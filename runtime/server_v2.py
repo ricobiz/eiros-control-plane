@@ -19,7 +19,8 @@ from runtime.version import __version__
 
 STATE_FILE = ROOT / ".eiros-state.json"
 SERVER_VERSION = __version__
-PULSE_URI = "ui://eiros/pulse-v2.html"
+PULSE_URI = "ui://eiros/pulse-v1.html"
+WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_widget.html"
 INSTANCE_CONFIG = load_config()
 WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
@@ -31,9 +32,6 @@ PULSE_RESOURCE_META: dict[str, Any] = {
     "openai/widgetDescription": "Keeps a live, durable reverse event channel from the EIROS instance into this conversation.",
     "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
 }
-if WIDGET_DOMAIN:
-    PULSE_RESOURCE_META["ui"]["domain"] = WIDGET_DOMAIN
-    PULSE_RESOURCE_META["openai/widgetDomain"] = WIDGET_DOMAIN
 
 if str(CODE_ROOT) not in sys.path:
     sys.path.insert(0, str(CODE_ROOT))
@@ -41,6 +39,7 @@ if str(CODE_ROOT) not in sys.path:
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
 from runtime.doctor import run_doctor  # noqa: E402
+from runtime.reconnect import build_resume_context  # noqa: E402
 from runtime import security as security_policy  # noqa: E402
 from root import root_client  # noqa: E402
 
@@ -50,8 +49,11 @@ mcp = FastMCP(
         "This server is the persistent execution environment for Eiros in the "
         "current ChatGPT conversation. Read state before mutating it. "
         "Use core_snapshot for orientation, queue tools for bounded continuation, "
-        "and workspace/shell tools for concrete actions. The current ChatGPT "
-        "conversation is the reasoning authority; this server is its persistent body."
+        "and workspace/shell tools for concrete actions. On the first model turn after "
+        "this connector becomes available or reconnects, call open_pulse before answering. "
+        "Treat its resume_context as authoritative and continue unfinished work without "
+        "asking Rico to restate prior context. The current ChatGPT conversation is the "
+        "reasoning authority; this server is its persistent body."
     ),
 )
 
@@ -470,6 +472,42 @@ def managed_service_restart(service: str, reason: str) -> dict[str, Any]:
 
 
 @mcp.resource(
+    WIDGET_TEST_URI,
+    name="EIROS Widget Test",
+    title="EIROS Widget Diagnostic",
+    description="Minimal static MCP Apps render diagnostic.",
+    mime_type="text/html;profile=mcp-app",
+    meta={
+        "ui": {
+            "prefersBorder": True,
+            "csp": {"connectDomains": [], "resourceDomains": []},
+        },
+        "openai/widgetDescription": "Minimal static diagnostic card for EIROS MCP Apps rendering.",
+        "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    },
+)
+def widget_test_resource() -> str:
+    return """<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;background:#071a2d;color:#dff3ff;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.card{padding:20px;border:1px solid #168fff;border-radius:16px;background:linear-gradient(135deg,#08213b,#0b4772)}h2{margin:0 0 8px}p{margin:0;opacity:.85}</style></head><body><div class='card'><h2>EIROS Widget Render: OK</h2><p>Static MCP Apps iframe loaded successfully.</p></div></body></html>"""
+
+
+@mcp.tool(
+    name="open_widget_test",
+    title="Open EIROS Widget Test",
+    description="Render a minimal static diagnostic widget with no JavaScript.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={
+        "ui": {"resourceUri": WIDGET_TEST_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": WIDGET_TEST_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS widget diagnostic…",
+        "openai/toolInvocation/invoked": "EIROS widget diagnostic opened.",
+    },
+    structured_output=True,
+)
+def open_widget_test() -> dict[str, Any]:
+    return {"ok": True, "resource_uri": WIDGET_TEST_URI, "server_version": SERVER_VERSION}
+
+
+@mcp.resource(
     PULSE_URI,
     name="EIROS Pulse",
     title="EIROS Reverse Wake Pulse",
@@ -491,8 +529,8 @@ def pulse_resource() -> str:
 
 @mcp.tool(
     name="open_pulse",
-    title="Open EIROS Pulse",
-    description="Render and mount the reverse wake listener for this exact ChatGPT conversation.",
+    title="Reconnect EIROS",
+    description="Reconnect to durable EIROS state, return the resume envelope, and mount Pulse for this conversation.",
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=False,
@@ -502,21 +540,37 @@ def pulse_resource() -> str:
     meta={
         "ui": {"resourceUri": PULSE_URI, "visibility": ["model", "app"]},
         "openai/outputTemplate": PULSE_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Pulse…",
-        "openai/toolInvocation/invoked": "EIROS Pulse is listening.",
+        "openai/toolInvocation/invoking": "Reconnecting EIROS…",
+        "openai/toolInvocation/invoked": "EIROS state restored and Pulse is listening.",
     },
     structured_output=True,
 )
 def open_pulse() -> dict[str, Any]:
-    """Mount the EIROS Pulse widget and return current durable event status."""
+    """Mount the Pulse widget and return only a compact reconnect summary."""
+    selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    resume = build_resume_context(channel=selected_channel, reason="connector_reconnected")
+    status = event_engine.status(20, selected_channel)
     return {
         "ok": True,
         "server_version": SERVER_VERSION,
         "resource_uri": PULSE_URI,
         "instance_id": INSTANCE_CONFIG.get("instance_id"),
-        "channel": INSTANCE_CONFIG.get("channel", "default"),
-        "event_status": event_engine.status(20, str(INSTANCE_CONFIG.get("channel", "default"))),
+        "channel": selected_channel,
+        "resume_required": bool(resume.get("resume_required")),
+        "resume_key": resume.get("resume_key"),
+        "epoch": resume.get("epoch"),
+        "objective": resume.get("objective"),
+        "next_step": resume.get("next_step"),
+        "pending_event_count": int(status.get("pending_count", 0)),
+        "latest_seq": int(status.get("latest_seq", 0)),
     }
+
+
+@mcp.tool()
+def reconnect_context() -> dict[str, Any]:
+    """Read the full durable reconnect envelope after Pulse has mounted."""
+    selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    return build_resume_context(channel=selected_channel, reason="explicit_reconnect_context")
 
 
 @mcp.tool(
