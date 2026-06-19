@@ -19,9 +19,9 @@ from runtime.version import __version__
 
 STATE_FILE = ROOT / ".eiros-state.json"
 SERVER_VERSION = __version__
-PULSE_URI = "ui://eiros/pulse-v4.html"
+PULSE_URI = "ui://eiros/pulse-lite-v1.html"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
-PULSE_HTML = CODE_ROOT / "runtime" / "pulse_widget.html"
+PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 INSTANCE_CONFIG = load_config()
 WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
 PULSE_RESOURCE_META: dict[str, Any] = {

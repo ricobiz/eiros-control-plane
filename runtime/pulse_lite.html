@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#071a2d;color:#dff3ff}.card{padding:18px;border:1px solid #168fff;border-radius:16px;background:linear-gradient(135deg,#08213b,#0b4772)}.top{display:flex;justify-content:space-between;align-items:center;gap:12px}.title{font-weight:800}.badge{padding:5px 9px;border-radius:999px;background:#0b2944;border:1px solid #168fff;font-size:11px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.box{padding:10px;border-radius:10px;background:#061525;border:1px solid #164e76}.box b{display:block;font-size:16px}.box span{font-size:10px;opacity:.72}.status{margin-top:12px;padding:10px;border-radius:10px;background:#061525;border:1px solid #164e76;white-space:pre-wrap;font-size:12px;line-height:1.45}button{margin-top:12px;padding:9px 12px;border-radius:10px;border:1px solid #2ba8ec;background:#0d5f8e;color:white;font-weight:700}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="top"><div class="title">EIROS Pulse Lite</div><div id="badge" class="badge">booting</div></div>
+  <div class="grid">
+    <div class="box"><b id="connection">starting</b><span>connection</span></div>
+    <div class="box"><b id="queue">0</b><span>queue</span></div>
+    <div class="box"><b id="leader">—</b><span>leader</span></div>
+  </div>
+  <div id="status" class="status">HTML rendered. Starting JavaScript…</div>
+  <button id="retry">Reconnect</button>
+</div>
+<script>
+window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
+(function(){
+  const $=id=>document.getElementById(id);
+  const set=(id,value)=>{const node=$(id);if(node)node.textContent=String(value)};
+  const boot=window.__EIROS_BOOTSTRAP__||{};
+  const host=window.openai||{};
+  const widgetId=(crypto&&crypto.randomUUID)?crypto.randomUUID():'lite-'+Date.now();
+  let timer=null;
+  let stopped=false;
+
+  function showError(error){
+    set('badge','error');
+    set('connection','offline');
+    set('status','JS/RPC error: '+String(error&&error.message?error.message:error));
+  }
+  window.addEventListener('error',event=>showError(event.error||event.message));
+  window.addEventListener('unhandledrejection',event=>showError(event.reason));
+
+  async function callTool(name,args){
+    if(typeof host.callTool==='function') return host.callTool(name,args||{});
+    throw new Error('window.openai.callTool is unavailable');
+  }
+  function unwrap(value){
+    if(!value)return{};
+    return value.structuredContent||(value.result&&value.result.structuredContent)||value;
+  }
+  async function poll(){
+    clearTimeout(timer);
+    if(stopped)return;
+    try{
+      set('badge','polling');
+      const raw=await callTool('pulse_poll',{
+        widget_id:widgetId,
+        cursor:0,
+        channel:String(boot.channel||'default'),
+        instance_id:String(boot.instanceId||''),
+        claim_seconds:30
+      });
+      const data=unwrap(raw);
+      const summary=data.summary||{};
+      set('connection','online');
+      set('leader',data.leader?'yes':'no');
+      set('queue',summary.total||data.pending_count||0);
+      set('badge',data.leader?'listening':'observer');
+      set('status','Pulse Lite RPC OK\ninstance '+String(boot.instanceId||'').slice(0,8)+' · channel '+String(boot.channel||'default')+' · server '+String(data.server_time||'?'));
+      timer=setTimeout(poll,1500);
+    }catch(error){
+      showError(error);
+      timer=setTimeout(poll,4000);
+    }
+  }
+  $('retry').addEventListener('click',()=>{stopped=false;set('status','Reconnecting…');poll()});
+  set('status','HTML + JavaScript rendered. Calling pulse_poll…');
+  poll();
+})();
+</script>
+</body>
+</html>
