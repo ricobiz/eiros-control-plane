@@ -46,6 +46,23 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     if(!value)return{};
     return value.structuredContent||(value.result&&value.result.structuredContent)||value;
   }
+  function sendRemoteEvent(event){
+    const prompt=[
+      `[EIROS_REMOTE_EVENT id=${event.id} seq=${event.seq} source=${event.source}]`,
+      String(event.text||''),
+      '',
+      'This event came from the EIROS VPS through Pulse Lite.',
+      'Handle it now, call ack_event with this event id, then resume the durable EIROS objective.'
+    ].join('\n');
+    set('badge','interrupting');
+    set('status',`Event #${event.seq} received. Requesting a new ChatGPT turn…\n${String(event.text||'')}`);
+    window.parent.postMessage({
+      jsonrpc:'2.0',
+      method:'ui/message',
+      params:{role:'user',content:[{type:'text',text:prompt}]}
+    },'*');
+  }
+
   async function poll(){
     clearTimeout(timer);
     if(stopped)return;
@@ -64,8 +81,13 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
       set('leader',data.leader?'yes':'no');
       set('queue',summary.total||data.pending_count||0);
       set('badge',data.leader?'listening':'observer');
-      set('status','Pulse Lite RPC OK\ninstance '+String(boot.instanceId||'').slice(0,8)+' · channel '+String(boot.channel||'default')+' · server '+String(data.server_time||'?'));
-      timer=setTimeout(poll,1500);
+      if(data.event){
+        sendRemoteEvent(data.event);
+        timer=setTimeout(poll,4000);
+      }else{
+        set('status','Pulse Lite RPC OK\ninstance '+String(boot.instanceId||'').slice(0,8)+' · channel '+String(boot.channel||'default')+' · server '+String(data.server_time||'?'));
+        timer=setTimeout(poll,1500);
+      }
     }catch(error){
       showError(error);
       timer=setTimeout(poll,4000);
