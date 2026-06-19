@@ -19,8 +19,8 @@ REMOTE_CONFIG = CONFIG_DIR / "claude-remote.json"
 CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v3.html"
 CLAUDE_PULSE_VERSION = "0.3.0"
 CLAUDE_PULSE_HTML = Path(__file__).with_name("claude_pulse.html")
-ROOM_URI = "ui://eiros/collab-room-v5.html"
-ROOM_VERSION = "0.5.0"
+ROOM_URI = "ui://eiros/collab-room-v6.html"
+ROOM_VERSION = "0.6.0"
 ROOM_HTML = Path(__file__).with_name("collab_room.html")
 INSTANCE_CONFIG = load_config()
 
@@ -261,6 +261,18 @@ def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
 def dialog_peek(agent_id: str, limit: int = 10, project_id: str = "", thread_id: str = "") -> dict[str, Any]:
     """Read available addressed messages without claiming them; used by Claude Pulse."""
     return collab.peek(agent_id, limit, project_id, thread_id)
+
+
+@mcp.resource(
+    "ui://eiros/collab-room-v5.html",
+    name="EIROS Room Legacy v5",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible responsive room resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+    meta={"ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}}},
+)
+def room_resource_legacy_v5() -> str:
+    return room_resource()
 
 
 @mcp.resource(

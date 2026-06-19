@@ -23,8 +23,8 @@ SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v5.html"
-ROOM_VERSION = "0.5.0"
+ROOM_URI = "ui://eiros/collab-room-v6.html"
+ROOM_VERSION = "0.6.0"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
@@ -937,6 +937,18 @@ def conversation_control_set(
 def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
     """Read current shared project room control state."""
     return collab_engine.get_control(project_id)
+
+
+@mcp.resource(
+    "ui://eiros/collab-room-v5.html",
+    name="EIROS Room Legacy v5",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible responsive room resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+    meta={"ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}}},
+)
+def room_resource_legacy_v5() -> str:
+    return room_resource()
 
 
 @mcp.resource(
