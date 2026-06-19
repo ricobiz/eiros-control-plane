@@ -45,7 +45,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
 
   const $=id=>document.getElementById(id);
   $('title').textContent=(boot.displayName||'EIROS')+' Pulse';
-  const set=(id,v)=>{$(id).textContent=String(v)};
+  const set=(id,v)=>{const el=$(id);if(el)el.textContent=String(v)};
   function ageLabel(seconds){
     const value=Number(seconds||0);
     if(value<60)return value+'s';
@@ -119,7 +119,6 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
   }
   function schedule(ms){
     clearTimeout(timer);
-    set('poll',ms);
     timer=setTimeout(tick,ms);
   }
   async function tick(){
