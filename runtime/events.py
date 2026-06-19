@@ -93,6 +93,27 @@ def emit(text: str, source: str = 'remote', payload: dict[str, Any] | None = Non
 def leader_alive(leader: dict[str, Any] | None, timestamp: int) -> bool:
     return bool(leader and int(leader.get('lease_until', 0)) > timestamp)
 
+def summarize_events(events: list[dict[str, Any]], timestamp: int) -> dict[str, Any]:
+    counts={'total':0,'queued':0,'in_flight':0,'awaiting_ack':0,'retry_ready':0}
+    created=[]
+    latest_ack=0
+    for event in events:
+        latest_ack=max(latest_ack,int(event.get('acked_at') or 0))
+        if event.get('status')=='acked':
+            continue
+        counts['total']+=1
+        created.append(int(event.get('created_at',timestamp)))
+        status=str(event.get('status') or 'pending')
+        claim=event.get('claim') or {}
+        alive=int(claim.get('until',0))>timestamp
+        if status=='delivered': counts['awaiting_ack']+=1
+        elif alive: counts['in_flight']+=1
+        elif status=='pending': counts['queued']+=1
+        else: counts['retry_ready']+=1
+    counts['oldest_age_seconds']=max(0,timestamp-min(created)) if created else 0
+    counts['latest_ack_at']=latest_ack
+    return counts
+
 def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = '',
          leader_lease_seconds: int = 25, claim_seconds: int = 45) -> dict[str, Any]:
     identity = str(widget_id or '').strip()[:200]
@@ -139,13 +160,14 @@ def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = 
                     'claimed_at': timestamp,
                 }
         channel_events = [entry for entry in store['events'] if entry.get('channel') == target]
+        summary = summarize_events(channel_events, timestamp)
         return {
             'instance_id': actual_instance, 'channel': target, 'leader': is_leader,
             'leader_widget_id': leader.get('widget_id'), 'leader_lease_until': leader.get('lease_until'),
             'event': selected,
             'latest_seq': max([int(entry.get('seq', 0)) for entry in channel_events] or [0]),
             'latest_acked_seq': max([int(entry.get('seq', 0)) for entry in channel_events if entry.get('status') == 'acked'] or [0]),
-            'pending_count': sum(1 for entry in channel_events if entry.get('status') != 'acked'),
+            'pending_count': summary['total'], 'summary': summary,
             'server_time': timestamp,
         }
 
@@ -183,6 +205,8 @@ def status(limit: int = 100, channel: str = '') -> dict[str, Any]:
     store = read_store()
     target = channel_name(channel)
     selected = [entry for entry in store['events'] if entry.get('channel') == target]
+    timestamp = now()
+    summary = summarize_events(selected, timestamp)
     return {
         'schema_version': store['schema_version'],
         'revision': store['revision'],
@@ -191,6 +215,6 @@ def status(limit: int = 100, channel: str = '') -> dict[str, Any]:
         'channel': target,
         'leader': store.get('leaders', {}).get(target),
         'latest_seq': max([int(entry.get('seq', 0)) for entry in selected] or [0]),
-        'pending_count': sum(1 for entry in selected if entry.get('status') != 'acked'),
+        'pending_count': summary['total'], 'summary': summary,
         'events': selected[-max(1, min(int(limit), 500)):],
     }
