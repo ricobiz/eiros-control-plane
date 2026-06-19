@@ -58,8 +58,11 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   const hostName=String(boot.host||'native-chat');
   const roomVersion=String(boot.roomVersion||'unknown');
   const serverVersion=String(boot.serverVersion||'unknown');
+  const pulseEnabled=Boolean(boot.pulseEnabled);
+  const pulseInstanceId=String(boot.instanceId||'');
+  const pulseChannel=String(boot.channel||'default');
   const sessionId='room-'+agentId+'-'+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now());
-  let timer=null,busy=false,lastSignature='',lastCount=0,lastHeartbeat=0;
+  let timer=null,pulseTimer=null,busy=false,lastSignature='',lastCount=0,lastHeartbeat=0,lastPulseEvent='';
   let rpcCounter=1;
   const pendingRpc=new Map();
 
@@ -128,6 +131,31 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
     const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;
     try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:hostName,widget_version:roomVersion,activity})}catch{}
   }
+  function emitWake(event){
+    if(!event||event.id===lastPulseEvent)return;
+    lastPulseEvent=event.id;
+    const prompt=[
+      `[EIROS_REMOTE_EVENT id=${event.id} seq=${event.seq} source=${event.source}]`,
+      String(event.text||''),
+      '',
+      'A new EIROS event is waiting. The full inter-agent transcript stays in EIROS Room.',
+      'Handle it now, call ack_event with this event id, and continue through the shared room protocol.'
+    ].join('\n');
+    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
+  }
+  async function pollPulse(){
+    clearTimeout(pulseTimer);
+    if(!pulseEnabled)return;
+    try{
+      const raw=await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:pulseChannel,instance_id:pulseInstanceId,claim_seconds:30});
+      const data=unwrap(raw);
+      if(data.event){
+        emitWake(data.event);
+        try{await callTool('pulse_mark_delivered',{event_id:data.event.id,widget_id:sessionId,channel:pulseChannel})}catch{}
+      }
+    }catch(error){$('foot').textContent='Pulse error: '+String(error?.message||error)}
+    finally{pulseTimer=setTimeout(pollPulse,1500)}
+  }
   async function refresh(){
     if(busy)return;busy=true;clearTimeout(timer);
     try{
@@ -175,7 +203,7 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   $('dialDisplay').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();callAgent($('dialDisplay').value)}});
   document.querySelectorAll('.key').forEach(button=>button.addEventListener('click',()=>dialKey(button.dataset.key||'')));
   $('pause').addEventListener('click',()=>control('paused'));$('resume').addEventListener('click',()=>control('running'));$('stop').addEventListener('click',()=>control('stopped'));
-  window.addEventListener('beforeunload',()=>clearTimeout(timer));refresh();
+  window.addEventListener('beforeunload',()=>{clearTimeout(timer);clearTimeout(pulseTimer)});refresh();pollPulse();
 })();
 </script>
 </body>

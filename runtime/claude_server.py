@@ -302,6 +302,9 @@ def room_resource() -> str:
         "agentId": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
         "roomVersion": ROOM_VERSION,
         "serverVersion": SERVER_VERSION,
+        "pulseEnabled": False,
+        "instanceId": "",
+        "channel": "default",
     }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 

@@ -986,6 +986,9 @@ def room_resource() -> str:
         "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
         "roomVersion": ROOM_VERSION,
         "serverVersion": SERVER_VERSION,
+        "pulseEnabled": True,
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
     }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
@@ -1119,10 +1122,10 @@ def pulse_resource() -> str:
         idempotentHint=True,
     ),
     meta={
-        "ui": {"resourceUri": PULSE_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": PULSE_URI,
-        "openai/toolInvocation/invoking": "Reconnecting EIROS…",
-        "openai/toolInvocation/invoked": "EIROS state restored and Pulse is listening.",
+        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Room and reconnecting Pulse…",
+        "openai/toolInvocation/invoked": "EIROS Room is open and Pulse is listening.",
     },
     structured_output=True,
 )
@@ -1134,7 +1137,7 @@ def open_pulse() -> dict[str, Any]:
     return {
         "ok": True,
         "server_version": SERVER_VERSION,
-        "resource_uri": PULSE_URI,
+        "resource_uri": ROOM_URI,
         "instance_id": INSTANCE_CONFIG.get("instance_id"),
         "channel": selected_channel,
         "resume_required": bool(resume.get("resume_required")),
