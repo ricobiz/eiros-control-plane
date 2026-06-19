@@ -20,6 +20,7 @@ TESTS = [
     "runtime.test_root_broker",
     "runtime.test_watchdog",
     "runtime.test_security",
+    "runtime.test_widget",
 ]
 
 
