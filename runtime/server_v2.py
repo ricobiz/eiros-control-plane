@@ -38,6 +38,7 @@ if str(CODE_ROOT) not in sys.path:
 
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
+from runtime import collab as collab_engine  # noqa: E402
 from runtime.doctor import run_doctor  # noqa: E402
 from runtime.reconnect import build_resume_context  # noqa: E402
 from runtime import security as security_policy  # noqa: E402
@@ -469,6 +470,126 @@ def managed_service_journal(service: str, lines: int = 100) -> dict[str, Any]:
 def managed_service_restart(service: str, reason: str) -> dict[str, Any]:
     """Restart an allowlisted EIROS service through the audited privileged broker."""
     return root_client.service_restart(service, reason)
+
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def hub_register(
+    agent_id: str,
+    display_name: str = "",
+    client_kind: str = "chatgpt-native",
+    capabilities: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Register or refresh one participant in the shared EIROS collaboration hub."""
+    return collab_engine.register_agent(agent_id, display_name, client_kind, capabilities, metadata)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def hub_status() -> dict[str, Any]:
+    """Read collaboration participants, projects and pending addressed messages."""
+    return collab_engine.hub_status()
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False)
+)
+def dialog_send(
+    from_agent: str,
+    to_agent: str,
+    content: str,
+    kind: str = "call",
+    project_id: str = "default",
+    thread_id: str = "main",
+    scene_id: str = "",
+    reply_to: str = "",
+    expects_reply: bool = True,
+    metadata: dict[str, Any] | None = None,
+    idempotency_key: str = "",
+) -> dict[str, Any]:
+    """Send one durable addressed collaboration message."""
+    return collab_engine.send_message(
+        from_agent=from_agent,
+        to_agent=to_agent,
+        content=content,
+        kind=kind,
+        project_id=project_id,
+        thread_id=thread_id,
+        scene_id=scene_id,
+        reply_to=reply_to,
+        expects_reply=expects_reply,
+        metadata=metadata,
+        idempotency_key=idempotency_key,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False)
+)
+def dialog_inbox(
+    agent_id: str,
+    client_id: str,
+    limit: int = 10,
+    claim_seconds: int = 180,
+    project_id: str = "",
+    thread_id: str = "",
+) -> dict[str, Any]:
+    """Claim addressed collaboration messages for one participant."""
+    return collab_engine.inbox(agent_id, client_id, limit, claim_seconds, project_id, thread_id)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def dialog_ack(agent_id: str, message_id: str, result: str = "") -> dict[str, Any]:
+    """Acknowledge an addressed collaboration message after handling it."""
+    return collab_engine.acknowledge(agent_id, message_id, result)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def dialog_release(agent_id: str, message_id: str, reason: str = "") -> dict[str, Any]:
+    """Release a claimed collaboration message for retry."""
+    return collab_engine.release(agent_id, message_id, reason)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def dialog_history(
+    project_id: str = "default",
+    thread_id: str = "main",
+    limit: int = 100,
+    after_seq: int = 0,
+) -> dict[str, Any]:
+    """Read ordered shared dialogue history for one project thread."""
+    return collab_engine.history(project_id, thread_id, limit, after_seq)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def project_state_get(project_id: str = "default") -> dict[str, Any]:
+    """Read durable shared project state."""
+    return collab_engine.get_project(project_id)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False)
+)
+def project_state_set(
+    agent_id: str,
+    project_id: str,
+    state: dict[str, Any],
+    expected_revision: int = -1,
+) -> dict[str, Any]:
+    """Replace shared project state with optimistic revision checking."""
+    return collab_engine.set_project(agent_id, project_id, state, expected_revision)
 
 
 @mcp.resource(
