@@ -19,9 +19,11 @@ from runtime.version import __version__
 
 STATE_FILE = ROOT / ".eiros-state.json"
 SERVER_VERSION = __version__
-PULSE_URI = "ui://eiros/pulse-lite-v2.html"
+PULSE_URI = "ui://eiros/pulse-lite-v3.html"
+PULSE_VERSION = "0.3.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v1.html"
+ROOM_URI = "ui://eiros/collab-room-v4.html"
+ROOM_VERSION = "0.4.0"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
@@ -595,9 +597,23 @@ def project_state_set(
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True,
-    meta={"ui": {"visibility": ["app"]}}
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
 )
+def room_heartbeat(
+    agent_id: str,
+    session_id: str,
+    host: str = "chatgpt",
+    widget_version: str = "",
+    activity: str = "online",
+) -> dict[str, Any]:
+    """Refresh one active room or pulse session for presence indicators."""
+    return collab_engine.session_heartbeat(agent_id, session_id, host, widget_version, activity)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
 )
 def room_snapshot(project_id: str = "eiros-hub", thread_id: str = "first-contact", limit: int = 200, after_seq: int = 0) -> dict[str, Any]:
     """Read shared room history, participant presence and operator control state."""
@@ -605,9 +621,8 @@ def room_snapshot(project_id: str = "eiros-hub", thread_id: str = "first-contact
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False,
-    meta={"ui": {"visibility": ["app"]}}
-)
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={"ui": {"visibility": ["app"]}},
 )
 def operator_send(
     content: str,
@@ -618,13 +633,32 @@ def operator_send(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Send one Rico operator message to ChatGPT, Claude or both."""
-    return collab_engine.operator_send(content, target, project_id, thread_id, kind, metadata)
+    result = collab_engine.operator_send(content, target, project_id, thread_id, kind, metadata)
+    notifications = []
+    for message in result.get("messages", []):
+        if message.get("to_agent") != "chatgpt":
+            continue
+        event = event_engine.emit(
+            text=(
+                f"EIROS_HUB_WAKE message_id={message.get('message_id')} from=rico "
+                f"project_id={message.get('project_id')} thread_id={message.get('thread_id')}. "
+                "The full message is in EIROS Room. Claim it through dialog_inbox as chatgpt, handle it, "
+                "then call dialog_ack and ack_event."
+            ),
+            source="collab:rico",
+            payload={"collab_message_id": message.get("message_id"), "kind": message.get("kind")},
+            priority=1200,
+            channel=str(INSTANCE_CONFIG.get("channel", "default")),
+            idempotency_key=f"collab-to-chatgpt:{message.get('message_id')}",
+        )
+        notifications.append({"message_id": message.get("message_id"), "event_id": event.get("id")})
+    result["notifications"] = notifications
+    return result
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True,
-    meta={"ui": {"visibility": ["app"]}}
-)
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
 )
 def conversation_control_set(
     actor_id: str = "rico",
@@ -638,9 +672,8 @@ def conversation_control_set(
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True,
-    meta={"ui": {"visibility": ["app"]}}
-)
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
 )
 def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
     """Read current shared project room control state."""
@@ -664,7 +697,14 @@ def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
 )
 def room_resource() -> str:
     html = ROOM_HTML.read_text(encoding="utf-8")
-    bootstrap = {"projectId": "eiros-hub", "threadId": "first-contact", "host": "chatgpt"}
+    bootstrap = {
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+        "host": "chatgpt",
+        "agentId": "chatgpt",
+        "roomVersion": ROOM_VERSION,
+        "serverVersion": SERVER_VERSION,
+    }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
@@ -690,6 +730,8 @@ def open_collab_room() -> dict[str, Any]:
         "thread_id": "first-contact",
         "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0)),
         "control": snapshot.get("control", {}),
+        "room_version": ROOM_VERSION,
+        "server_version": SERVER_VERSION,
     }
 
 
@@ -745,6 +787,7 @@ def pulse_resource() -> str:
         "displayName": INSTANCE_CONFIG.get("display_name", "EIROS"),
         "polling": INSTANCE_CONFIG.get("polling", {}),
         "serverVersion": SERVER_VERSION,
+        "pulseVersion": PULSE_VERSION,
     }
     return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 

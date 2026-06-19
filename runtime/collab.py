@@ -174,6 +174,50 @@ def heartbeat(agent_id: str, status: str = "online") -> dict[str, Any]:
         return current
 
 
+def session_heartbeat(
+    agent_id: str,
+    session_id: str,
+    host: str = "native-chat",
+    widget_version: str = "",
+    activity: str = "online",
+) -> dict[str, Any]:
+    identity = normalize_agent(agent_id)
+    session = str(session_id or "").strip()[:160]
+    if not session:
+        raise ValueError("session_id is required")
+    timestamp = now()
+    with locked_store() as store:
+        current = store["agents"].get(identity)
+        if not current:
+            current = {
+                "agent_id": identity,
+                "display_name": identity,
+                "client_kind": str(host or "native-chat")[:80],
+                "capabilities": [],
+                "metadata": {},
+                "registered_at": timestamp,
+            }
+        sessions = dict(current.get("sessions") or {})
+        sessions = {
+            key: value
+            for key, value in sessions.items()
+            if timestamp - int((value or {}).get("last_seen", 0)) <= 180
+        }
+        sessions[session] = {
+            "session_id": session,
+            "host": str(host or "native-chat")[:80],
+            "widget_version": str(widget_version or "")[:80],
+            "activity": str(activity or "online")[:40],
+            "last_seen": timestamp,
+        }
+        current["sessions"] = sessions
+        current["status"] = str(activity or "online")[:40]
+        current["last_seen"] = timestamp
+        current["active_session_count"] = len(sessions)
+        store["agents"][identity] = current
+        return current
+
+
 def send_message(
     from_agent: str,
     to_agent: str,
@@ -550,15 +594,52 @@ def hub_status() -> dict[str, Any]:
     store = read_store()
     timestamp = now()
     pending_by_agent: dict[str, int] = {}
+    activity_by_agent: dict[str, dict[str, int]] = {}
     for message in store["messages"]:
         if message.get("status") == "acked":
             continue
         recipient = str(message.get("to_agent") or "unknown")
         pending_by_agent[recipient] = pending_by_agent.get(recipient, 0) + 1
+        bucket = activity_by_agent.setdefault(recipient, {"pending": 0, "claimed": 0})
+        claim = message.get("claim") or {}
+        if _claim_alive(claim, timestamp):
+            bucket["claimed"] += 1
+        else:
+            bucket["pending"] += 1
     agents = []
     for agent in store["agents"].values():
         item = dict(agent)
-        item["seconds_since_seen"] = max(0, timestamp - int(item.get("last_seen", 0)))
+        age = max(0, timestamp - int(item.get("last_seen", 0)))
+        item["seconds_since_seen"] = age
+        sessions = []
+        for session in (item.get("sessions") or {}).values():
+            session_item = dict(session)
+            session_age = max(0, timestamp - int(session_item.get("last_seen", 0)))
+            session_item["seconds_since_seen"] = session_age
+            if session_age <= 180:
+                sessions.append(session_item)
+        sessions.sort(key=lambda entry: int(entry.get("last_seen", 0)), reverse=True)
+        item["sessions"] = sessions
+        item["active_session_count"] = sum(1 for entry in sessions if int(entry.get("seconds_since_seen", 9999)) <= 15)
+        if age <= 15:
+            presence = "online"
+        elif age <= 60:
+            presence = "away"
+        else:
+            presence = "offline"
+        activity = activity_by_agent.get(str(item.get("agent_id")), {"pending": 0, "claimed": 0})
+        if activity.get("claimed", 0) > 0:
+            activity_state = "working"
+        elif activity.get("pending", 0) > 0:
+            activity_state = "ringing"
+        elif presence == "online":
+            activity_state = "idle"
+        else:
+            activity_state = presence
+        item["presence"] = presence
+        item["activity"] = activity_state
+        item["pending_calls"] = int(activity.get("pending", 0))
+        item["claimed_calls"] = int(activity.get("claimed", 0))
         agents.append(item)
     agents.sort(key=lambda item: item.get("agent_id", ""))
     return {
@@ -570,6 +651,7 @@ def hub_status() -> dict[str, Any]:
         "controls": list(store.get("controls", {}).values()),
         "message_count": len(store["messages"]),
         "pending_by_agent": pending_by_agent,
+        "activity_by_agent": activity_by_agent,
         "latest_seq": max([int(item.get("seq", 0)) for item in store["messages"]] or [0]),
         "server_time": timestamp,
     }

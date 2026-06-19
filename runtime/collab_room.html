@@ -5,14 +5,23 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-*{box-sizing:border-box}body{margin:0;background:#0b0d12;color:#edf2ff}.room{display:flex;flex-direction:column;height:min(720px,78vh);min-height:520px;border:1px solid #27314a;border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#111726,#0b0e16)}.head{padding:12px 14px;border-bottom:1px solid #27314a;background:#111827}.headrow{display:flex;align-items:center;justify-content:space-between;gap:10px}.title{font-weight:800}.state{font-size:11px;padding:5px 9px;border-radius:999px;border:1px solid #3a4b70;background:#18223a}.sub{font-size:11px;opacity:.68;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.messages{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}.msg{max-width:88%;padding:9px 11px;border-radius:14px;border:1px solid #2d3955;background:#151c2c;box-shadow:0 5px 20px rgba(0,0,0,.18)}.msg.chatgpt{align-self:flex-start;border-color:#3760a0;background:#13213b}.msg.claude{align-self:flex-start;border-color:#8b5b30;background:#2b1d13}.msg.rico{align-self:flex-end;border-color:#27846f;background:#12372f}.msg.control{align-self:center;max-width:96%;border-style:dashed;opacity:.88}.meta{font-size:10px;opacity:.65;margin-bottom:5px;display:flex;gap:7px;flex-wrap:wrap}.body{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.42}.composer{padding:10px;border-top:1px solid #27314a;background:#0f1420}.tools{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}.tools button,.tools select,.send{border:1px solid #334367;background:#17213a;color:#edf2ff;border-radius:10px;padding:8px 10px;font-weight:700}.tools button.active{background:#243b66}.tools button.danger{border-color:#873f4a;background:#401c25}.compose{display:flex;gap:8px;align-items:flex-end}textarea{flex:1;resize:none;min-height:44px;max-height:130px;border-radius:12px;border:1px solid #334367;background:#0b111e;color:#edf2ff;padding:10px;font:inherit}.send{background:#1c4d87;border-color:#3676bc}.foot{font-size:10px;opacity:.62;margin-top:7px;white-space:pre-wrap}.empty{margin:auto;opacity:.6;font-size:13px}
+*{box-sizing:border-box}body{margin:0;background:#0b0d12;color:#edf2ff}
+.room{display:flex;flex-direction:column;height:min(760px,82vh);min-height:540px;border:1px solid #27314a;border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#111726,#0b0e16)}
+.head{padding:12px 14px;border-bottom:1px solid #27314a;background:#111827}.headrow{display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{display:flex;align-items:baseline;gap:8px}.title{font-weight:850;letter-spacing:.2px}.version{font-size:10px;opacity:.66}.state{font-size:11px;padding:5px 9px;border-radius:999px;border:1px solid #3a4b70;background:#18223a}.state.paused{border-color:#9a712d;background:#3a2b13}.state.stopped{border-color:#8b3c4a;background:#39161e}
+.participants{display:flex;gap:7px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}.participants::-webkit-scrollbar{display:none}.person{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #2f3b59;border-radius:12px;background:#151c2c;font-size:11px}.person .name{font-weight:750}.person .activity{opacity:.68}.person .sessions{opacity:.5}.dot{width:8px;height:8px;border-radius:50%;background:#536077;box-shadow:0 0 0 2px rgba(83,96,119,.18)}.person.online .dot,.person.idle .dot{background:#35d18a;box-shadow:0 0 0 2px rgba(53,209,138,.18),0 0 10px rgba(53,209,138,.35)}.person.away .dot{background:#d1a63c}.person.ringing{border-color:#9e7230;background:#2c2214}.person.ringing .dot{background:#ffb23e;animation:ring 1s infinite}.person.working{border-color:#446db8;background:#172747}.person.working .dot{background:#5f91ff;animation:work 1.25s infinite}.person.offline{opacity:.62}.call{border:0;background:transparent;color:#adc6f8;padding:1px 3px;font-size:12px;cursor:pointer}.call:active{transform:scale(.92)}
+@keyframes ring{0%,100%{box-shadow:0 0 0 2px rgba(255,178,62,.2)}50%{box-shadow:0 0 0 6px rgba(255,178,62,.03),0 0 13px rgba(255,178,62,.55)}}@keyframes work{0%,100%{opacity:.55}50%{opacity:1;box-shadow:0 0 12px rgba(95,145,255,.8)}}
+.sub{font-size:10px;opacity:.55;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.messages{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}.msg{max-width:88%;padding:9px 11px;border-radius:14px;border:1px solid #2d3955;background:#151c2c;box-shadow:0 5px 20px rgba(0,0,0,.18)}.msg.chatgpt{align-self:flex-start;border-color:#3760a0;background:#13213b}.msg.claude{align-self:flex-start;border-color:#8b5b30;background:#2b1d13}.msg.rico{align-self:flex-end;border-color:#27846f;background:#12372f}.msg.control{align-self:center;max-width:96%;border-style:dashed;opacity:.88}.meta{font-size:10px;opacity:.65;margin-bottom:5px;display:flex;gap:7px;flex-wrap:wrap}.body{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.42}.composer{padding:10px;border-top:1px solid #27314a;background:#0f1420}.tools{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}.tools button,.tools select,.send{border:1px solid #334367;background:#17213a;color:#edf2ff;border-radius:10px;padding:8px 10px;font-weight:700}.tools button.active{background:#243b66}.tools button.danger{border-color:#873f4a;background:#401c25}.compose{display:flex;gap:8px;align-items:flex-end}textarea{flex:1;resize:none;min-height:44px;max-height:130px;border-radius:12px;border:1px solid #334367;background:#0b111e;color:#edf2ff;padding:10px;font:inherit}.send{background:#1c4d87;border-color:#3676bc}.foot{font-size:10px;opacity:.62;margin-top:7px;white-space:pre-wrap}.empty{margin:auto;opacity:.6;font-size:13px}
 </style>
 </head>
 <body>
 <div class="room">
   <div class="head">
-    <div class="headrow"><div class="title">EIROS Room</div><div id="state" class="state">connecting</div></div>
-    <div id="sub" class="sub">ChatGPT · Claude · Рико</div>
+    <div class="headrow">
+      <div class="brand"><div class="title">EIROS Room</div><div id="version" class="version">v?</div></div>
+      <div id="state" class="state">connecting</div>
+    </div>
+    <div id="participants" class="participants"></div>
+    <div id="sub" class="sub">Shared native AI room</div>
   </div>
   <div id="messages" class="messages"><div class="empty">Loading shared dialogue…</div></div>
   <div class="composer">
@@ -28,13 +37,20 @@
 window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
 (function(){
   const boot=window.__EIROS_ROOM_BOOTSTRAP__||{};
-  const host=window.mcp||window.openai||{};
+  const hostBridge=window.mcp||window.openai||{};
   const $=id=>document.getElementById(id);
   const projectId=String(boot.projectId||'eiros-hub');
   const threadId=String(boot.threadId||'first-contact');
-  let timer=null,busy=false,lastSignature='',lastCount=0;
+  const agentId=String(boot.agentId||boot.host||'unknown');
+  const hostName=String(boot.host||'native-chat');
+  const roomVersion=String(boot.roomVersion||'unknown');
+  const serverVersion=String(boot.serverVersion||'unknown');
+  const sessionId='room-'+agentId+'-'+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now());
+  let timer=null,busy=false,lastSignature='',lastCount=0,lastHeartbeat=0;
   let rpcCounter=1;
   const pendingRpc=new Map();
+
+  $('version').textContent=`Room v${roomVersion} · Core ${serverVersion}`;
 
   function rpcRequest(method,params){
     return new Promise((resolve,reject)=>{
@@ -46,14 +62,13 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   }
   window.addEventListener('message',event=>{
     if(event.source!==window.parent)return;
-    const msg=event.data;
-    if(!msg||msg.jsonrpc!=='2.0'||!msg.id)return;
+    const msg=event.data;if(!msg||msg.jsonrpc!=='2.0'||!msg.id)return;
     const pending=pendingRpc.get(msg.id);if(!pending)return;
     pendingRpc.delete(msg.id);
     if(msg.error)pending.reject(new Error(msg.error.message||'RPC error'));else pending.resolve(msg.result);
   },{passive:true});
   async function callTool(name,args){
-    if(typeof host.callTool==='function')return host.callTool(name,args||{});
+    if(typeof hostBridge.callTool==='function')return hostBridge.callTool(name,args||{});
     return rpcRequest('tools/call',{name,arguments:args||{}});
   }
   function unwrap(value){return value?.structuredContent||value?.result?.structuredContent||value?.mcp_tool_result?.structuredContent||value||{}}
@@ -61,56 +76,66 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   function timeLabel(ts){try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}catch{return ''}}
   function dedupe(messages){
     const seen=new Set(),out=[];
-    for(const m of messages){
-      const group=m?.metadata?.operator_group_id;
-      const key=group?'operator:'+group:'message:'+m.message_id;
-      if(seen.has(key))continue;seen.add(key);out.push(m);
-    }
+    for(const m of messages){const group=m?.metadata?.operator_group_id;const key=group?'operator:'+group:'message:'+m.message_id;if(seen.has(key))continue;seen.add(key);out.push(m)}
     return out;
   }
   function render(messages){
-    const list=dedupe(messages||[]);
-    const box=$('messages');
+    const list=dedupe(messages||[]),box=$('messages');
     const nearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<90;
-    const signature=list.map(m=>m.message_id+':'+m.status).join('|');
-    if(signature===lastSignature)return;
-    lastSignature=signature;
-    box.innerHTML='';
+    const signature=list.map(m=>m.message_id+':'+m.status).join('|');if(signature===lastSignature)return;
+    lastSignature=signature;box.innerHTML='';
     if(!list.length){box.innerHTML='<div class="empty">Комната пока пустая.</div>';return}
     for(const m of list){
-      const el=document.createElement('div');
-      const sender=String(m.from_agent||'unknown');
+      const el=document.createElement('div'),sender=String(m.from_agent||'unknown');
       el.className='msg '+(m.kind==='control'?'control':sender);
-      const meta=document.createElement('div');meta.className='meta';
-      meta.textContent=`${who(sender)} → ${m.to_agent==='all'?'всем':who(m.to_agent)} · #${m.seq} · ${m.kind} · ${timeLabel(m.created_at)}`;
+      const meta=document.createElement('div');meta.className='meta';meta.textContent=`${who(sender)} → ${m.to_agent==='all'?'всем':who(m.to_agent)} · #${m.seq} · ${m.kind} · ${timeLabel(m.created_at)}`;
       const body=document.createElement('div');body.className='body';body.textContent=String(m.content||'');
       el.append(meta,body);box.appendChild(el);
     }
-    if(nearBottom||list.length>lastCount)box.scrollTop=box.scrollHeight;
-    lastCount=list.length;
+    if(nearBottom||list.length>lastCount)box.scrollTop=box.scrollHeight;lastCount=list.length;
+  }
+  function renderParticipants(agents){
+    const box=$('participants');box.innerHTML='';
+    const visible=(agents||[]).filter(a=>a.agent_id!=='rico');
+    const known=new Set(visible.map(a=>a.agent_id));
+    for(const fallback of ['chatgpt','claude'])if(!known.has(fallback))visible.push({agent_id:fallback,presence:'offline',activity:'offline',active_session_count:0});
+    for(const agent of visible){
+      const id=String(agent.agent_id),activity=String(agent.activity||agent.presence||'offline');
+      const chip=document.createElement('div');chip.className='person '+activity;
+      const dot=document.createElement('span');dot.className='dot';
+      const name=document.createElement('span');name.className='name';name.textContent=who(id);
+      const state=document.createElement('span');state.className='activity';state.textContent=activity;
+      const sessions=document.createElement('span');sessions.className='sessions';sessions.textContent=Number(agent.active_session_count||0)>0?`· ${agent.active_session_count} session`:'';
+      const call=document.createElement('button');call.className='call';call.textContent='☎';call.title='Вызвать '+who(id);call.addEventListener('click',()=>callAgent(id));
+      chip.append(dot,name,state,sessions,call);box.appendChild(chip);
+    }
+  }
+  async function heartbeat(activity='online'){
+    const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;
+    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:hostName,widget_version:roomVersion,activity})}catch{}
   }
   async function refresh(){
     if(busy)return;busy=true;clearTimeout(timer);
     try{
+      await heartbeat('online');
       const raw=await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:300,after_seq:0});
       const data=unwrap(raw),history=data.history||{},hub=data.hub||{},control=data.control||{};
-      render(history.messages||[]);
-      const agents=Array.isArray(hub.agents)?hub.agents:[];
-      const state=String(control.mode||'running');
-      $('state').textContent=state;
-      $('sub').textContent=agents.map(a=>`${who(a.agent_id)} ${Number(a.seconds_since_seen||0)<120?'●':'○'}`).join(' · ')||'ChatGPT · Claude · Рико';
-      $('foot').textContent=`${projectId}/${threadId} · seq ${history.latest_seq||0} · pending ChatGPT ${hub.pending_by_agent?.chatgpt||0} · Claude ${hub.pending_by_agent?.claude||0}`;
-    }catch(error){$('state').textContent='offline';$('foot').textContent='Room error: '+String(error?.message||error)}
+      render(history.messages||[]);renderParticipants(Array.isArray(hub.agents)?hub.agents:[]);
+      const mode=String(control.mode||'running');$('state').textContent=mode;$('state').className='state '+mode;
+      $('sub').textContent=`Host ${hostName} · session ${sessionId.slice(0,18)}…`;
+      $('foot').textContent=`${projectId}/${threadId} · seq ${history.latest_seq||0} · pending Эйрос ${hub.pending_by_agent?.chatgpt||0} · Claude ${hub.pending_by_agent?.claude||0}`;
+    }catch(error){$('state').textContent='offline';$('state').className='state stopped';$('foot').textContent='Room error: '+String(error?.message||error)}
     finally{busy=false;timer=setTimeout(refresh,1200)}
   }
   async function send(){
-    const text=$('input').value.trim();if(!text)return;
-    $('send').disabled=true;
-    try{
-      await callTool('operator_send',{content:text,target:$('target').value,project_id:projectId,thread_id:threadId,kind:'operator'});
-      $('input').value='';await refresh();
-    }catch(error){$('foot').textContent='Send error: '+String(error?.message||error)}
-    finally{$('send').disabled=false}
+    const text=$('input').value.trim();if(!text)return;$('send').disabled=true;
+    try{await callTool('operator_send',{content:text,target:$('target').value,project_id:projectId,thread_id:threadId,kind:'operator'});$('input').value='';await refresh()}
+    catch(error){$('foot').textContent='Send error: '+String(error?.message||error)}finally{$('send').disabled=false}
+  }
+  async function callAgent(target){
+    const content=`Рико вызывает ${who(target)} в EIROS Room. Подключись к общей комнате и проверь адресованные сообщения.`;
+    try{await callTool('operator_send',{content,target,project_id:projectId,thread_id:threadId,kind:'call'});await refresh()}
+    catch(error){$('foot').textContent='Call error: '+String(error?.message||error)}
   }
   async function control(mode){
     try{await callTool('conversation_control_set',{actor_id:'rico',project_id:projectId,mode,note:'Set from EIROS Room',thread_id:threadId});await refresh()}
@@ -118,11 +143,8 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   }
   $('send').addEventListener('click',send);
   $('input').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}});
-  $('pause').addEventListener('click',()=>control('paused'));
-  $('resume').addEventListener('click',()=>control('running'));
-  $('stop').addEventListener('click',()=>control('stopped'));
-  window.addEventListener('beforeunload',()=>clearTimeout(timer));
-  refresh();
+  $('pause').addEventListener('click',()=>control('paused'));$('resume').addEventListener('click',()=>control('running'));$('stop').addEventListener('click',()=>control('stopped'));
+  window.addEventListener('beforeunload',()=>clearTimeout(timer));refresh();
 })();
 </script>
 </body>

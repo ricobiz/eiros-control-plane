@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-*{box-sizing:border-box}body{margin:0;background:#17120d;color:#fff4e8}.card{padding:16px;border:1px solid #b86a2f;border-radius:18px;background:linear-gradient(145deg,#21160f,#3a2112)}.top{display:flex;align-items:center;justify-content:space-between;gap:12px}.title{font-weight:800}.badge{font-size:11px;padding:5px 9px;border-radius:999px;background:#4a2a17;border:1px solid #b86a2f}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.box{padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f}.box b{display:block;font-size:16px}.box span{font-size:10px;opacity:.72}.message,.status{margin-top:10px;padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f;white-space:pre-wrap;font-size:12px;line-height:1.45}.message{max-height:160px;overflow:auto}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}button{padding:9px 12px;border-radius:10px;border:1px solid #c47738;background:#6f3a17;color:#fff4e8;font-weight:700}
+*{box-sizing:border-box}body{margin:0;background:#17120d;color:#fff4e8}.card{padding:16px;border:1px solid #b86a2f;border-radius:18px;background:linear-gradient(145deg,#21160f,#3a2112)}.top{display:flex;align-items:center;justify-content:space-between;gap:12px}.title{font-weight:800}.version{font-size:10px;opacity:.65;margin-left:6px}.badge{font-size:11px;padding:5px 9px;border-radius:999px;background:#4a2a17;border:1px solid #b86a2f}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.box{padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f}.box b{display:block;font-size:16px}.box span{font-size:10px;opacity:.72}.message,.status{margin-top:10px;padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f;white-space:pre-wrap;font-size:12px;line-height:1.45}.message{max-height:160px;overflow:auto}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}button{padding:9px 12px;border-radius:10px;border:1px solid #c47738;background:#6f3a17;color:#fff4e8;font-weight:700}
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="top"><div class="title">EIROS Claude Pulse</div><div id="badge" class="badge">booting</div></div>
+  <div class="top"><div><span class="title">EIROS Claude Pulse</span><span id="version" class="version">v?</span></div><div id="badge" class="badge">booting</div></div>
   <div class="grid">
     <div class="box"><b id="connection">starting</b><span>connection</span></div>
     <div class="box"><b id="pending">0</b><span>pending</span></div>
@@ -34,6 +34,9 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
   let attempts=0;
   let lastEmitted='';
   let rpcCounter=1;
+  let lastHeartbeat=0;
+  const pulseVersion=String(boot.pulseVersion||'unknown');
+  set('version','v'+pulseVersion);
   const pendingRpc=new Map();
 
   function rpcRequest(method,params){
@@ -62,6 +65,17 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     if(!value)return{};
     return value.structuredContent||(value.result&&value.result.structuredContent)||(value.mcp_tool_result&&value.mcp_tool_result.structuredContent)||value;
   }
+  async function heartbeat(activity='online'){
+    const now=Date.now();
+    if(now-lastHeartbeat<4500)return;
+    lastHeartbeat=now;
+    try{
+      await callTool('room_heartbeat',{
+        agent_id:'claude',session_id:clientId,host:'claude-pulse',widget_version:pulseVersion,activity
+      });
+    }catch{}
+  }
+
   function emitToClaude(message){
     const prompt=[
       `[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,
@@ -81,6 +95,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
       const raw=await callTool('dialog_peek',{agent_id:'claude',limit:1});
       const data=unwrap(raw);
       const messages=Array.isArray(data.messages)?data.messages:[];
+      await heartbeat(messages.length?'ringing':'online');
       set('connection','online');
       set('pending',data.pending_count||0);
       set('badge','listening');
