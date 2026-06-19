@@ -21,6 +21,7 @@ sys.path.insert(0, str(CODE_ROOT))
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
 from runtime.boot_report import emit_startup_report  # noqa: E402
+from runtime import security as security_policy  # noqa: E402
 from runtime.maintenance import run_maintenance  # noqa: E402
 
 RUNNING = True
@@ -79,6 +80,7 @@ def execute_local(task: dict[str, Any]) -> tuple[bool, str, str]:
         return True, "state", json.dumps({"ok": True, "path": str(target)}, ensure_ascii=False)
 
     if kind == "shell":
+        security_policy.validate_local_action(action)
         command = str(action.get("command") or "").strip()
         if not command:
             return False, "shell", "Missing shell command"

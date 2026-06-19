@@ -59,3 +59,4 @@ runtime/release-check.json
 runtime/installation.json
 runtime/maintenance.json
 runtime/events.json.root-bak
+runtime/.last-boot-id

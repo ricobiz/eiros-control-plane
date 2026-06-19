@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -u
+
+ROOT="/srv/eiros-workspace"
+LOG="$ROOT/logs/live-reload.log"
+LEGACY="/opt/eiros-mcp/server.py.legacy-2.2.0"
+SERVER="/opt/eiros-mcp/server.py"
+mkdir -p "$ROOT/logs"
+exec >>"$LOG" 2>&1
+
+echo "[$(date -u +%FT%TZ)] live reload started"
+OLD_TUNNEL="$(pgrep -u eiros -f '^/usr/local/bin/tunnel-client run' | head -n1 || true)"
+OLD_SERVER="$(pgrep -u eiros -f '^/opt/eiros-mcp/.venv/bin/python /opt/eiros-mcp/server.py$' | head -n1 || true)"
+echo "old_tunnel=$OLD_TUNNEL old_server=$OLD_SERVER"
+
+if [ -n "$OLD_SERVER" ]; then
+  kill -TERM "$OLD_SERVER" 2>/dev/null || true
+fi
+
+new_server=""
+for _ in $(seq 1 30); do
+  candidate="$(pgrep -u eiros -f '^/opt/eiros-mcp/.venv/bin/python /opt/eiros-mcp/server.py$' | head -n1 || true)"
+  if [ -n "$candidate" ] && [ "$candidate" != "$OLD_SERVER" ]; then
+    new_server="$candidate"
+    break
+  fi
+  sleep 1
+done
+
+if [ -z "$new_server" ]; then
+  echo "server child did not respawn; restarting tunnel process"
+  current_tunnel="$(pgrep -u eiros -f '^/usr/local/bin/tunnel-client run' | head -n1 || true)"
+  if [ -n "$current_tunnel" ]; then
+    kill -TERM "$current_tunnel" 2>/dev/null || true
+  fi
+  for _ in $(seq 1 60); do
+    candidate="$(pgrep -u eiros -f '^/opt/eiros-mcp/.venv/bin/python /opt/eiros-mcp/server.py$' | head -n1 || true)"
+    if [ -n "$candidate" ] && [ "$candidate" != "$OLD_SERVER" ]; then
+      new_server="$candidate"
+      break
+    fi
+    sleep 1
+  done
+fi
+
+ready="no"
+for _ in $(seq 1 60); do
+  if [ -s /home/eiros/tunnel-health.url ]; then
+    base="$(cat /home/eiros/tunnel-health.url)"
+    if python3 -c "import urllib.request; assert urllib.request.urlopen('${base%/}/readyz',timeout=2).status==200" 2>/dev/null; then
+      ready="yes"
+      break
+    fi
+  fi
+  sleep 1
+done
+
+if [ -n "$new_server" ] && [ "$ready" = "yes" ]; then
+  echo "[$(date -u +%FT%TZ)] reload succeeded new_server=$new_server"
+  cd "$ROOT"
+  PYTHONPATH="$ROOT" python3 - <<'PY'
+from runtime import events
+from runtime.version import __version__
+events.emit(
+    text=f"EIROS live migration completed. Bridge runtime is now {__version__}.",
+    source="live-migration",
+    priority=1200,
+    channel="default",
+    idempotency_key=f"live-migration:{__version__}",
+    payload={"version": __version__, "status": "ready"},
+)
+PY
+  exit 0
+fi
+
+echo "[$(date -u +%FT%TZ)] reload failed; restoring legacy server"
+if [ -f "$LEGACY" ]; then
+  cp -a "$LEGACY" "$SERVER"
+  current_tunnel="$(pgrep -u eiros -f '^/usr/local/bin/tunnel-client run' | head -n1 || true)"
+  if [ -n "$current_tunnel" ]; then
+    kill -TERM "$current_tunnel" 2>/dev/null || true
+  fi
+fi
+cd "$ROOT"
+PYTHONPATH="$ROOT" python3 - <<'PY'
+from runtime import events
+events.emit(
+    text="EIROS live migration failed and the legacy Bridge wrapper was restored.",
+    source="live-migration",
+    priority=1200,
+    channel="default",
+    idempotency_key="live-migration:rollback",
+    payload={"status": "rolled_back"},
+)
+PY
+exit 1

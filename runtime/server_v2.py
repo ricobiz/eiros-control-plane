@@ -19,7 +19,7 @@ from runtime.version import __version__
 
 STATE_FILE = ROOT / ".eiros-state.json"
 SERVER_VERSION = __version__
-PULSE_URI = "ui://eiros/pulse-v1.html"
+PULSE_URI = "ui://eiros/pulse-v2.html"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_widget.html"
 INSTANCE_CONFIG = load_config()
 WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
@@ -41,6 +41,7 @@ if str(CODE_ROOT) not in sys.path:
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
 from runtime.doctor import run_doctor  # noqa: E402
+from runtime import security as security_policy  # noqa: E402
 from root import root_client  # noqa: E402
 
 mcp = FastMCP(
@@ -203,7 +204,8 @@ def write_file(path: str, content: str) -> dict[str, Any]:
 
 @mcp.tool()
 def run_shell(command: str, timeout_seconds: int = 60) -> dict[str, Any]:
-    """Run a shell command as the isolated eiros user inside the workspace."""
+    """Run a command as the isolated service user when operator mode is enabled."""
+    security_policy.require_operator("Direct command execution")
     timeout = max(1, min(int(timeout_seconds), 300))
     try:
         process = subprocess.run(
@@ -266,12 +268,15 @@ def queue_enqueue(
 ) -> dict[str, Any]:
     """Create a durable task with its own exact wake time or recurrence interval."""
     selected_mode = mode if mode in {"brain", "local"} else "brain"
+    selected_action = action or {}
+    if selected_mode == "local":
+        security_policy.validate_local_action(selected_action)
     args = argparse.Namespace(
         id=task_id or None,
         title=title,
         objective=objective,
         payload=json.dumps(payload or {}, ensure_ascii=False),
-        action=json.dumps(action or {}, ensure_ascii=False),
+        action=json.dumps(selected_action, ensure_ascii=False),
         mode=selected_mode,
         next_step=next_step,
         max_steps=max(1, min(int(max_steps), 1000)),
@@ -481,7 +486,7 @@ def pulse_resource() -> str:
         "polling": INSTANCE_CONFIG.get("polling", {}),
         "serverVersion": SERVER_VERSION,
     }
-    return html.replace("__EIROS_BOOTSTRAP__", json.dumps(bootstrap, ensure_ascii=False))
+    return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
 @mcp.tool(

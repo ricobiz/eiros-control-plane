@@ -41,6 +41,10 @@ DEFAULTS: dict[str, Any] = {
         "root_broker": False,
         "browser": False,
     },
+    "security": {
+        "shell_mode": "disabled",
+        "allow_local_shell_tasks": False,
+    },
 }
 
 

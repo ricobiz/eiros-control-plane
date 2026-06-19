@@ -19,6 +19,7 @@ TESTS = [
     "runtime.test_installer",
     "runtime.test_root_broker",
     "runtime.test_watchdog",
+    "runtime.test_security",
 ]
 
 
@@ -47,7 +48,7 @@ def run_release_check() -> dict[str, Any]:
     widget = (CODE_ROOT / "runtime" / "pulse_widget.html").read_text(encoding="utf-8")
     server = (CODE_ROOT / "runtime" / "server_v2.py").read_text(encoding="utf-8")
     contract = {
-        "bootstrap_placeholder": "__EIROS_BOOTSTRAP__" in widget,
+        "bootstrap_placeholder": "__EIROS_BOOTSTRAP_JSON__" in widget and "window.__EIROS_BOOTSTRAP__=" in widget,
         "ui_message": "ui/message" in widget,
         "app_only_poll": 'name="pulse_poll"' in server and 'visibility": ["app"]' in server,
         "instance_binding": "instance_id" in server and "channel" in server,
