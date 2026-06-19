@@ -1,0 +1,23 @@
+[Unit]
+Description=EIROS durable scheduler worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=eiros
+Group=eiros
+EnvironmentFile=-/etc/eiros/eiros.env
+WorkingDirectory=/opt/eiros-control-plane/current
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.worker
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/eiros /home/eiros
+
+[Install]
+WantedBy=multi-user.target

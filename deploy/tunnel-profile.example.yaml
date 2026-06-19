@@ -14,4 +14,4 @@ log:
 mcp:
   commands:
     - channel: main
-      command: "/opt/eiros-mcp/.venv/bin/python /opt/eiros-mcp/server.py"
+      command: "/opt/eiros-control-plane/venv/bin/python -m runtime.server_v2"

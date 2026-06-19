@@ -12,17 +12,16 @@ import time
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / "runtime"
-LOGS = ROOT / "logs"
+from runtime.config import CODE_ROOT, DATA_ROOT as ROOT, RUNTIME_DIR as RUNTIME, LOG_DIR as LOGS
 HEARTBEAT = RUNTIME / "worker-heartbeat.json"
 INBOX = RUNTIME / "brain-inbox.json"
 PID_FILE = RUNTIME / "worker.pid"
 
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(CODE_ROOT))
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
 from runtime.boot_report import emit_startup_report  # noqa: E402
+from runtime.maintenance import run_maintenance  # noqa: E402
 
 RUNNING = True
 OWNER = f"worker:{socket.gethostname()}:{os.getpid()}"
@@ -254,8 +253,9 @@ def main() -> None:
         selector = selectors.DefaultSelector()
         selector.register(sock, selectors.EVENT_READ)
 
+        maintenance_report = run_maintenance()
         startup_report = emit_startup_report()
-        heartbeat("running", startup=True, startup_report=startup_report)
+        heartbeat("running", startup=True, startup_report=startup_report, maintenance=maintenance_report)
         while RUNNING:
             summary = drain_due()
             timeout = next_timeout()

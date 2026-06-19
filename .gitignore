@@ -50,3 +50,12 @@ deploy/generated/
 *.bundle
 
 runtime/.github-token
+
+config/instance.json
+runtime/*.sha256
+build/
+*.egg-info/
+runtime/release-check.json
+runtime/installation.json
+runtime/maintenance.json
+runtime/events.json.root-bak

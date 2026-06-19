@@ -14,17 +14,33 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-ROOT = Path("/srv/eiros-workspace").resolve()
-STATE_FILE = ROOT / ".eiros-state.json"
-SERVER_VERSION = "2.2.0"
-PULSE_URI = "ui://eiros/pulse-v1.html"
-PULSE_HTML = ROOT / "runtime" / "pulse_widget.html"
+from runtime.config import CODE_ROOT, DATA_ROOT as ROOT, load_config
+from runtime.version import __version__
 
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+STATE_FILE = ROOT / ".eiros-state.json"
+SERVER_VERSION = __version__
+PULSE_URI = "ui://eiros/pulse-v1.html"
+PULSE_HTML = CODE_ROOT / "runtime" / "pulse_widget.html"
+INSTANCE_CONFIG = load_config()
+WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
+PULSE_RESOURCE_META: dict[str, Any] = {
+    "ui": {
+        "prefersBorder": True,
+        "csp": {"connectDomains": [], "resourceDomains": []},
+    },
+    "openai/widgetDescription": "Keeps a live, durable reverse event channel from the EIROS instance into this conversation.",
+    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+}
+if WIDGET_DOMAIN:
+    PULSE_RESOURCE_META["ui"]["domain"] = WIDGET_DOMAIN
+    PULSE_RESOURCE_META["openai/widgetDomain"] = WIDGET_DOMAIN
+
+if str(CODE_ROOT) not in sys.path:
+    sys.path.insert(0, str(CODE_ROOT))
 
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
+from runtime.doctor import run_doctor  # noqa: E402
 
 mcp = FastMCP(
     "Eiros Control Plane",
@@ -85,6 +101,8 @@ def health() -> dict[str, Any]:
         "platform": platform.platform(),
         "workspace": str(ROOT),
         "queue_file": str(queue_engine.QUEUE_FILE),
+        "instance_id": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
     }
 
 
@@ -416,22 +434,18 @@ def brain_inbox() -> dict[str, Any]:
     title="EIROS Reverse Wake Pulse",
     description="Mounted reverse channel from the EIROS VPS into this ChatGPT conversation.",
     mime_type="text/html;profile=mcp-app",
-    meta={
-        "ui": {
-            "prefersBorder": True,
-            "domain": "https://68be4ba218d2082e3b.v2.appdeploy.ai",
-            "csp": {"connectDomains": [], "resourceDomains": []},
-        },
-        "openai/widgetDescription": "Keeps a live, durable reverse event channel from the EIROS VPS into this conversation.",
-        "openai/widgetDomain": "https://68be4ba218d2082e3b.v2.appdeploy.ai",
-        "openai/widgetCSP": {
-            "connect_domains": [],
-            "resource_domains": [],
-        },
-    },
+    meta=PULSE_RESOURCE_META,
 )
 def pulse_resource() -> str:
-    return PULSE_HTML.read_text(encoding="utf-8")
+    html = PULSE_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "displayName": INSTANCE_CONFIG.get("display_name", "EIROS"),
+        "polling": INSTANCE_CONFIG.get("polling", {}),
+        "serverVersion": SERVER_VERSION,
+    }
+    return html.replace("__EIROS_BOOTSTRAP__", json.dumps(bootstrap, ensure_ascii=False))
 
 
 @mcp.tool(
@@ -458,7 +472,9 @@ def open_pulse() -> dict[str, Any]:
         "ok": True,
         "server_version": SERVER_VERSION,
         "resource_uri": PULSE_URI,
-        "event_status": event_engine.status(20),
+        "instance_id": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "event_status": event_engine.status(20, str(INSTANCE_CONFIG.get("channel", "default"))),
     }
 
 
@@ -475,9 +491,14 @@ def open_pulse() -> dict[str, Any]:
     meta={"ui": {"visibility": ["app"]}},
     structured_output=True,
 )
-def pulse_poll(widget_id: str, cursor: int = 0) -> dict[str, Any]:
-    """Poll one durable remote event for the active Pulse widget."""
-    return event_engine.poll(widget_id=widget_id, cursor=max(0, int(cursor)))
+def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "") -> dict[str, Any]:
+    """Poll one durable remote event for the active Pulse widget and bound channel."""
+    polling = INSTANCE_CONFIG.get("polling", {})
+    return event_engine.poll(
+        widget_id=widget_id, cursor=max(0, int(cursor)), channel=channel, instance_id=instance_id,
+        leader_lease_seconds=int(polling.get("leader_lease_seconds", 25)),
+        claim_seconds=int(polling.get("claim_seconds", 45)),
+    )
 
 
 @mcp.tool(
@@ -493,9 +514,9 @@ def pulse_poll(widget_id: str, cursor: int = 0) -> dict[str, Any]:
     meta={"ui": {"visibility": ["app"]}},
     structured_output=True,
 )
-def pulse_mark_delivered(event_id: str, widget_id: str) -> dict[str, Any]:
+def pulse_mark_delivered(event_id: str, widget_id: str, channel: str = "") -> dict[str, Any]:
     """Mark a claimed event as delivered by the active Pulse widget."""
-    return event_engine.mark_delivered(event_id=event_id, widget_id=widget_id)
+    return event_engine.mark_delivered(event_id=event_id, widget_id=widget_id, channel=channel)
 
 
 @mcp.tool(
@@ -515,9 +536,11 @@ def emit_event(
     source: str = "chatgpt",
     payload: dict[str, Any] | None = None,
     priority: int = 0,
+    channel: str = "",
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     """Create a durable reverse-channel event."""
-    return event_engine.emit(text=text, source=source, payload=payload, priority=priority)
+    return event_engine.emit(text=text, source=source, payload=payload, priority=priority, channel=channel, idempotency_key=idempotency_key)
 
 
 @mcp.tool(
@@ -549,9 +572,15 @@ def ack_event(event_id: str, result: str = "", actor: str = "eiros") -> dict[str
     ),
     structured_output=True,
 )
-def pulse_status(limit: int = 100) -> dict[str, Any]:
-    """Read durable reverse-channel status and recent events."""
-    return event_engine.status(limit=max(1, min(int(limit), 500)))
+def pulse_status(limit: int = 100, channel: str = "") -> dict[str, Any]:
+    """Read durable reverse-channel status and recent events for one channel."""
+    return event_engine.status(limit=max(1, min(int(limit), 500)), channel=channel)
+
+
+@mcp.tool()
+def doctor(offline: bool = False) -> dict[str, Any]:
+    """Run installation and runtime diagnostics for this EIROS instance."""
+    return run_doctor(offline=bool(offline))
 
 
 if __name__ == "__main__":

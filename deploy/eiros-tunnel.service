@@ -1,0 +1,25 @@
+[Unit]
+Description=EIROS OpenAI Secure MCP Tunnel
+After=network-online.target eiros-worker.service
+Wants=network-online.target
+Requires=eiros-worker.service
+
+[Service]
+Type=simple
+User=eiros
+Group=eiros
+EnvironmentFile=/etc/eiros/tunnel.env
+EnvironmentFile=-/etc/eiros/eiros.env
+WorkingDirectory=/opt/eiros-control-plane/current
+ExecStart=/usr/local/bin/tunnel-client run --profile eiros --health.listen-addr 127.0.0.1:0 --health.url-file /home/eiros/tunnel-health.url
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/eiros /home/eiros
+
+[Install]
+WantedBy=multi-user.target

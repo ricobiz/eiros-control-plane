@@ -10,7 +10,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="top"><div class="title">EIROS Pulse</div><div id="badge" class="badge">booting</div></div>
+  <div class="top"><div id="title" class="title">EIROS Pulse</div><div id="badge" class="badge">booting</div></div>
   <div class="row">
     <div class="metric"><b id="leader">—</b><span>leader</span></div>
     <div class="metric"><b id="cursor">0</b><span>cursor</span></div>
@@ -22,10 +22,19 @@
   <div id="status" class="status">Starting bridge…</div>
 </div>
 <script>
+window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP__;
 (function(){
   const host=window.openai||{};
-  const saved=host.widgetState&&host.widgetState.privateContent?host.widgetState.privateContent:{};
+  const boot=window.__EIROS_BOOTSTRAP__||{};
+  const rawSaved=host.widgetState&&host.widgetState.privateContent?host.widgetState.privateContent:{};
+  const saved=rawSaved.instanceId===boot.instanceId&&rawSaved.channel===boot.channel?rawSaved:{};
   const widgetId=saved.widgetId||(crypto.randomUUID?crypto.randomUUID():'pulse-'+Date.now()+'-'+Math.random().toString(16).slice(2));
+  const instanceId=String(boot.instanceId||'');
+  const channel=String(boot.channel||'default');
+  const polling=boot.polling||{};
+  const activeMs=Number(polling.active_ms||750);
+  const idleMinMs=Number(polling.idle_min_ms||1200);
+  const idleMaxMs=Number(polling.idle_max_ms||15000);
   let cursor=Number(saved.cursor||0);
   let paused=Boolean(saved.paused||false);
   let interval=1000;
@@ -35,12 +44,13 @@
   const pendingRpc=new Map();
 
   const $=id=>document.getElementById(id);
+  $('title').textContent=(boot.displayName||'EIROS')+' Pulse';
   const set=(id,v)=>{$(id).textContent=String(v)};
   function persist(){
     if(typeof host.setWidgetState==='function'){
       host.setWidgetState({
-        modelContent:`EIROS Pulse active; cursor=${cursor}; paused=${paused}`,
-        privateContent:{widgetId,cursor,paused},
+        modelContent:`${boot.displayName||'EIROS'} Pulse active; instance=${instanceId}; channel=${channel}; cursor=${cursor}; paused=${paused}`,
+        privateContent:{widgetId,cursor,paused,instanceId,channel},
         imageIds:[]
       });
     }
@@ -102,7 +112,7 @@
     if(busy){schedule(interval);return}
     busy=true;
     try{
-      const raw=await callTool('pulse_poll',{widget_id:widgetId,cursor});
+      const raw=await callTool('pulse_poll',{widget_id:widgetId,cursor,channel,instance_id:instanceId});
       const data=unwrap(raw);
       set('leader',data.leader?'yes':'no');
       set('pending',data.pending_count||0);
@@ -113,14 +123,15 @@
         await updateContext(event);
         await postMessage(event);
         await new Promise(r=>setTimeout(r,250));
-        await callTool('pulse_mark_delivered',{event_id:event.id,widget_id:widgetId});
+        await callTool('pulse_mark_delivered',{event_id:event.id,widget_id:widgetId,channel});
         cursor=Math.max(cursor,Number(event.seq||0));
-        interval=750;
+        interval=activeMs;
+        set('cursor',cursor);
         persist();
         set('status',`Posted remote event ${event.id}`);
       }else{
-        interval=Math.min(data.leader?15000:5000,Math.max(1200,Math.floor(interval*1.5)));
-        set('status',`widget ${widgetId.slice(0,8)} · server ${data.server_time||'?'} · latest ${data.latest_seq||0}`);
+        interval=Math.min(data.leader?idleMaxMs:Math.min(5000,idleMaxMs),Math.max(idleMinMs,Math.floor(interval*1.5)));
+        set('status',`${boot.displayName||'EIROS'} ${String(instanceId).slice(0,8)} · ${channel} · widget ${widgetId.slice(0,8)} · server ${data.server_time||'?'} · latest ${data.latest_seq||0}`);
       }
     }catch(err){
       interval=Math.min(15000,Math.max(2000,interval*2));
@@ -134,9 +145,11 @@
   }
   $('toggle').addEventListener('click',()=>{paused=!paused;$('toggle').textContent=paused?'Resume':'Pause';persist();if(!paused){interval=500;schedule(50)}});
   $('test').addEventListener('click',async()=>{
-    try{await callTool('emit_event',{text:'PULSE_WIDGET_TEST',source:'pulse-widget',payload:{widget_id:widgetId},priority:10});interval=250;schedule(50)}catch(err){set('status',String(err))}
+    try{await callTool('emit_event',{text:'PULSE_WIDGET_TEST',source:'pulse-widget',payload:{widget_id:widgetId,instance_id:instanceId,channel},priority:10,channel,idempotency_key:'widget-test-'+widgetId+'-'+Date.now()});interval=250;schedule(50)}catch(err){set('status',String(err))}
   });
   window.addEventListener('beforeunload',()=>clearTimeout(timer));
+  set('cursor',cursor);
+  set('status',`${boot.displayName||'EIROS'} ${String(instanceId).slice(0,8)} · channel ${channel}`);
   persist();
   schedule(100);
 })();

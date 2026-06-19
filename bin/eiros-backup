@@ -8,8 +8,8 @@ export GIT_SSH_COMMAND="ssh -i /home/eiros/.ssh/eiros-control-plane_ed25519 -o I
 
 # Only source/configuration paths are eligible for automatic commits.
 git add -- \
-  .gitignore README.md requirements.txt CORE.md PROTOCOL.md REVERSE_WAKE.md \
-  bin deploy root \
+  .gitignore README.md requirements.txt pyproject.toml CORE.md PROTOCOL.md REVERSE_WAKE.md \
+  bin config deploy docs root \
   'runtime/*.py' 'runtime/*.html' 2>/dev/null || true
 
 if ! git diff --cached --quiet; then
@@ -20,9 +20,7 @@ if ! git diff --cached --quiet; then
     exit 23
   fi
 
-  python3 -m py_compile runtime/*.py root/*.py
-  python3 -m runtime.test_scheduler >/dev/null
-  python3 -m runtime.test_queue >/dev/null
+  python3 -m runtime.release_check >/dev/null
 
   stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   git commit -m "Automated EIROS snapshot ${stamp}"

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "instance_id": "generated-on-first-run",
+  "display_name": "EIROS",
+  "channel": "default",
+  "widget_domain": "https://your-unique-widget-origin.example",
+  "polling": {
+    "active_ms": 750,
+    "idle_min_ms": 1200,
+    "idle_max_ms": 15000,
+    "leader_lease_seconds": 25,
+    "claim_seconds": 45
+  },
+  "features": {
+    "reverse_wake": true,
+    "scheduler": true,
+    "root_broker": false,
+    "browser": false
+  }
+}

@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime import queue as queue_engine
-
-ROOT = Path(__file__).resolve().parents[1]
+from runtime.config import DATA_ROOT as ROOT
 STATUS_FILE = ROOT / "runtime" / "server-status.json"
 LAST_BOOT_FILE = ROOT / "runtime" / ".last-boot-id"
 

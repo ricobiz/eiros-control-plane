@@ -12,8 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_DIR = ROOT / "runtime"
+from runtime.config import DATA_ROOT as ROOT, RUNTIME_DIR
 QUEUE_FILE = RUNTIME_DIR / "queue.json"
 LOCK_FILE = RUNTIME_DIR / "queue.lock"
 WAKEUP_SOCKET = RUNTIME_DIR / "wakeup.sock"
