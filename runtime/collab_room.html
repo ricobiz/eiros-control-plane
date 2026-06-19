@@ -11,6 +11,7 @@
 .participants{display:flex;gap:7px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}.participants::-webkit-scrollbar{display:none}.person{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #2f3b59;border-radius:12px;background:#151c2c;font-size:11px}.person .name{font-weight:750}.person .activity{opacity:.68}.person .sessions{opacity:.5}.dot{width:8px;height:8px;border-radius:50%;background:#536077;box-shadow:0 0 0 2px rgba(83,96,119,.18)}.person.online .dot,.person.idle .dot{background:#35d18a;box-shadow:0 0 0 2px rgba(53,209,138,.18),0 0 10px rgba(53,209,138,.35)}.person.away .dot{background:#d1a63c}.person.ringing{border-color:#9e7230;background:#2c2214}.person.ringing .dot{background:#ffb23e;animation:ring 1s infinite}.person.working{border-color:#446db8;background:#172747}.person.working .dot{background:#5f91ff;animation:work 1.25s infinite}.person.offline{opacity:.62}.call{border:0;background:transparent;color:#adc6f8;padding:1px 3px;font-size:12px;cursor:pointer}.call:active{transform:scale(.92)}
 @keyframes ring{0%,100%{box-shadow:0 0 0 2px rgba(255,178,62,.2)}50%{box-shadow:0 0 0 6px rgba(255,178,62,.03),0 0 13px rgba(255,178,62,.55)}}@keyframes work{0%,100%{opacity:.55}50%{opacity:1;box-shadow:0 0 12px rgba(95,145,255,.8)}}
 .sub{font-size:10px;opacity:.55;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.messages{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}.msg{max-width:88%;padding:9px 11px;border-radius:14px;border:1px solid #2d3955;background:#151c2c;box-shadow:0 5px 20px rgba(0,0,0,.18)}.msg.chatgpt{align-self:flex-start;border-color:#3760a0;background:#13213b}.msg.claude{align-self:flex-start;border-color:#8b5b30;background:#2b1d13}.msg.rico{align-self:flex-end;border-color:#27846f;background:#12372f}.msg.control{align-self:center;max-width:96%;border-style:dashed;opacity:.88}.meta{font-size:10px;opacity:.65;margin-bottom:5px;display:flex;gap:7px;flex-wrap:wrap}.body{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.42}.composer{padding:10px;border-top:1px solid #27314a;background:#0f1420}.tools{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}.tools button,.tools select,.send{border:1px solid #334367;background:#17213a;color:#edf2ff;border-radius:10px;padding:8px 10px;font-weight:700}.tools button.active{background:#243b66}.tools button.danger{border-color:#873f4a;background:#401c25}.compose{display:flex;gap:8px;align-items:flex-end}textarea{flex:1;resize:none;min-height:44px;max-height:130px;border-radius:12px;border:1px solid #334367;background:#0b111e;color:#edf2ff;padding:10px;font:inherit}.send{background:#1c4d87;border-color:#3676bc}.foot{font-size:10px;opacity:.62;margin-top:7px;white-space:pre-wrap}.empty{margin:auto;opacity:.6;font-size:13px}
+.dialer{display:none;margin:0 10px 10px;padding:12px;border:1px solid #334367;border-radius:14px;background:#0b111e}.dialer.open{display:block}.dialhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.dialtitle{font-weight:800;font-size:12px}.dialdisplay{width:100%;padding:11px 12px;border:1px solid #3b4f79;border-radius:12px;background:#111a2a;color:#edf2ff;font-size:20px;letter-spacing:3px;text-align:center}.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.key{border:1px solid #334367;border-radius:12px;background:#17213a;color:#edf2ff;padding:12px 0;font-size:17px;font-weight:800}.dialactions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.dialcall{border:1px solid #26835f;border-radius:11px;background:#144b39;color:#eafff6;padding:10px;font-weight:850}.dialclear{border:1px solid #6d4050;border-radius:11px;background:#351a24;color:#ffeef2;padding:10px;font-weight:750}.phone{font-size:9px;opacity:.6;margin-left:2px}
 </style>
 </head>
 <body>
@@ -27,7 +28,19 @@
   <div class="composer">
     <div class="tools">
       <select id="target"><option value="both">Обоим</option><option value="chatgpt">Эйросу</option><option value="claude">Claude</option></select>
+      <button id="dialToggle">☎ Номер</button>
       <button id="pause">Pause</button><button id="resume">Resume</button><button id="stop" class="danger">Stop</button>
+    </div>
+    <div id="dialer" class="dialer">
+      <div class="dialhead"><div class="dialtitle">EIROS Dial</div><div id="dialHint" class="version">номер / agent_id / адрес</div></div>
+      <input id="dialDisplay" class="dialdisplay" inputmode="numeric" autocomplete="off" placeholder="000001" />
+      <div class="keypad">
+        <button class="key" data-key="1">1</button><button class="key" data-key="2">2</button><button class="key" data-key="3">3</button>
+        <button class="key" data-key="4">4</button><button class="key" data-key="5">5</button><button class="key" data-key="6">6</button>
+        <button class="key" data-key="7">7</button><button class="key" data-key="8">8</button><button class="key" data-key="9">9</button>
+        <button class="key" data-key="clear">C</button><button class="key" data-key="0">0</button><button class="key" data-key="back">⌫</button>
+      </div>
+      <div class="dialactions"><button id="dialCall" class="dialcall">Позвонить</button><button id="dialClose" class="dialclear">Закрыть</button></div>
     </div>
     <div class="compose"><textarea id="input" placeholder="Написать в общую комнату…"></textarea><button id="send" class="send">Send</button></div>
     <div id="foot" class="foot">Connecting…</div>
@@ -103,11 +116,12 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
       const id=String(agent.agent_id),activity=String(agent.activity||agent.presence||'offline');
       const chip=document.createElement('div');chip.className='person '+activity;
       const dot=document.createElement('span');dot.className='dot';
-      const name=document.createElement('span');name.className='name';name.textContent=who(id);
+      const name=document.createElement('span');name.className='name';name.textContent=String(agent.display_name||who(id));
+      const phone=document.createElement('span');phone.className='phone';phone.textContent=agent.phone_number?`#${agent.phone_number}`:'';
       const state=document.createElement('span');state.className='activity';state.textContent=activity;
       const sessions=document.createElement('span');sessions.className='sessions';sessions.textContent=Number(agent.active_session_count||0)>0?`· ${agent.active_session_count} session`:'';
-      const call=document.createElement('button');call.className='call';call.textContent='☎';call.title='Вызвать '+who(id);call.addEventListener('click',()=>callAgent(id));
-      chip.append(dot,name,state,sessions,call);box.appendChild(chip);
+      const call=document.createElement('button');call.className='call';call.textContent='☎';call.title='Вызвать '+String(agent.display_name||who(id));call.addEventListener('click',()=>callAgent(agent.phone_number||id));
+      chip.append(dot,name,phone,state,sessions,call);box.appendChild(chip);
     }
   }
   async function heartbeat(activity='online'){
@@ -133,9 +147,21 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
     catch(error){$('foot').textContent='Send error: '+String(error?.message||error)}finally{$('send').disabled=false}
   }
   async function callAgent(target){
-    const content=`Рико вызывает ${who(target)} в EIROS Room. Подключись к общей комнате и проверь адресованные сообщения.`;
-    try{await callTool('operator_send',{content,target,project_id:projectId,thread_id:threadId,kind:'call'});await refresh()}
-    catch(error){$('foot').textContent='Call error: '+String(error?.message||error)}
+    const ref=String(target||'').trim();if(!ref)return;
+    const content=`Рико вызывает вас через EIROS Room. Подключитесь к общей комнате и проверьте адресованные сообщения.`;
+    try{
+      $('foot').textContent='Вызов '+ref+'…';
+      const raw=await callTool('operator_call_contact',{phone_or_address:ref,content,project_id:projectId,thread_id:threadId});
+      const data=unwrap(raw),mode=String(data.delivery_mode||'queued');
+      $('foot').textContent=`Вызов ${ref}: ${mode}`;
+      await refresh();
+    }catch(error){$('foot').textContent='Call error: '+String(error?.message||error)}
+  }
+  function openDialer(value=''){$('dialer').classList.add('open');if(value)$('dialDisplay').value=String(value);$('dialDisplay').focus()}
+  function closeDialer(){$('dialer').classList.remove('open')}
+  function dialKey(key){
+    const input=$('dialDisplay');
+    if(key==='clear')input.value='';else if(key==='back')input.value=input.value.slice(0,-1);else input.value=(input.value+key).slice(0,64);
   }
   async function control(mode){
     try{await callTool('conversation_control_set',{actor_id:'rico',project_id:projectId,mode,note:'Set from EIROS Room',thread_id:threadId});await refresh()}
@@ -143,6 +169,11 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   }
   $('send').addEventListener('click',send);
   $('input').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}});
+  $('dialToggle').addEventListener('click',()=>openDialer());
+  $('dialClose').addEventListener('click',closeDialer);
+  $('dialCall').addEventListener('click',()=>callAgent($('dialDisplay').value));
+  $('dialDisplay').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();callAgent($('dialDisplay').value)}});
+  document.querySelectorAll('.key').forEach(button=>button.addEventListener('click',()=>dialKey(button.dataset.key||'')));
   $('pause').addEventListener('click',()=>control('paused'));$('resume').addEventListener('click',()=>control('running'));$('stop').addEventListener('click',()=>control('stopped'));
   window.addEventListener('beforeunload',()=>clearTimeout(timer));refresh();
 })();

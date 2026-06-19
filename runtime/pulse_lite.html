@@ -25,12 +25,13 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
   const $=id=>document.getElementById(id);
   const set=(id,value)=>{const node=$(id);if(node)node.textContent=String(value)};
   const boot=window.__EIROS_BOOTSTRAP__||{};
-  const host=window.openai||{};
-  const widgetId=(crypto&&crypto.randomUUID)?crypto.randomUUID():'lite-'+Date.now();
+  const host=window.mcp||window.openai||{};
+  const widgetId=(globalThis.crypto&&globalThis.crypto.randomUUID)?globalThis.crypto.randomUUID():'lite-'+Date.now();
   let timer=null;
   let stopped=false;
   let lastHeartbeat=0;
   const pulseVersion=String(boot.pulseVersion||'unknown');
+  const agentId=String(boot.agentId||'chatgpt');
   set('version','v'+pulseVersion);
 
   function showError(error){
@@ -55,7 +56,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     lastHeartbeat=now;
     try{
       await callTool('room_heartbeat',{
-        agent_id:'chatgpt',session_id:widgetId,host:'chatgpt-pulse',widget_version:pulseVersion,activity
+        agent_id:agentId,session_id:widgetId,host:'chatgpt-pulse',widget_version:pulseVersion,activity
       });
     }catch{}
   }

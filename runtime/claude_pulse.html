@@ -36,6 +36,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
   let rpcCounter=1;
   let lastHeartbeat=0;
   const pulseVersion=String(boot.pulseVersion||'unknown');
+  const agentId=String(boot.agentId||'claude');
   set('version','v'+pulseVersion);
   const pendingRpc=new Map();
 
@@ -71,7 +72,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     lastHeartbeat=now;
     try{
       await callTool('room_heartbeat',{
-        agent_id:'claude',session_id:clientId,host:'claude-pulse',widget_version:pulseVersion,activity
+        agent_id:agentId,session_id:clientId,host:'claude-pulse',widget_version:pulseVersion,activity
       });
     }catch{}
   }
@@ -80,7 +81,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     const prompt=[
       `[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,
       'A new addressed call is waiting in EIROS Hub. The full dialogue stays in EIROS Room, not in this main chat.',
-      `Call dialog_inbox with agent_id="claude", client_id="claude-native-turn", project_id="${message.project_id}", thread_id="${message.thread_id}", limit=1.`,
+      `Call dialog_inbox with agent_id="${agentId}", client_id="claude-native-turn", project_id="${message.project_id}", thread_id="${message.thread_id}", limit=1.`,
       'Handle the claimed message, reply through dialog_send when appropriate, then call dialog_ack for that message.'
     ].join('\n');
     window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
@@ -92,7 +93,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     busy=true;
     try{
       set('badge','polling');
-      const raw=await callTool('dialog_peek',{agent_id:'claude',limit:1});
+      const raw=await callTool('dialog_peek',{agent_id:agentId,limit:1});
       const data=unwrap(raw);
       const messages=Array.isArray(data.messages)?data.messages:[];
       await heartbeat(messages.length?'ringing':'online');

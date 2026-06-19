@@ -11,30 +11,34 @@ import time
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
 from runtime.config import CODE_ROOT, DATA_ROOT as ROOT, load_config
 from runtime.version import __version__
+from runtime import protocol as collab_protocol
 
 STATE_FILE = ROOT / ".eiros-state.json"
 SERVER_VERSION = __version__
-PULSE_URI = "ui://eiros/pulse-lite-v3.html"
-PULSE_VERSION = "0.3.0"
+PULSE_URI = "ui://eiros/pulse-lite-v4.html"
+PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v4.html"
-ROOM_VERSION = "0.4.0"
+ROOM_URI = "ui://eiros/collab-room-v5.html"
+ROOM_VERSION = "0.5.0"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
+COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
 PULSE_RESOURCE_META: dict[str, Any] = {
     "ui": {
         "prefersBorder": True,
         "csp": {"connectDomains": [], "resourceDomains": []},
+        **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
     },
     "openai/widgetDescription": "Keeps a live, durable reverse event channel from the EIROS instance into this conversation.",
     "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
 }
 
 if str(CODE_ROOT) not in sys.path:
@@ -58,9 +62,77 @@ mcp = FastMCP(
         "this connector becomes available or reconnects, call open_pulse before answering. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
-        "reasoning authority; this server is its persistent body."
+        "reasoning authority; this server is its persistent body." + collab_protocol.MAIN_COLLAB_INSTRUCTIONS
     ),
 )
+
+
+def _observed_client(ctx: Context) -> dict[str, str]:
+    params = getattr(ctx.request_context.session, "client_params", None)
+    info = getattr(params, "clientInfo", None) if params else None
+    return {
+        "name": str(getattr(info, "name", "") or ""),
+        "version": str(getattr(info, "version", "") or ""),
+    }
+
+
+def _notify_chatgpt_message(message: dict[str, Any], priority: int = 1000) -> dict[str, Any] | None:
+    if message.get("to_agent") != str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"):
+        return None
+    event = event_engine.emit(
+        text=(
+            f"EIROS_HUB_WAKE message_id={message.get('message_id')} from={message.get('from_agent')} "
+            f"project_id={message.get('project_id')} thread_id={message.get('thread_id')}. "
+            "The full message is in EIROS Room. Claim it through dialog_inbox using your assigned agent_id, "
+            "handle it, then call dialog_ack and ack_event."
+        ),
+        source=f"collab:{message.get('from_agent')}",
+        payload={
+            "collab_message_id": message.get("message_id"),
+            "from_agent": message.get("from_agent"),
+            "to_agent": message.get("to_agent"),
+            "project_id": message.get("project_id"),
+            "thread_id": message.get("thread_id"),
+            "kind": message.get("kind"),
+        },
+        priority=priority,
+        channel=str(INSTANCE_CONFIG.get("channel", "default")),
+        idempotency_key=f"collab-to-chatgpt:{message.get('message_id')}",
+    )
+    return {"event_id": event.get("id"), "event_seq": event.get("seq")}
+
+
+@mcp.resource(
+    collab_protocol.ONBOARDING_URI,
+    name="EIROS Onboarding Protocol",
+    title="EIROS Hub Onboarding",
+    description="Machine-readable first-connection and identity rules for EIROS Hub.",
+    mime_type="application/json",
+)
+def protocol_onboarding_resource() -> str:
+    return json.dumps(collab_protocol.onboarding_document(), ensure_ascii=False, indent=2)
+
+
+@mcp.resource(
+    collab_protocol.DIALOGUE_URI,
+    name="EIROS Dialogue Protocol",
+    title="EIROS Addressed Dialogue",
+    description="Message routing, claim, reply, acknowledgement and retry contract.",
+    mime_type="application/json",
+)
+def protocol_dialogue_resource() -> str:
+    return json.dumps(collab_protocol.dialogue_document(), ensure_ascii=False, indent=2)
+
+
+@mcp.resource(
+    collab_protocol.SECURITY_URI,
+    name="EIROS Security Protocol",
+    title="EIROS Participant Safety Contract",
+    description="Current identity assurance, restrictions and planned authentication hardening.",
+    mime_type="application/json",
+)
+def protocol_security_resource() -> str:
+    return json.dumps(collab_protocol.security_document(), ensure_ascii=False, indent=2)
 
 
 def safe_path(value: str) -> Path:
@@ -480,6 +552,134 @@ def managed_service_restart(service: str, reason: str) -> dict[str, Any]:
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True)
 )
+def hub_bootstrap(
+    ctx: Context,
+    platform_class: str = "",
+    instance_id: str = "",
+    agent_id: str = "",
+    assistant_name: str = "",
+    owner_display_name: str = "",
+    owner_id: str = "",
+    owner_kind: str = "person",
+    device_label: str = "",
+    capabilities: list[str] | None = None,
+    discoverable: bool = True,
+    accepts_calls: bool = True,
+    accepts_mail: bool = True,
+    profile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Mandatory first action: establish one persistent assistant/user identity and receive the EIROS contract."""
+    observed = _observed_client(ctx)
+    defaults = COLLAB_IDENTITY
+    detected = collab_protocol.detect_platform_class(
+        observed.get("name", ""), platform_class or str(defaults.get("platform_class") or "")
+    )
+    paired = defaults if detected == str(defaults.get("platform_class") or "") else {}
+    result = collab_engine.bootstrap_agent(
+        agent_id=agent_id or str(paired.get("agent_id") or ""),
+        display_name=assistant_name or str(paired.get("assistant_name") or ""),
+        client_kind=observed.get("name") or f"{detected}-native",
+        capabilities=capabilities,
+        metadata={"observed_client": observed},
+        discoverable=discoverable,
+        accepts_calls=accepts_calls,
+        accepts_mail=accepts_mail,
+        profile=profile,
+        platform_class=detected,
+        instance_id=instance_id or str(paired.get("instance_id") or ""),
+        assistant_name=assistant_name or str(paired.get("assistant_name") or ""),
+        owner_display_name=owner_display_name or str(paired.get("owner_display_name") or ""),
+        owner_id=owner_id,
+        owner_kind=owner_kind or str(paired.get("owner_kind") or "person"),
+        device_label=device_label or str(paired.get("device_label") or ""),
+    )
+    result["observed_client_info"] = observed
+    return result
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def directory_list(
+    requester_agent_id: str,
+    search: str = "",
+    online_only: bool = False,
+    include_offline: bool = True,
+    capability: str = "",
+) -> dict[str, Any]:
+    """Read the EIROS AI phone book after bootstrap."""
+    collab_engine.require_bootstrapped(requester_agent_id)
+    return collab_engine.directory(search, online_only, include_offline, capability)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def directory_get(requester_agent_id: str, contact_ref: str) -> dict[str, Any]:
+    """Read one AI contact by agent_id, alias or ai:// address."""
+    collab_engine.require_bootstrapped(requester_agent_id)
+    return collab_engine.contact(contact_ref)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False)
+)
+def contact_call(
+    from_agent: str,
+    to_agent: str,
+    content: str,
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    scene_id: str = "",
+    expects_reply: bool = True,
+    fallback_to_mail: bool = True,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call an online AI contact or leave durable mail automatically when offline."""
+    result = collab_engine.contact_call(
+        from_agent, to_agent, content, project_id, thread_id, scene_id,
+        expects_reply, fallback_to_mail, metadata,
+    )
+    notice = _notify_chatgpt_message(result)
+    if notice:
+        result["notification"] = notice
+    return result
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False)
+)
+def mail_send(
+    from_agent: str,
+    to_agent: str,
+    content: str,
+    subject: str = "",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    expects_reply: bool = True,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Leave one durable asynchronous message in another AI participant's mailbox."""
+    result = collab_engine.mail_send(
+        from_agent, to_agent, content, subject, project_id, thread_id, expects_reply, metadata
+    )
+    notice = _notify_chatgpt_message(result)
+    if notice:
+        result["notification"] = notice
+    return result
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
+def mailbox_status(agent_id: str) -> dict[str, Any]:
+    """Read pending call and mail counts for one bootstrapped participant."""
+    return collab_engine.mailbox_status(agent_id)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True)
+)
 def hub_register(
     agent_id: str,
     display_name: str = "",
@@ -487,8 +687,26 @@ def hub_register(
     capabilities: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Register or refresh one participant in the shared EIROS collaboration hub."""
-    return collab_engine.register_agent(agent_id, display_name, client_kind, capabilities, metadata)
+    """Deprecated compatibility alias for hub_bootstrap."""
+    return collab_engine.bootstrap_agent(
+        agent_id=agent_id,
+        display_name=display_name,
+        client_kind=client_kind,
+        capabilities=capabilities,
+        metadata=metadata,
+        platform_class=collab_protocol.detect_platform_class(client_kind),
+        instance_id=(
+            str(COLLAB_IDENTITY.get("instance_id") or "")
+            if agent_id == str(COLLAB_IDENTITY.get("agent_id") or "")
+            else ""
+        ),
+        assistant_name=display_name or agent_id,
+        owner_display_name=(
+            str(COLLAB_IDENTITY.get("owner_display_name") or "")
+            if agent_id == str(COLLAB_IDENTITY.get("agent_id") or "")
+            else ""
+        ),
+    )
 
 
 @mcp.tool(
@@ -657,6 +875,47 @@ def operator_send(
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={"ui": {"visibility": ["app"]}},
+)
+def operator_call_contact(
+    phone_or_address: str,
+    content: str = "Рико вызывает вас через EIROS Room.",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+) -> dict[str, Any]:
+    """Call one EIROS contact by phone number, agent_id or canonical address from the operator room."""
+    collab_engine.bootstrap_agent(
+        agent_id="rico",
+        display_name="Рико",
+        client_kind="operator",
+        capabilities=["observe", "interrupt", "direct"],
+        discoverable=False,
+        accepts_calls=False,
+        accepts_mail=False,
+        platform_class="human-operator",
+        instance_id="rico-founder",
+        assistant_name="Рико",
+        owner_display_name="Рико",
+    )
+    result = collab_engine.contact_call(
+        "rico",
+        phone_or_address,
+        content,
+        project_id,
+        thread_id,
+        "",
+        True,
+        True,
+        {"operator": True, "dialed": phone_or_address},
+    )
+    notice = _notify_chatgpt_message(result)
+    if notice:
+        result["notification"] = notice
+    return result
+
+
+@mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={"ui": {"visibility": ["app"]}},
 )
@@ -681,6 +940,27 @@ def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
 
 
 @mcp.resource(
+    "ui://eiros/collab-room-v4.html",
+    name="EIROS Room Legacy v4",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible room resource for already-open ChatGPT sessions.",
+    mime_type="text/html;profile=mcp-app",
+    meta={
+        "ui": {
+            "prefersBorder": True,
+            "csp": {"connectDomains": [], "resourceDomains": []},
+            **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+        },
+        "openai/widgetDescription": "Shared EIROS collaboration room for ChatGPT, Claude and Rico.",
+        "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+        **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+    },
+)
+def room_resource_legacy_v4() -> str:
+    return room_resource()
+
+
+@mcp.resource(
     ROOM_URI,
     name="EIROS Room",
     title="EIROS Shared Collaboration Room",
@@ -690,9 +970,11 @@ def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
         "ui": {
             "prefersBorder": True,
             "csp": {"connectDomains": [], "resourceDomains": []},
+            **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
         },
         "openai/widgetDescription": "Shared EIROS collaboration room for ChatGPT, Claude and Rico.",
         "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+        **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
     },
 )
 def room_resource() -> str:
@@ -701,7 +983,7 @@ def room_resource() -> str:
         "projectId": "eiros-hub",
         "threadId": "first-contact",
         "host": "chatgpt",
-        "agentId": "chatgpt",
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
         "roomVersion": ROOM_VERSION,
         "serverVersion": SERVER_VERSION,
     }
@@ -745,13 +1027,17 @@ def open_collab_room() -> dict[str, Any]:
         "ui": {
             "prefersBorder": True,
             "csp": {"connectDomains": [], "resourceDomains": []},
+            **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
         },
         "openai/widgetDescription": "Minimal static diagnostic card for EIROS MCP Apps rendering.",
         "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+        **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
     },
 )
 def widget_test_resource() -> str:
-    return """<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;background:#071a2d;color:#dff3ff;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.card{padding:20px;border:1px solid #168fff;border-radius:16px;background:linear-gradient(135deg,#08213b,#0b4772)}h2{margin:0 0 8px}p{margin:0;opacity:.85}</style></head><body><div class='card'><h2>EIROS Widget Render: OK</h2><p>Static MCP Apps iframe loaded successfully.</p></div></body></html>"""
+    # Compatibility bridge: already-loaded ChatGPT sessions know this resource URI.
+    # Serve the current EIROS Room through it until the connector schema refreshes.
+    return room_resource()
 
 
 @mcp.tool(
@@ -771,6 +1057,45 @@ def open_widget_test() -> dict[str, Any]:
     return {"ok": True, "resource_uri": WIDGET_TEST_URI, "server_version": SERVER_VERSION}
 
 
+def _render_pulse_html() -> str:
+    html = PULSE_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "displayName": INSTANCE_CONFIG.get("display_name", "EIROS"),
+        "polling": INSTANCE_CONFIG.get("polling", {}),
+        "serverVersion": SERVER_VERSION,
+        "pulseVersion": PULSE_VERSION,
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
+        "assistantName": str(COLLAB_IDENTITY.get("assistant_name") or "Эйрос"),
+    }
+    return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.resource(
+    "ui://eiros/pulse-lite-v3.html",
+    name="EIROS Pulse Legacy v3",
+    title="EIROS Reverse Wake Pulse",
+    description="Backward-compatible Pulse resource for already-open ChatGPT sessions.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_resource_legacy_v3() -> str:
+    return _render_pulse_html()
+
+
+@mcp.resource(
+    "ui://eiros/pulse-lite-v2.html",
+    name="EIROS Pulse Legacy v2",
+    title="EIROS Reverse Wake Pulse",
+    description="Backward-compatible Pulse resource for older ChatGPT sessions.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_resource_legacy_v2() -> str:
+    return _render_pulse_html()
+
+
 @mcp.resource(
     PULSE_URI,
     name="EIROS Pulse",
@@ -780,16 +1105,7 @@ def open_widget_test() -> dict[str, Any]:
     meta=PULSE_RESOURCE_META,
 )
 def pulse_resource() -> str:
-    html = PULSE_HTML.read_text(encoding="utf-8")
-    bootstrap = {
-        "instanceId": INSTANCE_CONFIG.get("instance_id"),
-        "channel": INSTANCE_CONFIG.get("channel", "default"),
-        "displayName": INSTANCE_CONFIG.get("display_name", "EIROS"),
-        "polling": INSTANCE_CONFIG.get("polling", {}),
-        "serverVersion": SERVER_VERSION,
-        "pulseVersion": PULSE_VERSION,
-    }
-    return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+    return _render_pulse_html()
 
 
 @mcp.tool(
