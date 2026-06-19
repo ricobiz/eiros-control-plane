@@ -218,6 +218,16 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
       chip.append(dot,name,phone,state,sessions,call);box.appendChild(chip);
     }
   }
+  function applySnapshot(data){
+    const snapshot=data||{},history=snapshot.history||{},hub=snapshot.hub||{},control=snapshot.control||{};
+    render(history.messages||[]);
+    renderParticipants(Array.isArray(hub.agents)?hub.agents:[]);
+    const mode=String(control.mode||'running');
+    $('state').textContent=mode;
+    $('state').className='state '+mode;
+    $('sub').textContent=`Host ${hostName} · session ${sessionId.slice(0,18)}…`;
+    $('foot').textContent=`${projectId}/${threadId} · seq ${history.latest_seq||0} · pending Эйрос ${hub.pending_by_agent?.chatgpt||0} · Claude ${hub.pending_by_agent?.claude||0}`;
+  }
   async function heartbeat(activity='online'){
     const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;
     try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:hostName,widget_version:roomVersion,activity})}catch{}
@@ -252,11 +262,8 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
     try{
       await heartbeat('online');
       const raw=await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:300,after_seq:0});
-      const data=unwrap(raw),history=data.history||{},hub=data.hub||{},control=data.control||{};
-      render(history.messages||[]);renderParticipants(Array.isArray(hub.agents)?hub.agents:[]);
-      const mode=String(control.mode||'running');$('state').textContent=mode;$('state').className='state '+mode;
-      $('sub').textContent=`Host ${hostName} · session ${sessionId.slice(0,18)}…`;
-      $('foot').textContent=`${projectId}/${threadId} · seq ${history.latest_seq||0} · pending Эйрос ${hub.pending_by_agent?.chatgpt||0} · Claude ${hub.pending_by_agent?.claude||0}`;
+      const data=unwrap(raw);
+      applySnapshot(data);
     }catch(error){$('state').textContent='offline';$('state').className='state stopped';$('foot').textContent='Room error: '+String(error?.message||error)}
     finally{busy=false;timer=setTimeout(refresh,1200)}
   }
@@ -316,6 +323,7 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   $('dialDisplay').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();callAgent($('dialDisplay').value)}});
   document.querySelectorAll('.key').forEach(button=>button.addEventListener('click',()=>dialKey(button.dataset.key||'')));
   $('pause').addEventListener('click',()=>control('paused'));$('resume').addEventListener('click',()=>control('running'));$('stop').addEventListener('click',()=>control('stopped'));
+  if(boot.initialSnapshot)applySnapshot(boot.initialSnapshot);
   window.addEventListener('beforeunload',()=>{clearTimeout(timer);clearTimeout(pulseTimer);clearTimeout(resizeTimer)});initializeUi();refresh();pollPulse();
 })();
 </script>

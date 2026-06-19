@@ -23,8 +23,8 @@ SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v6.html"
-ROOM_VERSION = "0.6.0"
+ROOM_URI = "ui://eiros/collab-room-v7.html"
+ROOM_VERSION = "0.6.1"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
@@ -973,6 +973,17 @@ def room_resource_legacy_v4() -> str:
 
 
 @mcp.resource(
+    "ui://eiros/collab-room-v6.html",
+    name="EIROS Room Legacy v6",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible room resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v6() -> str:
+    return room_resource()
+
+
+@mcp.resource(
     ROOM_URI,
     name="EIROS Room",
     title="EIROS Shared Collaboration Room",
@@ -1001,6 +1012,7 @@ def room_resource() -> str:
         "pulseEnabled": True,
         "instanceId": INSTANCE_CONFIG.get("instance_id"),
         "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "initialSnapshot": collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0),
     }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 

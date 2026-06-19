@@ -19,8 +19,8 @@ REMOTE_CONFIG = CONFIG_DIR / "claude-remote.json"
 CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v3.html"
 CLAUDE_PULSE_VERSION = "0.3.0"
 CLAUDE_PULSE_HTML = Path(__file__).with_name("claude_pulse.html")
-ROOM_URI = "ui://eiros/collab-room-v6.html"
-ROOM_VERSION = "0.6.0"
+ROOM_URI = "ui://eiros/collab-room-v7.html"
+ROOM_VERSION = "0.6.1"
 ROOM_HTML = Path(__file__).with_name("collab_room.html")
 INSTANCE_CONFIG = load_config()
 
@@ -293,6 +293,17 @@ def room_resource_legacy_v4() -> str:
 
 
 @mcp.resource(
+    "ui://eiros/collab-room-v6.html",
+    name="EIROS Room Legacy v6",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible room resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v6() -> str:
+    return room_resource()
+
+
+@mcp.resource(
     ROOM_URI,
     name="EIROS Room",
     title="EIROS Shared Collaboration Room",
@@ -317,6 +328,7 @@ def room_resource() -> str:
         "pulseEnabled": False,
         "instanceId": "",
         "channel": "default",
+        "initialSnapshot": collab.room_snapshot("eiros-hub", "first-contact", 100, 0),
     }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
