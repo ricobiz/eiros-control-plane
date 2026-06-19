@@ -1,0 +1,19 @@
+[Unit]
+Description=EIROS OpenAI Secure MCP Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=eiros
+Group=eiros
+Environment=HOME=/home/eiros
+EnvironmentFile=/etc/eiros-tunnel.env
+WorkingDirectory=/opt/eiros-mcp
+ExecStart=/usr/local/bin/tunnel-client run --profile eiros
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

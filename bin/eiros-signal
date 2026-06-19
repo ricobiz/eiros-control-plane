@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from runtime import events
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Emit a durable EIROS reverse-channel event")
+    parser.add_argument("text", nargs="+", help="Message to deliver into the mounted ChatGPT conversation")
+    parser.add_argument("--source", default="terminal")
+    parser.add_argument("--priority", type=int, default=0)
+    parser.add_argument("--payload", default="{}", help="Optional JSON object")
+    args = parser.parse_args()
+    payload = json.loads(args.payload)
+    if not isinstance(payload, dict):
+        raise SystemExit("--payload must be a JSON object")
+    event = events.emit(
+        text=" ".join(args.text),
+        source=args.source,
+        payload=payload,
+        priority=args.priority,
+    )
+    print(json.dumps(event, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

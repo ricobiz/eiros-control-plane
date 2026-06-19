@@ -1,0 +1,48 @@
+# Secrets and local configuration
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+config/local.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# EIROS runtime state
+.eiros-state.json
+state.json
+JOURNAL.md
+runtime/*.json
+runtime/*.lock
+runtime/*.pid
+runtime/*.sock
+runtime/*.log
+runtime/*.root-bak
+runtime/*.tmp
+runtime/phase.txt
+runtime/probe-fired.txt
+runtime/worker.launch.pid
+logs/
+tasks/*.json
+memory/
+
+# Temporary and backup files
+*.bak
+*.backup
+*.tar
+*.tar.gz
+*.zip
+*.tmp
+.DS_Store
+
+# Generated deployment state
+deploy/generated/
