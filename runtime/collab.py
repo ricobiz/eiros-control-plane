@@ -30,6 +30,7 @@ def empty_store() -> dict[str, Any]:
         "next_seq": 1,
         "agents": {},
         "projects": {},
+        "controls": {},
         "messages": [],
     }
 
@@ -67,6 +68,7 @@ def _load() -> dict[str, Any]:
     value.setdefault("next_seq", 1)
     value.setdefault("agents", {})
     value.setdefault("projects", {})
+    value.setdefault("controls", {})
     value.setdefault("messages", [])
     value["schema_version"] = SCHEMA_VERSION
     return value
@@ -102,6 +104,29 @@ def normalize_agent(value: str) -> str:
     if not all(ch.isalnum() or ch in "-_" for ch in result):
         raise ValueError("agent_id may contain only letters, digits, hyphen and underscore")
     return result
+
+
+def _control_value(store: dict[str, Any], project_id: str) -> dict[str, Any]:
+    project = str(project_id or "default").strip()[:120] or "default"
+    current = store.get("controls", {}).get(project)
+    if current:
+        return current
+    return {
+        "project_id": project,
+        "revision": 0,
+        "mode": "running",
+        "note": "",
+        "updated_at": 0,
+        "updated_by": None,
+    }
+
+
+def _message_deliverable(store: dict[str, Any], message: dict[str, Any]) -> bool:
+    control = _control_value(store, str(message.get("project_id") or "default"))
+    mode = str(control.get("mode") or "running")
+    if mode == "running":
+        return True
+    return message.get("from_agent") == "rico" or message.get("kind") in {"control", "operator"}
 
 
 def register_agent(
@@ -236,6 +261,8 @@ def inbox(
                 continue
             if thread_id and message.get("thread_id") != thread_id:
                 continue
+            if not _message_deliverable(store, message):
+                continue
             claim = message.get("claim") or {}
             if _claim_alive(claim, timestamp):
                 continue
@@ -264,6 +291,51 @@ def inbox(
             "server_time": timestamp,
             "store_revision": int(store.get("revision", 0)) + 1,
         }
+
+
+def peek(
+    agent_id: str,
+    limit: int = 10,
+    project_id: str = "",
+    thread_id: str = "",
+) -> dict[str, Any]:
+    identity = normalize_agent(agent_id)
+    count = max(1, min(int(limit), 50))
+    store = read_store()
+    timestamp = now()
+    selected: list[dict[str, Any]] = []
+    for message in sorted(store["messages"], key=lambda item: int(item.get("seq", 0))):
+        if message.get("status") == "acked":
+            continue
+        if message.get("to_agent") != identity:
+            continue
+        if project_id and message.get("project_id") != project_id:
+            continue
+        if thread_id and message.get("thread_id") != thread_id:
+            continue
+        if not _message_deliverable(store, message):
+            continue
+        claim = message.get("claim") or {}
+        if _claim_alive(claim, timestamp):
+            continue
+        selected.append(message)
+        if len(selected) >= count:
+            break
+    pending = sum(
+        1
+        for message in store["messages"]
+        if message.get("status") != "acked"
+        and message.get("to_agent") == identity
+        and _message_deliverable(store, message)
+    )
+    return {
+        "agent_id": identity,
+        "messages": selected,
+        "available_count": len(selected),
+        "pending_count": pending,
+        "server_time": timestamp,
+        "store_revision": int(store.get("revision", 0)),
+    }
 
 
 def acknowledge(agent_id: str, message_id: str, result: str = "") -> dict[str, Any]:
@@ -371,6 +443,109 @@ def set_project(
         return updated
 
 
+def get_control(project_id: str = "default") -> dict[str, Any]:
+    store = read_store()
+    return _control_value(store, project_id)
+
+
+def set_control(
+    actor_id: str,
+    project_id: str = "default",
+    mode: str = "running",
+    note: str = "",
+    thread_id: str = "main",
+) -> dict[str, Any]:
+    actor = normalize_agent(actor_id)
+    project = str(project_id or "default").strip()[:120] or "default"
+    selected_mode = str(mode or "running").strip().lower()
+    if selected_mode not in {"running", "paused", "stopped"}:
+        raise ValueError("mode must be running, paused or stopped")
+    with locked_store() as store:
+        current = _control_value(store, project)
+        updated = {
+            "project_id": project,
+            "revision": int(current.get("revision", 0)) + 1,
+            "mode": selected_mode,
+            "note": str(note or "")[:2000],
+            "updated_at": now(),
+            "updated_by": actor,
+        }
+        store["controls"][project] = updated
+        seq = int(store["next_seq"])
+        store["next_seq"] = seq + 1
+        store["messages"].append({
+            "message_id": str(uuid.uuid4()),
+            "seq": seq,
+            "project_id": project,
+            "thread_id": str(thread_id or "main")[:160] or "main",
+            "scene_id": "",
+            "from_agent": actor,
+            "to_agent": "all",
+            "kind": "control",
+            "content": f"Conversation control: {selected_mode}" + (f" — {note}" if note else ""),
+            "reply_to": None,
+            "expects_reply": False,
+            "metadata": {"control_mode": selected_mode},
+            "idempotency_key": None,
+            "status": "acked",
+            "created_at": now(),
+            "claim": None,
+            "delivery_attempts": 0,
+            "acked_at": now(),
+            "ack_result": "control state recorded",
+            "ack_agent": actor,
+        })
+        return updated
+
+
+def operator_send(
+    content: str,
+    target: str = "both",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    kind: str = "operator",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    text = str(content or "").strip()
+    if not text:
+        raise ValueError("content is required")
+    selected = str(target or "both").strip().lower()
+    if selected not in {"both", "chatgpt", "claude"}:
+        raise ValueError("target must be both, chatgpt or claude")
+    register_agent("rico", "Рико", "operator", ["observe", "interrupt", "direct"])
+    targets = ["chatgpt", "claude"] if selected == "both" else [selected]
+    group_id = str(uuid.uuid4())
+    messages = []
+    for recipient in targets:
+        combined = dict(metadata or {})
+        combined.update({"operator_group_id": group_id, "operator_target": selected})
+        messages.append(send_message(
+            from_agent="rico",
+            to_agent=recipient,
+            content=text,
+            kind=kind,
+            project_id=project_id,
+            thread_id=thread_id,
+            expects_reply=True,
+            metadata=combined,
+            idempotency_key=f"operator:{group_id}:{recipient}",
+        ))
+    return {"ok": True, "group_id": group_id, "target": selected, "messages": messages}
+
+
+def room_snapshot(
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    limit: int = 200,
+    after_seq: int = 0,
+) -> dict[str, Any]:
+    return {
+        "history": history(project_id, thread_id, limit, after_seq),
+        "hub": hub_status(),
+        "control": get_control(project_id),
+    }
+
+
 def hub_status() -> dict[str, Any]:
     store = read_store()
     timestamp = now()
@@ -392,6 +567,7 @@ def hub_status() -> dict[str, Any]:
         "updated_at": store.get("updated_at"),
         "agents": agents,
         "projects": list(store["projects"].values()),
+        "controls": list(store.get("controls", {}).values()),
         "message_count": len(store["messages"]),
         "pending_by_agent": pending_by_agent,
         "latest_seq": max([int(item.get("seq", 0)) for item in store["messages"]] or [0]),

@@ -21,7 +21,9 @@ STATE_FILE = ROOT / ".eiros-state.json"
 SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v2.html"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
+ROOM_URI = "ui://eiros/collab-room-v1.html"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
+ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
 WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
 PULSE_RESOURCE_META: dict[str, Any] = {
@@ -590,6 +592,105 @@ def project_state_set(
 ) -> dict[str, Any]:
     """Replace shared project state with optimistic revision checking."""
     return collab_engine.set_project(agent_id, project_id, state, expected_revision)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True,
+    meta={"ui": {"visibility": ["app"]}}
+)
+)
+def room_snapshot(project_id: str = "eiros-hub", thread_id: str = "first-contact", limit: int = 200, after_seq: int = 0) -> dict[str, Any]:
+    """Read shared room history, participant presence and operator control state."""
+    return collab_engine.room_snapshot(project_id, thread_id, limit, after_seq)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False,
+    meta={"ui": {"visibility": ["app"]}}
+)
+)
+def operator_send(
+    content: str,
+    target: str = "both",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    kind: str = "operator",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send one Rico operator message to ChatGPT, Claude or both."""
+    return collab_engine.operator_send(content, target, project_id, thread_id, kind, metadata)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True,
+    meta={"ui": {"visibility": ["app"]}}
+)
+)
+def conversation_control_set(
+    actor_id: str = "rico",
+    project_id: str = "eiros-hub",
+    mode: str = "running",
+    note: str = "",
+    thread_id: str = "first-contact",
+) -> dict[str, Any]:
+    """Pause, resume or stop delivery for one shared project room."""
+    return collab_engine.set_control(actor_id, project_id, mode, note, thread_id)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True,
+    meta={"ui": {"visibility": ["app"]}}
+)
+)
+def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
+    """Read current shared project room control state."""
+    return collab_engine.get_control(project_id)
+
+
+@mcp.resource(
+    ROOM_URI,
+    name="EIROS Room",
+    title="EIROS Shared Collaboration Room",
+    description="Shared ChatGPT, Claude and Rico dialogue with operator controls.",
+    mime_type="text/html;profile=mcp-app",
+    meta={
+        "ui": {
+            "prefersBorder": True,
+            "csp": {"connectDomains": [], "resourceDomains": []},
+        },
+        "openai/widgetDescription": "Shared EIROS collaboration room for ChatGPT, Claude and Rico.",
+        "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    },
+)
+def room_resource() -> str:
+    html = ROOM_HTML.read_text(encoding="utf-8")
+    bootstrap = {"projectId": "eiros-hub", "threadId": "first-contact", "host": "chatgpt"}
+    return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.tool(
+    name="open_collab_room",
+    title="Open EIROS Room",
+    description="Open the shared ChatGPT, Claude and Rico collaboration room.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={
+        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Room…",
+        "openai/toolInvocation/invoked": "EIROS Room opened.",
+    },
+    structured_output=True,
+)
+def open_collab_room() -> dict[str, Any]:
+    snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0)
+    return {
+        "ok": True,
+        "resource_uri": ROOM_URI,
+        "project_id": "eiros-hub",
+        "thread_id": "first-contact",
+        "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0)),
+        "control": snapshot.get("control", {}),
+    }
 
 
 @mcp.resource(

@@ -64,18 +64,11 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
   }
   function emitToClaude(message){
     const prompt=[
-      `[EIROS_HUB_CALL message_id=${message.message_id} seq=${message.seq} from=${message.from_agent} kind=${message.kind}]`,
-      `project_id=${message.project_id}`,
-      `thread_id=${message.thread_id}`,
-      message.scene_id?`scene_id=${message.scene_id}`:'',
-      message.reply_to?`reply_to=${message.reply_to}`:'',
-      '',
-      message.content,
-      '',
-      'This is an addressed call delivered from the shared EIROS Hub into this Claude conversation.',
-      'Handle it as Claude. If a reply is appropriate, use dialog_send with from_agent="claude", to_agent equal to the sender, preserve project_id/thread_id/scene_id, and set reply_to to this message_id.',
-      'After handling it, call dialog_ack with agent_id="claude" and this message_id.'
-    ].filter(Boolean).join('\n');
+      `[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,
+      'A new addressed call is waiting in EIROS Hub. The full dialogue stays in EIROS Room, not in this main chat.',
+      `Call dialog_inbox with agent_id="claude", client_id="claude-native-turn", project_id="${message.project_id}", thread_id="${message.thread_id}", limit=1.`,
+      'Handle the claimed message, reply through dialog_send when appropriate, then call dialog_ack for that message.'
+    ].join('\n');
     window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
   }
   function schedule(ms){clearTimeout(timer);timer=setTimeout(poll,ms)}
@@ -85,7 +78,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     busy=true;
     try{
       set('badge','polling');
-      const raw=await callTool('dialog_inbox',{agent_id:'claude',client_id:clientId,limit:1,claim_seconds:120});
+      const raw=await callTool('dialog_peek',{agent_id:'claude',limit:1});
       const data=unwrap(raw);
       const messages=Array.isArray(data.messages)?data.messages:[];
       set('connection','online');
@@ -99,7 +92,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
         if(message.message_id!==lastEmitted){
           lastEmitted=message.message_id;
           emitToClaude(message);
-          set('status',`Emitted ui/message for ${message.message_id}. Waiting for Claude to reply and acknowledge.`);
+          set('status',`Wake sent for ${message.message_id}. Full text remains in EIROS Room; waiting for Claude to claim, reply and acknowledge.`);
         }
         schedule(1500);
       }else{

@@ -60,3 +60,7 @@ runtime/installation.json
 runtime/maintenance.json
 runtime/events.json.root-bak
 runtime/.last-boot-id
+
+# Local Claude remote MCP edge
+config/claude-remote.json
+runtime/claude-public-origin.txt
