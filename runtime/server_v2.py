@@ -32,9 +32,6 @@ PULSE_RESOURCE_META: dict[str, Any] = {
     "openai/widgetDescription": "Keeps a live, durable reverse event channel from the EIROS instance into this conversation.",
     "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
 }
-if WIDGET_DOMAIN:
-    PULSE_RESOURCE_META["ui"]["domain"] = WIDGET_DOMAIN
-    PULSE_RESOURCE_META["openai/widgetDomain"] = WIDGET_DOMAIN
 
 if str(CODE_ROOT) not in sys.path:
     sys.path.insert(0, str(CODE_ROOT))
@@ -483,11 +480,9 @@ def managed_service_restart(service: str, reason: str) -> dict[str, Any]:
     meta={
         "ui": {
             "prefersBorder": True,
-            "domain": WIDGET_DOMAIN,
             "csp": {"connectDomains": [], "resourceDomains": []},
         },
         "openai/widgetDescription": "Minimal static diagnostic card for EIROS MCP Apps rendering.",
-        "openai/widgetDomain": WIDGET_DOMAIN,
         "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
     },
 )
