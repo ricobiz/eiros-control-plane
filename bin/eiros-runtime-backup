@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKUP_DIR="${EIROS_BACKUP_DIR:-/home/eiros/eiros-runtime-backups}"
+KEEP="${EIROS_BACKUP_KEEP:-168}"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+TARGET="$BACKUP_DIR/eiros-runtime-$STAMP.tar.gz"
+
+mkdir -p "$BACKUP_DIR"
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m runtime.cli snapshot create "$TARGET" > "$TARGET.json"
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m runtime.cli snapshot inspect "$TARGET" >/dev/null
+
+find "$BACKUP_DIR" -maxdepth 1 -type f -name 'eiros-runtime-*.tar.gz' -printf '%T@ %p\n' \
+  | sort -nr \
+  | awk -v keep="$KEEP" 'NR > keep {sub(/^[^ ]+ /, ""); print}' \
+  | while IFS= read -r old; do
+      rm -f "$old" "$old.json"
+    done
+
+printf 'EIROS runtime snapshot complete: %s\n' "$TARGET"

@@ -1,0 +1,25 @@
+[Unit]
+Description=EIROS audited privileged operations broker
+After=local-fs.target
+Before=eiros-worker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=-/etc/eiros/eiros.env
+WorkingDirectory=/opt/eiros-control-plane/current
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m root.root_broker
+Restart=always
+RestartSec=3
+RuntimeDirectory=eiros
+RuntimeDirectoryMode=0750
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run /var/log/eiros
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SYS_ADMIN
+
+[Install]
+WantedBy=multi-user.target

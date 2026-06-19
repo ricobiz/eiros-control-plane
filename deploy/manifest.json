@@ -1,20 +1,23 @@
 {
   "name": "eiros-control-plane",
-  "version": "0.1.0-foundation",
+  "version": "0.2.0-alpha.1",
   "protocol_version": 1,
   "queue_schema": 2,
   "event_schema": 2,
+  "snapshot_schema": 1,
   "python": ">=3.11",
   "entrypoints": {
     "mcp": "python -m runtime.server_v2",
     "worker": "python -m runtime.worker",
-    "cli": "bin/eiros",
-    "bootstrap": "bin/eiros init",
-    "doctor": "bin/eiros doctor",
-    "release_check": "bin/eiros release-check"
+    "root_broker": "python -m root.root_broker",
+    "cli": "eiros",
+    "bootstrap": "eiros init",
+    "doctor": "eiros doctor",
+    "release_check": "eiros release-check"
   },
   "runtime_state": "EIROS_DATA_DIR",
   "required_services": [
+    "eiros-root-broker.service",
     "eiros-worker.service",
     "eiros-tunnel.service"
   ]

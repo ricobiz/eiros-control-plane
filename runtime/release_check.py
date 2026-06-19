@@ -5,7 +5,6 @@ import json
 import subprocess
 import sys
 import time
-from pathlib import Path
 from typing import Any
 
 from runtime.config import CODE_ROOT, DATA_ROOT, RUNTIME_DIR
@@ -16,6 +15,10 @@ TESTS = [
     "runtime.test_scheduler",
     "runtime.test_queue",
     "runtime.test_foundation",
+    "runtime.test_snapshot",
+    "runtime.test_installer",
+    "runtime.test_root_broker",
+    "runtime.test_watchdog",
 ]
 
 
@@ -38,7 +41,7 @@ def run_module(module: str) -> dict[str, Any]:
 
 def run_release_check() -> dict[str, Any]:
     started = int(time.time())
-    compiled = compileall.compile_dir(CODE_ROOT / "runtime", quiet=1) and compileall.compile_dir(CODE_ROOT / "root", quiet=1)
+    compiled = compileall.compile_dir(CODE_ROOT / "runtime", quiet=1) and compileall.compile_dir(CODE_ROOT / "root", quiet=1) and compileall.compile_dir(CODE_ROOT / "deploy", quiet=1)
     tests = [run_module(module) for module in TESTS]
     doctor = run_doctor(offline=False)
     widget = (CODE_ROOT / "runtime" / "pulse_widget.html").read_text(encoding="utf-8")
@@ -48,6 +51,8 @@ def run_release_check() -> dict[str, Any]:
         "ui_message": "ui/message" in widget,
         "app_only_poll": 'name="pulse_poll"' in server and 'visibility": ["app"]' in server,
         "instance_binding": "instance_id" in server and "channel" in server,
+        "runtime_snapshot": (CODE_ROOT / "runtime" / "snapshot.py").is_file(),
+        "rollback_installer": "rollback_release" in (CODE_ROOT / "deploy" / "install.py").read_text(encoding="utf-8"),
     }
     ok = compiled and all(test["ok"] for test in tests) and doctor["ok"] and all(contract.values())
     report = {

@@ -41,6 +41,7 @@ if str(CODE_ROOT) not in sys.path:
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
 from runtime.doctor import run_doctor  # noqa: E402
+from root import root_client  # noqa: E402
 
 mcp = FastMCP(
     "Eiros Control Plane",
@@ -426,6 +427,41 @@ def queue_reschedule(task_id: str, run_at: int = 0, delay_seconds: int = 0) -> d
 def brain_inbox() -> dict[str, Any]:
     """Read scheduled brain tasks that became due while no model turn was active."""
     return read_json_file(ROOT / "runtime" / "brain-inbox.json", {"revision": 0, "updated_at": 0, "items": []})
+
+
+@mcp.tool()
+def privileged_status() -> dict[str, Any]:
+    """Check whether the audited privileged operations broker is available."""
+    try:
+        return root_client.status()
+    except Exception as exc:
+        return {"ok": False, "available": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@mcp.tool()
+def system_snapshot() -> dict[str, Any]:
+    """Read load, disk and uptime through the audited privileged broker."""
+    return root_client.system_snapshot()
+
+
+@mcp.tool()
+def managed_service_status(service: str) -> dict[str, Any]:
+    """Read status for an allowlisted EIROS service."""
+    return root_client.service_status(service)
+
+
+@mcp.tool()
+def managed_service_journal(service: str, lines: int = 100) -> dict[str, Any]:
+    """Read bounded logs for an allowlisted EIROS service."""
+    return root_client.journal_tail(service, lines)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False)
+)
+def managed_service_restart(service: str, reason: str) -> dict[str, Any]:
+    """Restart an allowlisted EIROS service through the audited privileged broker."""
+    return root_client.service_restart(service, reason)
 
 
 @mcp.resource(
