@@ -121,11 +121,11 @@ def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = 
             for event in store['events']:
                 if event.get('channel') != target:
                     continue
-                if int(event.get('seq', 0)) <= int(cursor) or event.get('status') == 'acked':
+                if event.get('status') == 'acked':
                     continue
                 claim = event.get('claim') or {}
                 claim_alive = int(claim.get('until', 0)) > timestamp
-                if claim_alive and claim.get('widget_id') != identity:
+                if claim_alive:
                     continue
                 candidates.append(event)
             candidates.sort(key=lambda entry: (-int(entry.get('priority', 0)), int(entry.get('seq', 0))))
@@ -144,6 +144,7 @@ def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = 
             'leader_widget_id': leader.get('widget_id'), 'leader_lease_until': leader.get('lease_until'),
             'event': selected,
             'latest_seq': max([int(entry.get('seq', 0)) for entry in channel_events] or [0]),
+            'latest_acked_seq': max([int(entry.get('seq', 0)) for entry in channel_events if entry.get('status') == 'acked'] or [0]),
             'pending_count': sum(1 for entry in channel_events if entry.get('status') != 'acked'),
             'server_time': timestamp,
         }

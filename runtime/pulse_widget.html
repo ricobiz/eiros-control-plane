@@ -96,11 +96,11 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
       'This message was emitted on the EIROS VPS and delivered by the mounted EIROS Pulse component into this same conversation.',
       'Handle it as the current Eiros. After completing the requested action, call ack_event with this event id and a concise result.'
     ].join('\n');
-    if(typeof host.sendFollowUpMessage==='function'){
-      await host.sendFollowUpMessage({prompt,scrollToBottom:true});
-      return;
-    }
-    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
+    window.parent.postMessage({
+      jsonrpc:'2.0',
+      method:'ui/message',
+      params:{role:'user',content:[{type:'text',text:prompt}]}
+    },'*');
   }
   function schedule(ms){
     clearTimeout(timer);
@@ -112,7 +112,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     if(busy){schedule(interval);return}
     busy=true;
     try{
-      const raw=await callTool('pulse_poll',{widget_id:widgetId,cursor,channel,instance_id:instanceId});
+      const raw=await callTool('pulse_poll',{widget_id:widgetId,cursor,channel,instance_id:instanceId,claim_seconds:120});
       const data=unwrap(raw);
       set('leader',data.leader?'yes':'no');
       set('pending',data.pending_count||0);
@@ -122,13 +122,8 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
         set('event',`#${event.seq} ${event.source}\n${event.text}`);
         await updateContext(event);
         await postMessage(event);
-        await new Promise(r=>setTimeout(r,250));
-        await callTool('pulse_mark_delivered',{event_id:event.id,widget_id:widgetId,channel});
-        cursor=Math.max(cursor,Number(event.seq||0));
         interval=activeMs;
-        set('cursor',cursor);
-        persist();
-        set('status',`Posted remote event ${event.id}`);
+        set('status',`Emitted ui/message for ${event.id}; awaiting model ack`);
       }else{
         interval=Math.min(data.leader?idleMaxMs:Math.min(5000,idleMaxMs),Math.max(idleMinMs,Math.floor(interval*1.5)));
         set('status',`${boot.displayName||'EIROS'} ${String(instanceId).slice(0,8)} · ${channel} · widget ${widgetId.slice(0,8)} · server ${data.server_time||'?'} · latest ${data.latest_seq||0}`);
