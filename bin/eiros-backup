@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/srv/eiros-workspace"
+cd "$ROOT"
+
+export GIT_SSH_COMMAND="ssh -i /home/eiros/.ssh/eiros-control-plane_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+# Only source/configuration paths are eligible for automatic commits.
+git add -- \
+  .gitignore README.md requirements.txt CORE.md PROTOCOL.md REVERSE_WAKE.md \
+  bin deploy root \
+  'runtime/*.py' 'runtime/*.html' 2>/dev/null || true
+
+if ! git diff --cached --quiet; then
+  staged_patch="$(git diff --cached --no-ext-diff --unified=0 -- . ':!*.bundle')"
+  if printf '%s' "$staged_patch" | grep -Eiq '(github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{20,}|BEGIN (OPENSSH|RSA|EC|PRIVATE) PRIVATE KEY)'; then
+    git reset --quiet
+    echo "Refusing automatic commit: possible secret detected in staged diff" >&2
+    exit 23
+  fi
+
+  python3 -m py_compile runtime/*.py root/*.py
+  python3 -m runtime.test_scheduler >/dev/null
+  python3 -m runtime.test_queue >/dev/null
+
+  stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  git commit -m "Automated EIROS snapshot ${stamp}"
+fi
+
+git push origin main
+
+tmp_bundle="runtime/eiros-control-plane.bundle.tmp"
+git bundle create "$tmp_bundle" --all
+mv "$tmp_bundle" eiros-control-plane.bundle
+sha256sum eiros-control-plane.bundle > runtime/eiros-control-plane.bundle.sha256
+
+echo "EIROS backup complete: $(git rev-parse HEAD)"
