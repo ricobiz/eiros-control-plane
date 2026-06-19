@@ -46,3 +46,5 @@ memory/
 
 # Generated deployment state
 deploy/generated/
+
+*.bundle
