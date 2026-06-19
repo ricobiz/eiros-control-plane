@@ -64,3 +64,5 @@ runtime/.last-boot-id
 # Local Claude remote MCP edge
 config/claude-remote.json
 runtime/claude-public-origin.txt
+runtime/queue.json.*
+runtime/collab.json.*
