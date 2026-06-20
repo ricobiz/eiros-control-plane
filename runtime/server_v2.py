@@ -26,8 +26,8 @@ WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v8.html"
 ROOM_VERSION = "0.6.2"
-ROOM_PROBE_URI = "ui://eiros/room-probe-js-v1.html"
-ROOM_PROBE_STAGE = "minimal-js"
+ROOM_PROBE_URI = "ui://eiros/room-probe-rpc-v1.html"
+ROOM_PROBE_STAGE = "single-rpc"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
@@ -1016,18 +1016,30 @@ html,body{margin:0;padding:0;background:#0b0d12;color:#edf2ff;font-family:-apple
 <div class="room">
   <div class="head"><div class="title">EIROS Room Probe</div><div id="badge" class="badge">JS STARTING…</div></div>
   <div class="body"><div id="panel" class="panel">HTML/CSS появились. Минимальный JavaScript ещё не подтвердился.</div></div>
-  <div class="composer"><div class="fakeinput">RPC и история пока отключены</div><div id="button" class="button">Tap test</div></div>
+  <div class="composer"><div class="fakeinput">RPC и история пока отключены</div><div id="button" class="button">Run RPC</div></div>
 </div>
 <script>
 (function(){
   const badge=document.getElementById('badge');
   const panel=document.getElementById('panel');
   const button=document.getElementById('button');
-  badge.textContent='MINIMAL JS OK';
+  const bridge=window.mcp||{};
+  badge.textContent='RPC READY';
   badge.classList.add('ok');
-  panel.textContent='JavaScript выполнился. Нажатия тоже должны работать. MCP RPC, история и Pulse пока не подключены.';
-  button.addEventListener('click',function(){
-    panel.textContent='Tap обработан: '+new Date().toLocaleTimeString();
+  panel.textContent='JavaScript выполнился. Нажми кнопку для одного room_snapshot.';
+  button.addEventListener('click',async function(){
+    try{
+      badge.textContent='RPC CALLING…';
+      if(typeof bridge.callTool!=='function')throw new Error('window.mcp.callTool unavailable');
+      const raw=await bridge.callTool('room_snapshot',{project_id:'eiros-hub',thread_id:'first-contact',limit:5,after_seq:0});
+      const data=raw?.structuredContent||raw?.result?.structuredContent||raw||{};
+      const history=data.history||{};
+      badge.textContent='SINGLE RPC OK';
+      panel.textContent='latest_seq: '+String(history.latest_seq||0)+' · messages: '+String((history.messages||[]).length);
+    }catch(error){
+      badge.textContent='RPC ERROR';
+      panel.textContent=String(error?.message||error);
+    }
   });
 })();
 </script>
