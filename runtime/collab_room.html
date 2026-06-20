@@ -53,7 +53,7 @@
   <div class="head">
     <div class="headrow">
       <div class="brand"><div class="title">EIROS Room</div><div id="version" class="version">v?</div></div>
-      <div style="display:flex;align-items:center;gap:7px"><button id="expand" class="expand" style="display:none">⛶</button><div id="state" class="state">connecting</div></div>
+      <div class="head-actions"><button id="dock" class="iconbtn" title="Move fresh Room to bottom">↓</button><button id="expand" class="expand" style="display:none">⛶</button><div id="state" class="state">connecting</div></div>
     </div>
     <div id="participants" class="participants"></div>
     <div id="sub" class="sub">Shared native AI room</div><div class="docknote">↓ создаёт свежий Room последней карточкой в чате</div>
@@ -82,6 +82,18 @@
 </div>
 <script>
 window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
+window.addEventListener('error',function(event){
+  const foot=document.getElementById('foot');
+  const state=document.getElementById('state');
+  if(state){state.textContent='ui error';state.className='state stopped'}
+  if(foot){foot.textContent='Room JavaScript error: '+String(event?.message||event?.error||'unknown error')}
+});
+window.addEventListener('unhandledrejection',function(event){
+  const foot=document.getElementById('foot');
+  const state=document.getElementById('state');
+  if(state){state.textContent='rpc error';state.className='state stopped'}
+  if(foot){foot.textContent='Room promise error: '+String(event?.reason?.message||event?.reason||'unknown rejection')}
+});
 (function(){
   const boot=window.__EIROS_ROOM_BOOTSTRAP__||{};
   const hostBridge=window.mcp||window.openai||{};
@@ -316,14 +328,12 @@ window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
   $('dock').addEventListener('click',requestDock);
   $('expand').addEventListener('click',requestExpand);
   $('input').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}});
-  $('expand').addEventListener('click',async()=>{try{const result=await rpcRequest('ui/request-display-mode',{mode:'fullscreen'});hostContext={...hostContext,displayMode:result?.mode||'inline'};applyHostContext(hostContext)}catch(error){$('foot').textContent='Fullscreen unavailable: '+String(error?.message||error)}});
   $('dialToggle').addEventListener('click',()=>openDialer());
   $('dialClose').addEventListener('click',closeDialer);
   $('dialCall').addEventListener('click',()=>callAgent($('dialDisplay').value));
   $('dialDisplay').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();callAgent($('dialDisplay').value)}});
   document.querySelectorAll('.key').forEach(button=>button.addEventListener('click',()=>dialKey(button.dataset.key||'')));
   $('pause').addEventListener('click',()=>control('paused'));$('resume').addEventListener('click',()=>control('running'));$('stop').addEventListener('click',()=>control('stopped'));
-  if(boot.initialSnapshot)applySnapshot(boot.initialSnapshot);
   window.addEventListener('beforeunload',()=>{clearTimeout(timer);clearTimeout(pulseTimer);clearTimeout(resizeTimer)});initializeUi();refresh();pollPulse();
 })();
 </script>

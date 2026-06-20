@@ -24,7 +24,16 @@ def main():
  assert server_v2.WIDGET_TEST_URI.endswith("widget-test-v2.html")
  assert "domain" not in server_v2.WIDGET_TEST_META["ui"]
  assert "openai/widgetDomain" not in server_v2.WIDGET_TEST_META
- checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin"]
+ room_template=(ROOT/"runtime"/"collab_room.html").read_text()
+ room_ids=set(re.findall(r'id="([^"]+)"',room_template))
+ room_refs=set(re.findall(r"\$\('([^']+)'\)",room_template))
+ assert not (room_refs-room_ids), f"missing room DOM ids: {sorted(room_refs-room_ids)}"
+ room_rendered=server_v2.room_resource()
+ assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
+ assert "initialSnapshot" not in room_rendered
+ assert len(room_rendered.encode("utf-8")) < 40000
+ assert server_v2.ROOM_URI.endswith("collab-room-v8.html")
+ checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin","room DOM bindings","lean room bootstrap","room cache-busted URI"]
  print(json.dumps({"ok":True,"checks":checks,"count":len(checks)},indent=2))
 
 if __name__=="__main__": main()
