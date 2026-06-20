@@ -22,14 +22,19 @@ STATE_FILE = ROOT / ".eiros-state.json"
 SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.0"
-WIDGET_TEST_URI = "ui://eiros/widget-test-v1.html"
+WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
+WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v7.html"
 ROOM_VERSION = "0.6.1"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
-WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
+CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
+# Custom widget origins are opt-in. During development ChatGPT's managed sandbox
+# is more reliable and avoids blank/grey iframe failures from stale origin metadata.
+USE_CUSTOM_WIDGET_DOMAIN = os.environ.get("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", "").strip().lower() in {"1", "true", "yes"}
+WIDGET_DOMAIN = CONFIGURED_WIDGET_DOMAIN if USE_CUSTOM_WIDGET_DOMAIN else ""
 PULSE_RESOURCE_META: dict[str, Any] = {
     "ui": {
         "prefersBorder": True,
@@ -1044,27 +1049,51 @@ def open_collab_room() -> dict[str, Any]:
     }
 
 
+def _widget_test_html() -> str:
+    return """<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+html,body{margin:0;padding:0;background:#071a2d;color:#e8f7ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.card{margin:0;padding:20px;border:2px solid #28a7ff;border-radius:16px;background:#0b3555;min-height:112px;display:flex;flex-direction:column;justify-content:center}
+h2{margin:0 0 8px;font-size:20px}p{margin:0;line-height:1.4;opacity:.88}.stamp{margin-top:10px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.7}
+</style>
+</head>
+<body><div class="card"><h2>EIROS Widget Render: OK</h2><p>Static MCP Apps iframe loaded. No JavaScript, no external assets, no custom origin.</p><div class="stamp">widget-test-v2</div></div></body>
+</html>"""
+
+
+WIDGET_TEST_META: dict[str, Any] = {
+    "ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}},
+    "openai/widgetDescription": "Minimal static diagnostic card for EIROS MCP Apps rendering.",
+    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+}
+
+
+@mcp.resource(
+    WIDGET_TEST_LEGACY_URI,
+    name="EIROS Widget Test Legacy",
+    title="EIROS Widget Diagnostic",
+    description="Backward-compatible static MCP Apps render diagnostic.",
+    mime_type="text/html;profile=mcp-app",
+    meta=WIDGET_TEST_META,
+)
+def widget_test_resource_legacy() -> str:
+    return _widget_test_html()
+
+
 @mcp.resource(
     WIDGET_TEST_URI,
     name="EIROS Widget Test",
     title="EIROS Widget Diagnostic",
     description="Minimal static MCP Apps render diagnostic.",
     mime_type="text/html;profile=mcp-app",
-    meta={
-        "ui": {
-            "prefersBorder": True,
-            "csp": {"connectDomains": [], "resourceDomains": []},
-            **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
-        },
-        "openai/widgetDescription": "Minimal static diagnostic card for EIROS MCP Apps rendering.",
-        "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
-        **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
-    },
+    meta=WIDGET_TEST_META,
 )
 def widget_test_resource() -> str:
-    # Compatibility bridge: already-loaded ChatGPT sessions know this resource URI.
-    # Serve the current EIROS Room through it until the connector schema refreshes.
-    return room_resource()
+    return _widget_test_html()
 
 
 @mcp.tool(

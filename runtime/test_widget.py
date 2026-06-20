@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json,re
 from pathlib import Path
+from runtime import server_v2
 ROOT=Path(__file__).resolve().parents[1]
 
 def main():
@@ -16,6 +17,14 @@ def main():
  assert "ui/message" in rendered and "tools/call" in rendered
  scripts=re.findall(r"<script>(.*?)</script>",rendered,flags=re.DOTALL)
  assert len(scripts)==1 and scripts[0].count("(function(){")==1
- print(json.dumps({"ok":True,"checks":["single placeholder","stable global name","instance binding","bridge methods"],"count":4},indent=2))
+ diagnostic=server_v2.widget_test_resource()
+ assert diagnostic==server_v2.widget_test_resource_legacy()
+ assert "EIROS Widget Render: OK" in diagnostic
+ assert "<script" not in diagnostic.lower()
+ assert server_v2.WIDGET_TEST_URI.endswith("widget-test-v2.html")
+ assert "domain" not in server_v2.WIDGET_TEST_META["ui"]
+ assert "openai/widgetDomain" not in server_v2.WIDGET_TEST_META
+ checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin"]
+ print(json.dumps({"ok":True,"checks":checks,"count":len(checks)},indent=2))
 
 if __name__=="__main__": main()
