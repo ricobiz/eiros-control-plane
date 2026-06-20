@@ -164,6 +164,10 @@ def install_release(args: argparse.Namespace) -> dict[str, Any]:
     ensure_user(plan.user)
     prefix.mkdir(parents=True, exist_ok=True)
     release.parent.mkdir(parents=True, exist_ok=True)
+    # Installation runs as root, while bootstrap runs as the isolated service
+    # user. Keep the release parent traversable without making it public.
+    shutil.chown(release.parent, user="root", group=plan.user)
+    release.parent.chmod(0o750)
     data_dir.mkdir(parents=True, exist_ok=True)
     if release.exists():
         raise RuntimeError(f"Release already exists: {release}")

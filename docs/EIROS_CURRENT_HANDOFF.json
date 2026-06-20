@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "updated_at_utc": "2026-06-20T22:36:57Z",
+  "status": "production-restored",
+  "canonical_architecture": "OpenAI Secure MCP Tunnel -> profile eiros -> stdio runtime.server_v2",
+  "tunnel_id": "tunnel_6a348638523c8191bdf391bd2582609d",
+  "repository": "ricobiz/eiros-control-plane",
+  "branch": "main",
+  "source_checkout": "/srv/eiros-workspace",
+  "production_prefix": "/opt/eiros-control-plane",
+  "current_release": "/opt/eiros-control-plane/releases/0.2.0-alpha.1-1781991907",
+  "previous_release": "/opt/eiros-control-plane/releases/0.2.0-alpha.1-1781991802",
+  "data_dir": "/var/lib/eiros",
+  "backup": "/srv/eiros-backups/20260620T215449Z",
+  "verified": {
+    "connector_health": true,
+    "root_broker_active": true,
+    "worker_active": true,
+    "tunnel_active": true,
+    "tunnel_profile": "eiros",
+    "bootstrap_ok": true,
+    "doctor_critical_failures": 0
+  },
+  "repaired_root_causes": [
+    "release parent directory blocked traversal by service user",
+    "production venv had wrong or incomplete MCP package",
+    "systemd previously retained rescue tunnel profile"
+  ],
+  "next_action": "Use this production state as the baseline; do not reintroduce rescue-http or public HTTP MCP for the ChatGPT connector."
+}
