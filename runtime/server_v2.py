@@ -26,8 +26,8 @@ WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v8.html"
 ROOM_VERSION = "0.6.2"
-ROOM_PROBE_URI = "ui://eiros/room-probe-rpc-v1.html"
-ROOM_PROBE_STAGE = "single-rpc"
+ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
+ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
@@ -1016,7 +1016,7 @@ html,body{margin:0;padding:0;background:#0b0d12;color:#edf2ff;font-family:-apple
 <div class="room">
   <div class="head"><div class="title">EIROS Room Probe</div><div id="badge" class="badge">JS STARTING…</div></div>
   <div class="body"><div id="panel" class="panel">HTML/CSS появились. Минимальный JavaScript ещё не подтвердился.</div></div>
-  <div class="composer"><div class="fakeinput">RPC и история пока отключены</div><div id="button" class="button">Run RPC</div></div>
+  <div class="composer"><div class="fakeinput">RPC и история пока отключены</div><div id="button" class="button">Reload data</div></div>
 </div>
 <script>
 (function(){
@@ -1026,21 +1026,25 @@ html,body{margin:0;padding:0;background:#0b0d12;color:#edf2ff;font-family:-apple
   const bridge=window.mcp||{};
   badge.textContent='RPC READY';
   badge.classList.add('ok');
-  panel.textContent='JavaScript выполнился. Нажми кнопку для одного room_snapshot.';
-  button.addEventListener('click',async function(){
+  panel.textContent='JavaScript выполнился. Загружаю историю и участников один раз…';
+  async function hydrate(){
     try{
-      badge.textContent='RPC CALLING…';
+      badge.textContent='HYDRATING…';
       if(typeof bridge.callTool!=='function')throw new Error('window.mcp.callTool unavailable');
       const raw=await bridge.callTool('room_snapshot',{project_id:'eiros-hub',thread_id:'first-contact',limit:5,after_seq:0});
       const data=raw?.structuredContent||raw?.result?.structuredContent||raw||{};
-      const history=data.history||{};
-      badge.textContent='SINGLE RPC OK';
-      panel.textContent='latest_seq: '+String(history.latest_seq||0)+' · messages: '+String((history.messages||[]).length);
+      const history=data.history||{},hub=data.hub||{};
+      const lines=(history.messages||[]).map(function(m){return String(m.from_agent||'?')+' → '+String(m.to_agent||'?')+': '+String(m.content||'').slice(0,80)});
+      const agents=(hub.agents||[]).map(function(a){return String(a.display_name||a.agent_id||'?')+' ['+String(a.presence||a.status||'?')+']'});
+      badge.textContent='ONE-SHOT HYDRATION OK';
+      panel.textContent='Участники: '+agents.join(', ')+'\n\nПоследние сообщения:\n'+lines.join('\n');
     }catch(error){
-      badge.textContent='RPC ERROR';
+      badge.textContent='HYDRATION ERROR';
       panel.textContent=String(error?.message||error);
     }
-  });
+  }
+  button.addEventListener('click',hydrate);
+  setTimeout(hydrate,120);
 })();
 </script>
 </body>
@@ -1049,7 +1053,7 @@ html,body{margin:0;padding:0;background:#0b0d12;color:#edf2ff;font-family:-apple
 
 ROOM_PROBE_META: dict[str, Any] = {
     "ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}},
-    "openai/widgetDescription": "EIROS Room shell diagnostic with minimal inline JavaScript and no RPC.",
+    "openai/widgetDescription": "EIROS Room one-shot history and participant hydration diagnostic.",
     "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
 }
 
