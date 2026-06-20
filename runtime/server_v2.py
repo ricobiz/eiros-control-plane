@@ -26,6 +26,8 @@ WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v8.html"
 ROOM_VERSION = "0.6.2"
+ROOM_PROBE_URI = "ui://eiros/room-probe-static-v1.html"
+ROOM_PROBE_STAGE = "static-shell"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
@@ -999,6 +1001,46 @@ def room_resource_legacy_v7() -> str:
     return room_resource()
 
 
+def _room_probe_html() -> str:
+    return """<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+html,body{margin:0;padding:0;background:#0b0d12;color:#edf2ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}.room{min-height:360px;border:2px solid #596b95;border-radius:16px;overflow:hidden;background:#101522}.head{padding:14px;border-bottom:1px solid #2b3652;background:#151d2d}.title{font-size:18px;font-weight:800}.badge{display:inline-block;margin-top:8px;padding:5px 9px;border:1px solid #3760a0;border-radius:999px;background:#13213b;font-size:12px}.body{padding:14px}.panel{padding:12px;border:1px solid #2d3955;border-radius:12px;background:#151c2c;line-height:1.45}.composer{display:flex;gap:8px;padding:14px;border-top:1px solid #2b3652}.fakeinput{flex:1;padding:11px;border:1px solid #334367;border-radius:10px;background:#0b111e;color:#9aa8c3}.button{padding:11px 14px;border:1px solid #3676bc;border-radius:10px;background:#1c4d87;color:white;font-weight:700}
+</style>
+</head>
+<body>
+<div class="room">
+  <div class="head"><div class="title">EIROS Room Probe</div><div class="badge">STATIC SHELL OK</div></div>
+  <div class="body"><div class="panel">Это визуальная оболочка Room без JavaScript, RPC, истории и Pulse.<br>Если она видна — ломается не HTML/CSS, а динамический слой.</div></div>
+  <div class="composer"><div class="fakeinput">Поле сообщения пока отключено</div><div class="button">Send</div></div>
+</div>
+</body>
+</html>"""
+
+
+ROOM_PROBE_META: dict[str, Any] = {
+    "ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}},
+    "openai/widgetDescription": "Static EIROS Room shell diagnostic with no JavaScript.",
+    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+}
+
+
+@mcp.resource(
+    ROOM_PROBE_URI,
+    name="EIROS Room Static Probe",
+    title="EIROS Room Static Probe",
+    description="Static room shell used to isolate MCP Apps rendering failures.",
+    mime_type="text/html;profile=mcp-app",
+    meta=ROOM_PROBE_META,
+)
+def room_probe_resource() -> str:
+    return _room_probe_html()
+
+
 @mcp.resource(
     ROOM_URI,
     name="EIROS Room",
@@ -1038,10 +1080,10 @@ def room_resource() -> str:
     description="Open the shared ChatGPT, Claude and Rico collaboration room.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={
-        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": ROOM_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Room…",
-        "openai/toolInvocation/invoked": "EIROS Room opened.",
+        "ui": {"resourceUri": ROOM_PROBE_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_PROBE_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Room render probe…",
+        "openai/toolInvocation/invoked": "EIROS Room render probe opened.",
     },
     structured_output=True,
 )
@@ -1049,7 +1091,8 @@ def open_collab_room() -> dict[str, Any]:
     snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0)
     return {
         "ok": True,
-        "resource_uri": ROOM_URI,
+        "resource_uri": ROOM_PROBE_URI,
+        "probe_stage": ROOM_PROBE_STAGE,
         "project_id": "eiros-hub",
         "thread_id": "first-contact",
         "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0)),
@@ -1185,10 +1228,10 @@ def pulse_resource() -> str:
         idempotentHint=True,
     ),
     meta={
-        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": ROOM_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Room and reconnecting Pulse…",
-        "openai/toolInvocation/invoked": "EIROS Room is open and Pulse is listening.",
+        "ui": {"resourceUri": ROOM_PROBE_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_PROBE_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Room static render probe…",
+        "openai/toolInvocation/invoked": "EIROS Room static render probe opened.",
     },
     structured_output=True,
 )
@@ -1200,7 +1243,8 @@ def open_pulse() -> dict[str, Any]:
     return {
         "ok": True,
         "server_version": SERVER_VERSION,
-        "resource_uri": ROOM_URI,
+        "resource_uri": ROOM_PROBE_URI,
+        "probe_stage": ROOM_PROBE_STAGE,
         "instance_id": INSTANCE_CONFIG.get("instance_id"),
         "channel": selected_channel,
         "resume_required": bool(resume.get("resume_required")),
