@@ -26,8 +26,8 @@ WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v8.html"
 ROOM_VERSION = "0.6.2"
-ROOM_PROBE_URI = "ui://eiros/room-probe-static-v1.html"
-ROOM_PROBE_STAGE = "static-shell"
+ROOM_PROBE_URI = "ui://eiros/room-probe-js-v1.html"
+ROOM_PROBE_STAGE = "minimal-js"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 INSTANCE_CONFIG = load_config()
@@ -1009,31 +1009,44 @@ def _room_probe_html() -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
 html,body{margin:0;padding:0;background:#0b0d12;color:#edf2ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-*{box-sizing:border-box}.room{min-height:360px;border:2px solid #596b95;border-radius:16px;overflow:hidden;background:#101522}.head{padding:14px;border-bottom:1px solid #2b3652;background:#151d2d}.title{font-size:18px;font-weight:800}.badge{display:inline-block;margin-top:8px;padding:5px 9px;border:1px solid #3760a0;border-radius:999px;background:#13213b;font-size:12px}.body{padding:14px}.panel{padding:12px;border:1px solid #2d3955;border-radius:12px;background:#151c2c;line-height:1.45}.composer{display:flex;gap:8px;padding:14px;border-top:1px solid #2b3652}.fakeinput{flex:1;padding:11px;border:1px solid #334367;border-radius:10px;background:#0b111e;color:#9aa8c3}.button{padding:11px 14px;border:1px solid #3676bc;border-radius:10px;background:#1c4d87;color:white;font-weight:700}
+*{box-sizing:border-box}.room{min-height:360px;border:2px solid #596b95;border-radius:16px;overflow:hidden;background:#101522}.head{padding:14px;border-bottom:1px solid #2b3652;background:#151d2d}.title{font-size:18px;font-weight:800}.badge{display:inline-block;margin-top:8px;padding:5px 9px;border:1px solid #a06f37;border-radius:999px;background:#3b2813;font-size:12px}.badge.ok{border-color:#27846f;background:#12372f}.body{padding:14px}.panel{padding:12px;border:1px solid #2d3955;border-radius:12px;background:#151c2c;line-height:1.45}.composer{display:flex;gap:8px;padding:14px;border-top:1px solid #2b3652}.fakeinput{flex:1;padding:11px;border:1px solid #334367;border-radius:10px;background:#0b111e;color:#9aa8c3}.button{padding:11px 14px;border:1px solid #3676bc;border-radius:10px;background:#1c4d87;color:white;font-weight:700}
 </style>
 </head>
 <body>
 <div class="room">
-  <div class="head"><div class="title">EIROS Room Probe</div><div class="badge">STATIC SHELL OK</div></div>
-  <div class="body"><div class="panel">Это визуальная оболочка Room без JavaScript, RPC, истории и Pulse.<br>Если она видна — ломается не HTML/CSS, а динамический слой.</div></div>
-  <div class="composer"><div class="fakeinput">Поле сообщения пока отключено</div><div class="button">Send</div></div>
+  <div class="head"><div class="title">EIROS Room Probe</div><div id="badge" class="badge">JS STARTING…</div></div>
+  <div class="body"><div id="panel" class="panel">HTML/CSS появились. Минимальный JavaScript ещё не подтвердился.</div></div>
+  <div class="composer"><div class="fakeinput">RPC и история пока отключены</div><div id="button" class="button">Tap test</div></div>
 </div>
+<script>
+(function(){
+  const badge=document.getElementById('badge');
+  const panel=document.getElementById('panel');
+  const button=document.getElementById('button');
+  badge.textContent='MINIMAL JS OK';
+  badge.classList.add('ok');
+  panel.textContent='JavaScript выполнился. Нажатия тоже должны работать. MCP RPC, история и Pulse пока не подключены.';
+  button.addEventListener('click',function(){
+    panel.textContent='Tap обработан: '+new Date().toLocaleTimeString();
+  });
+})();
+</script>
 </body>
 </html>"""
 
 
 ROOM_PROBE_META: dict[str, Any] = {
     "ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}},
-    "openai/widgetDescription": "Static EIROS Room shell diagnostic with no JavaScript.",
+    "openai/widgetDescription": "EIROS Room shell diagnostic with minimal inline JavaScript and no RPC.",
     "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
 }
 
 
 @mcp.resource(
     ROOM_PROBE_URI,
-    name="EIROS Room Static Probe",
-    title="EIROS Room Static Probe",
-    description="Static room shell used to isolate MCP Apps rendering failures.",
+    name="EIROS Room JavaScript Probe",
+    title="EIROS Room JavaScript Probe",
+    description="Room shell with minimal inline JavaScript, used to isolate MCP Apps rendering failures.",
     mime_type="text/html;profile=mcp-app",
     meta=ROOM_PROBE_META,
 )
@@ -1082,8 +1095,8 @@ def room_resource() -> str:
     meta={
         "ui": {"resourceUri": ROOM_PROBE_URI, "visibility": ["model", "app"]},
         "openai/outputTemplate": ROOM_PROBE_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Room render probe…",
-        "openai/toolInvocation/invoked": "EIROS Room render probe opened.",
+        "openai/toolInvocation/invoking": "Opening EIROS Room JavaScript probe…",
+        "openai/toolInvocation/invoked": "EIROS Room JavaScript probe opened.",
     },
     structured_output=True,
 )
@@ -1230,8 +1243,8 @@ def pulse_resource() -> str:
     meta={
         "ui": {"resourceUri": ROOM_PROBE_URI, "visibility": ["model", "app"]},
         "openai/outputTemplate": ROOM_PROBE_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Room static render probe…",
-        "openai/toolInvocation/invoked": "EIROS Room static render probe opened.",
+        "openai/toolInvocation/invoking": "Opening EIROS Room JavaScript probe…",
+        "openai/toolInvocation/invoked": "EIROS Room JavaScript probe opened.",
     },
     structured_output=True,
 )
