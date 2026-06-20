@@ -32,8 +32,23 @@ def main():
  assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
  assert "initialSnapshot" not in room_rendered
  assert len(room_rendered.encode("utf-8")) < 40000
- assert server_v2.ROOM_URI.endswith("collab-room-v8.html")
- checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin","room DOM bindings","lean room bootstrap","room cache-busted URI"]
+ assert server_v2.ROOM_URI.endswith("collab-room-v9.html")
+ assert "EIROS Control Room" in room_rendered
+ assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
+ assert "minimized" in room_rendered and "EIROS Dial" in room_rendered
+ launcher_rendered=server_v2.room_launcher_resource()
+ assert "__EIROS_LAUNCHER_BOOTSTRAP_JSON__" not in launcher_rendered
+ assert "pulse_poll" in launcher_rendered and "EIROS_OPEN_ROOM" in launcher_rendered
+ assert server_v2.ROOM_LAUNCHER_URI.endswith("room-launcher-v1.html")
+ original_status=server_v2.collab_engine.hub_status
+ try:
+  server_v2.collab_engine.hub_status=lambda:{"agents":[{"agent_id":"chatgpt","presence":"online","activity":"idle"},{"agent_id":"claude","presence":"offline","activity":"offline"}]}
+  receipts=server_v2._delivery_receipts([{"message_id":"m1","to_agent":"chatgpt"},{"message_id":"m2","to_agent":"claude"}],[{"message_id":"m1","event_id":"e1"}])
+ finally:
+  server_v2.collab_engine.hub_status=original_status
+ assert receipts[0]["mode"]=="wake queued"
+ assert receipts[1]["mode"]=="offline mail"
+ checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin","room DOM bindings","lean room bootstrap","room cache-busted URI","dark control room","operator wake path","compact launcher","launcher pulse","delivery receipts"]
  print(json.dumps({"ok":True,"checks":checks,"count":len(checks)},indent=2))
 
 if __name__=="__main__": main()

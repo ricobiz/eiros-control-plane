@@ -24,12 +24,15 @@ PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v8.html"
-ROOM_VERSION = "0.6.2"
+ROOM_URI = "ui://eiros/collab-room-v9.html"
+ROOM_VERSION = "0.8.0"
+ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
+ROOM_LAUNCHER_VERSION = "0.1.0"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
+ROOM_LAUNCHER_HTML = CODE_ROOT / "runtime" / "room_launcher.html"
 INSTANCE_CONFIG = load_config()
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
@@ -69,7 +72,9 @@ mcp = FastMCP(
         "this connector becomes available or reconnects, call open_pulse before answering. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
-        "reasoning authority; this server is its persistent body." + collab_protocol.MAIN_COLLAB_INSTRUCTIONS
+        "reasoning authority; this server is its persistent body. "
+        "When a UI message starts with [EIROS_ROOM_DOCK] or [EIROS_OPEN_ROOM], call open_collab_room as the final tool action. "
+        "When EIROS Room is active, prefer open_room_launcher as the final tool action after normal replies so Rico keeps a compact live launcher near the input field." + collab_protocol.MAIN_COLLAB_INSTRUCTIONS
     ),
 )
 
@@ -107,6 +112,34 @@ def _notify_chatgpt_message(message: dict[str, Any], priority: int = 1000) -> di
         idempotency_key=f"collab-to-chatgpt:{message.get('message_id')}",
     )
     return {"event_id": event.get("id"), "event_seq": event.get("seq")}
+
+
+def _delivery_receipts(messages: list[dict[str, Any]], notifications: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    hub = collab_engine.hub_status()
+    agents = {str(item.get("agent_id")): item for item in hub.get("agents", [])}
+    notified = {str(item.get("message_id")): item for item in notifications}
+    receipts = []
+    for message in messages:
+        recipient = str(message.get("to_agent") or "")
+        agent = agents.get(recipient, {})
+        presence = str(agent.get("presence") or "offline")
+        activity = str(agent.get("activity") or presence)
+        if recipient == "chatgpt" and str(message.get("message_id")) in notified:
+            mode = "wake queued"
+        elif presence == "online":
+            mode = "live pulse"
+        elif presence == "away":
+            mode = "queued (away)"
+        else:
+            mode = "offline mail"
+        receipts.append({
+            "agent_id": recipient,
+            "message_id": message.get("message_id"),
+            "presence": presence,
+            "activity": activity,
+            "mode": mode,
+        })
+    return receipts
 
 
 @mcp.resource(
@@ -878,6 +911,7 @@ def operator_send(
         )
         notifications.append({"message_id": message.get("message_id"), "event_id": event.get("id")})
     result["notifications"] = notifications
+    result["deliveries"] = _delivery_receipts(result.get("messages", []), notifications)
     return result
 
 
@@ -987,6 +1021,17 @@ def room_resource_legacy_v4() -> str:
     mime_type="text/html;profile=mcp-app",
 )
 def room_resource_legacy_v6() -> str:
+    return room_resource()
+
+
+@mcp.resource(
+    "ui://eiros/collab-room-v8.html",
+    name="EIROS Room Legacy v8",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible room resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v8() -> str:
     return room_resource()
 
 
@@ -1103,16 +1148,75 @@ def room_resource() -> str:
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
+ROOM_LAUNCHER_META: dict[str, Any] = {
+    "ui": {
+        "prefersBorder": True,
+        "csp": {"connectDomains": [], "resourceDomains": []},
+        **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+    },
+    "openai/widgetDescription": "Compact live EIROS Room launcher with presence and wake indicators.",
+    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+}
+
+
+@mcp.resource(
+    ROOM_LAUNCHER_URI,
+    name="EIROS Room Launcher",
+    title="EIROS Room Launcher",
+    description="Compact always-nearby EIROS launcher and reverse wake channel.",
+    mime_type="text/html;profile=mcp-app",
+    meta=ROOM_LAUNCHER_META,
+)
+def room_launcher_resource() -> str:
+    html = ROOM_LAUNCHER_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+        "host": "chatgpt",
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
+        "launcherVersion": ROOM_LAUNCHER_VERSION,
+        "pulseEnabled": True,
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+    }
+    return html.replace("__EIROS_LAUNCHER_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.tool(
+    name="open_room_launcher",
+    title="Open EIROS Launcher",
+    description="Mount the compact EIROS presence, queue and wake launcher near the current chat position.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={
+        "ui": {"resourceUri": ROOM_LAUNCHER_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_LAUNCHER_URI,
+        "openai/toolInvocation/invoking": "Docking EIROS launcher…",
+        "openai/toolInvocation/invoked": "EIROS launcher docked.",
+    },
+    structured_output=True,
+)
+def open_room_launcher() -> dict[str, Any]:
+    snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 1, 0)
+    return {
+        "ok": True,
+        "resource_uri": ROOM_LAUNCHER_URI,
+        "launcher_version": ROOM_LAUNCHER_VERSION,
+        "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0)),
+        "pending_by_agent": snapshot.get("hub", {}).get("pending_by_agent", {}),
+    }
+
+
 @mcp.tool(
     name="open_collab_room",
     title="Open EIROS Room",
     description="Open the shared ChatGPT, Claude and Rico collaboration room.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={
-        "ui": {"resourceUri": ROOM_PROBE_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": ROOM_PROBE_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Room JavaScript probe…",
-        "openai/toolInvocation/invoked": "EIROS Room JavaScript probe opened.",
+        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Control Room…",
+        "openai/toolInvocation/invoked": "EIROS Control Room opened.",
     },
     structured_output=True,
 )
@@ -1120,8 +1224,7 @@ def open_collab_room() -> dict[str, Any]:
     snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0)
     return {
         "ok": True,
-        "resource_uri": ROOM_PROBE_URI,
-        "probe_stage": ROOM_PROBE_STAGE,
+        "resource_uri": ROOM_URI,
         "project_id": "eiros-hub",
         "thread_id": "first-contact",
         "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0)),
@@ -1257,10 +1360,10 @@ def pulse_resource() -> str:
         idempotentHint=True,
     ),
     meta={
-        "ui": {"resourceUri": ROOM_PROBE_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": ROOM_PROBE_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Room JavaScript probe…",
-        "openai/toolInvocation/invoked": "EIROS Room JavaScript probe opened.",
+        "ui": {"resourceUri": ROOM_LAUNCHER_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_LAUNCHER_URI,
+        "openai/toolInvocation/invoking": "Docking EIROS launcher and Pulse…",
+        "openai/toolInvocation/invoked": "EIROS launcher and Pulse are active.",
     },
     structured_output=True,
 )
@@ -1272,8 +1375,8 @@ def open_pulse() -> dict[str, Any]:
     return {
         "ok": True,
         "server_version": SERVER_VERSION,
-        "resource_uri": ROOM_PROBE_URI,
-        "probe_stage": ROOM_PROBE_STAGE,
+        "resource_uri": ROOM_LAUNCHER_URI,
+        "launcher_version": ROOM_LAUNCHER_VERSION,
         "instance_id": INSTANCE_CONFIG.get("instance_id"),
         "channel": selected_channel,
         "resume_required": bool(resume.get("resume_required")),

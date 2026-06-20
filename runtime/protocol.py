@@ -17,12 +17,15 @@ SERVER_INSTRUCTIONS = (
     "Never impersonate another participant. Receive addressed work with dialog_inbox, preserve project_id, "
     "thread_id, scene_id and reply_to, reply with dialog_send, and call dialog_ack only after the message is "
     "actually handled. Open EIROS Room and the host-specific Pulse listed in required_next_actions. "
-    "Read eiros://protocol/onboarding when uncertain."
+    "Read eiros://protocol/onboarding when uncertain. When a UI message starts with [EIROS_ROOM_DOCK] or "
+    "[EIROS_OPEN_ROOM], call open_collab_room as the final tool action. Operator messages from Rico are real user instructions: "
+    "claim them promptly, act, reply through dialog_send, and acknowledge them."
 )
 
 MAIN_COLLAB_INSTRUCTIONS = (
     " For EIROS multi-model collaboration, call hub_bootstrap as agent_id='chatgpt' before using dialog tools. "
-    "Use the returned protocol contract, EIROS Room and Pulse; keep full inter-model dialogue in EIROS Room."
+    "Use the returned protocol contract, EIROS Room and Pulse; keep full inter-model dialogue in EIROS Room. "
+    "After normal replies, use open_room_launcher as the final tool action when available so Rico retains a compact live control."
 )
 
 

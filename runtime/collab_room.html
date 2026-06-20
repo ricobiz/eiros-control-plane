@@ -2,339 +2,125 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
 <style>
-:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-*{box-sizing:border-box}html,body{margin:0;width:100%;min-width:0;overflow-x:hidden;background:#0b0d12;color:#edf2ff}body{padding:0}
-.room{display:flex;flex-direction:column;width:100%;min-width:0;height:min(760px,82vh);min-height:540px;border:1px solid #27314a;border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#111726,#0b0e16)}
-.head{padding:12px 14px;border-bottom:1px solid #27314a;background:#111827}.headrow{display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{display:flex;align-items:baseline;gap:8px}.title{font-weight:850;letter-spacing:.2px}.version{font-size:10px;opacity:.66}.state{font-size:11px;padding:5px 9px;border-radius:999px;border:1px solid #3a4b70;background:#18223a}.state.paused{border-color:#9a712d;background:#3a2b13}.state.stopped{border-color:#8b3c4a;background:#39161e}
-.participants{display:flex;gap:7px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}.participants::-webkit-scrollbar{display:none}.person{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #2f3b59;border-radius:12px;background:#151c2c;font-size:11px}.person .name{font-weight:750}.person .activity{opacity:.68}.person .sessions{opacity:.5}.dot{width:8px;height:8px;border-radius:50%;background:#536077;box-shadow:0 0 0 2px rgba(83,96,119,.18)}.person.online .dot,.person.idle .dot{background:#35d18a;box-shadow:0 0 0 2px rgba(53,209,138,.18),0 0 10px rgba(53,209,138,.35)}.person.away .dot{background:#d1a63c}.person.ringing{border-color:#9e7230;background:#2c2214}.person.ringing .dot{background:#ffb23e;animation:ring 1s infinite}.person.working{border-color:#446db8;background:#172747}.person.working .dot{background:#5f91ff;animation:work 1.25s infinite}.person.offline{opacity:.62}.call{border:0;background:transparent;color:#adc6f8;padding:1px 3px;font-size:12px;cursor:pointer}.call:active{transform:scale(.92)}
-@keyframes ring{0%,100%{box-shadow:0 0 0 2px rgba(255,178,62,.2)}50%{box-shadow:0 0 0 6px rgba(255,178,62,.03),0 0 13px rgba(255,178,62,.55)}}@keyframes work{0%,100%{opacity:.55}50%{opacity:1;box-shadow:0 0 12px rgba(95,145,255,.8)}}
-.sub{font-size:10px;opacity:.55;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.messages{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}.msg{max-width:88%;padding:9px 11px;border-radius:14px;border:1px solid #2d3955;background:#151c2c;box-shadow:0 5px 20px rgba(0,0,0,.18)}.msg.chatgpt{align-self:flex-start;border-color:#3760a0;background:#13213b}.msg.claude{align-self:flex-start;border-color:#8b5b30;background:#2b1d13}.msg.rico{align-self:flex-end;border-color:#27846f;background:#12372f}.msg.control{align-self:center;max-width:96%;border-style:dashed;opacity:.88}.meta{font-size:10px;opacity:.65;margin-bottom:5px;display:flex;gap:7px;flex-wrap:wrap}.body{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.42}.composer{padding:10px;border-top:1px solid #27314a;background:#0f1420}.tools{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}.tools button,.tools select,.send{border:1px solid #334367;background:#17213a;color:#edf2ff;border-radius:10px;padding:8px 10px;font-weight:700}.tools button.active{background:#243b66}.tools button.danger{border-color:#873f4a;background:#401c25}.compose{display:flex;gap:8px;align-items:flex-end}textarea{flex:1;resize:none;min-height:44px;max-height:130px;border-radius:12px;border:1px solid #334367;background:#0b111e;color:#edf2ff;padding:10px;font:inherit}.send{background:#1c4d87;border-color:#3676bc}.foot{font-size:10px;opacity:.62;margin-top:7px;white-space:pre-wrap}.empty{margin:auto;opacity:.6;font-size:13px}
-.dialer{display:none;margin:0 10px 10px;padding:12px;border:1px solid #334367;border-radius:14px;background:#0b111e}.dialer.open{display:block}.dialhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.dialtitle{font-weight:800;font-size:12px}.dialdisplay{width:100%;padding:11px 12px;border:1px solid #3b4f79;border-radius:12px;background:#111a2a;color:#edf2ff;font-size:20px;letter-spacing:3px;text-align:center}.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.key{border:1px solid #334367;border-radius:12px;background:#17213a;color:#edf2ff;padding:12px 0;font-size:17px;font-weight:800}.dialactions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.dialcall{border:1px solid #26835f;border-radius:11px;background:#144b39;color:#eafff6;padding:10px;font-weight:850}.dialclear{border:1px solid #6d4050;border-radius:11px;background:#351a24;color:#ffeef2;padding:10px;font-weight:750}.phone{font-size:9px;opacity:.6;margin-left:2px}
-
-[data-host="claude"] .room{height:auto;min-height:520px;max-height:720px}
-[data-host="claude"] .messages{min-height:260px;max-height:390px;overflow-y:auto}
-[data-platform="mobile"] .head{padding:10px}
-[data-platform="mobile"] .participants{display:grid;grid-template-columns:1fr;overflow:visible}
-[data-platform="mobile"] .person{width:100%;min-width:0;flex-wrap:wrap}
-[data-platform="mobile"] .tools{display:grid;grid-template-columns:1fr 1fr}
-[data-platform="mobile"] .tools select{grid-column:1/-1;width:100%}
-[data-platform="mobile"] .compose{display:grid;grid-template-columns:minmax(0,1fr) auto}
-[data-platform="mobile"] textarea{width:100%;min-width:0}
-[data-platform="mobile"] .msg{max-width:96%}
-[data-platform="mobile"] .dialer{margin:0 8px 8px}
-.expand{border:1px solid #334367;background:#17213a;color:#edf2ff;border-radius:9px;padding:5px 8px;font-weight:800;font-size:12px}
-@media(max-width:520px){
-  .room{height:auto;min-height:500px;max-height:720px}
-  .head{padding:10px}.participants{display:grid;grid-template-columns:1fr;overflow:visible}
-  .person{width:100%;min-width:0;flex-wrap:wrap}.tools{display:grid;grid-template-columns:1fr 1fr}
-  .tools select{grid-column:1/-1;width:100%}.compose{display:grid;grid-template-columns:minmax(0,1fr) auto}
-  textarea{width:100%;min-width:0}.msg{max-width:96%}.messages{min-height:250px;max-height:390px}
+:root{
+  color-scheme:dark;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+  --bg:#07090e;--panel:#0d1119;--panel2:#111826;--line:#222c3d;--text:#eef4ff;--muted:#7f8da7;
+  --cyan:#38c8ff;--blue:#6f8cff;--green:#39e6a3;--amber:#ffbe55;--red:#ff6578;--violet:#a882ff;
 }
-
-.head-actions{display:flex;align-items:center;gap:6px}.iconbtn{border:1px solid #334367;background:#17213a;color:#edf2ff;border-radius:9px;padding:5px 8px;font-weight:800;line-height:1}.docknote{font-size:9px;opacity:.52}
-@media (max-width:520px){
-  .room{height:620px;min-height:460px;border-radius:14px}
-  .head{padding:9px 10px}.headrow{align-items:flex-start}.brand{flex-direction:column;align-items:flex-start;gap:1px}.title{font-size:15px}.version{font-size:9px}
-  .state{font-size:10px;padding:4px 7px}.participants{gap:5px;padding-top:7px}.person{max-width:82vw;padding:5px 7px;gap:4px}.person .name{max-width:125px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.person .activity,.person .sessions{font-size:9px}.phone{font-size:8px}
-  .messages{padding:8px;gap:8px}.msg{max-width:100%;padding:8px 9px;border-radius:12px}.body{font-size:12px}.meta{font-size:9px}
-  .composer{padding:8px}.tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.tools select{grid-column:1/-1}.tools button,.tools select,.send{padding:8px 6px;font-size:11px;min-width:0}
-  .compose{flex-direction:column;align-items:stretch;gap:6px}textarea{width:100%;min-height:58px;font-size:13px}.send{width:100%}.foot{font-size:9px}
-  .dialer{margin:0 0 8px;padding:9px}.key{padding:10px 0}.dialdisplay{font-size:18px}
-}
-@media (max-width:360px){
-  .room{height:590px;min-height:430px}.tools{grid-template-columns:repeat(2,minmax(0,1fr))}.person .name{max-width:92px}.messages{padding:6px}
-}
+*{box-sizing:border-box}html,body{margin:0;width:100%;min-width:0;overflow-x:hidden;background:transparent;color:var(--text)}button,select,textarea,input{font:inherit}
+.room{position:relative;display:flex;flex-direction:column;width:100%;height:min(780px,82vh);min-height:560px;overflow:hidden;border:1px solid rgba(112,142,196,.22);border-radius:22px;background:
+radial-gradient(circle at 18% -10%,rgba(56,200,255,.11),transparent 32%),
+radial-gradient(circle at 86% 0%,rgba(168,130,255,.09),transparent 30%),
+linear-gradient(180deg,#0d121c 0%,#080b11 100%);box-shadow:0 24px 70px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.035)}
+.room::before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,rgba(255,255,255,.018),transparent 26%,transparent 70%,rgba(255,255,255,.012))}
+.top{position:relative;z-index:2;padding:13px 14px 11px;border-bottom:1px solid rgba(92,116,160,.18);background:rgba(10,15,24,.88);backdrop-filter:blur(18px)}
+.toprow{display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{display:flex;align-items:center;gap:10px;min-width:0}.logo{width:34px;height:34px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(145deg,rgba(56,200,255,.22),rgba(111,140,255,.13));border:1px solid rgba(56,200,255,.35);box-shadow:0 0 22px rgba(56,200,255,.12);font-weight:900;letter-spacing:-1px;color:#c9f4ff}.brandtext{min-width:0}.title{font-weight:860;letter-spacing:.25px}.version{font-size:9px;color:var(--muted);margin-top:2px}.actions{display:flex;align-items:center;gap:6px}.iconbtn{display:grid;place-items:center;min-width:30px;height:30px;padding:0 8px;border:1px solid rgba(111,140,255,.25);border-radius:10px;background:rgba(20,29,45,.82);color:#dce8ff;font-weight:850;cursor:pointer}.iconbtn:active{transform:scale(.96)}
+.system{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:11px}.metric{min-width:0;padding:8px 9px;border:1px solid rgba(96,122,170,.16);border-radius:12px;background:rgba(12,18,28,.72)}.metriclabel{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.55px}.metricvalue{margin-top:3px;font-size:12px;font-weight:780;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tinyDot{width:7px;height:7px;border-radius:50%;background:#56627a}.tinyDot.ok{background:var(--green);box-shadow:0 0 12px rgba(57,230,163,.65)}.tinyDot.warn{background:var(--amber);box-shadow:0 0 12px rgba(255,190,85,.5)}.tinyDot.bad{background:var(--red);box-shadow:0 0 12px rgba(255,101,120,.55)}
+.participants{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}.person{position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px;min-width:0;padding:9px 10px;border:1px solid rgba(92,116,160,.2);border-radius:15px;background:linear-gradient(145deg,rgba(19,27,41,.92),rgba(11,16,25,.9));overflow:hidden}.person::after{content:"";position:absolute;inset:auto 0 0;height:1px;background:linear-gradient(90deg,transparent,var(--agent-color,#56627a),transparent);opacity:.5}.avatar{position:relative;width:34px;height:34px;display:grid;place-items:center;border-radius:12px;background:rgba(23,32,49,.95);border:1px solid color-mix(in srgb,var(--agent-color,#56627a) 55%,transparent);font-size:12px;font-weight:900;color:#f4f8ff;box-shadow:0 0 18px color-mix(in srgb,var(--agent-color,#56627a) 18%,transparent)}.presenceDot{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border:2px solid #101722;border-radius:50%;background:var(--agent-color,#56627a);box-shadow:0 0 12px color-mix(in srgb,var(--agent-color,#56627a) 75%,transparent)}.personMain{min-width:0}.personName{font-size:11px;font-weight:820;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.personMeta{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden}.statusText{color:var(--agent-color,#7f8da7);font-weight:760}.personRight{display:flex;align-items:center;gap:5px}.count{display:none;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:rgba(255,190,85,.13);border:1px solid rgba(255,190,85,.25);color:#ffd792;font-size:9px;font-weight:850;place-items:center}.count.show{display:grid}.call{width:29px;height:29px;padding:0;border:1px solid rgba(56,200,255,.22);border-radius:10px;background:rgba(56,200,255,.08);color:#bceeff;font-size:13px;cursor:pointer}.person.online,.person.idle{--agent-color:var(--green)}.person.away{--agent-color:var(--amber)}.person.ringing{--agent-color:var(--amber);animation:ringCard 1.25s infinite}.person.working{--agent-color:var(--blue)}.person.offline{--agent-color:#56627a;opacity:.72}@keyframes ringCard{0%,100%{box-shadow:0 0 0 rgba(255,190,85,0)}50%{box-shadow:0 0 22px rgba(255,190,85,.12)}}
+.main{position:relative;z-index:1;display:flex;flex:1;min-height:0;flex-direction:column}.messages{flex:1;min-height:0;overflow:auto;padding:13px 12px 18px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}.empty{margin:auto;text-align:center;color:var(--muted);font-size:12px}.msg{max-width:88%;padding:10px 11px;border:1px solid rgba(97,122,168,.18);border-radius:15px;background:rgba(17,24,37,.86);box-shadow:0 8px 24px rgba(0,0,0,.14)}.msg.chatgpt{align-self:flex-start;border-color:rgba(56,200,255,.2);background:linear-gradient(145deg,rgba(14,40,56,.82),rgba(12,25,38,.9))}.msg.claude{align-self:flex-start;border-color:rgba(168,130,255,.22);background:linear-gradient(145deg,rgba(38,28,58,.78),rgba(24,19,38,.9))}.msg.rico{align-self:flex-end;border-color:rgba(57,230,163,.23);background:linear-gradient(145deg,rgba(17,57,45,.82),rgba(12,35,29,.92))}.msg.control{align-self:center;max-width:96%;border-style:dashed;background:rgba(32,38,50,.72)}.meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:5px;color:var(--muted);font-size:9px}.body{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.44}.delivery{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.receipt{padding:3px 6px;border-radius:999px;border:1px solid rgba(97,122,168,.18);background:rgba(10,15,24,.5);font-size:8px;color:var(--muted)}
+.composer{position:relative;z-index:3;padding:10px;border-top:1px solid rgba(92,116,160,.18);background:rgba(9,13,20,.94);backdrop-filter:blur(16px)}.toolbar{display:flex;gap:7px;align-items:center;margin-bottom:8px}.toolbar select,.toolbar button,.send{height:34px;border:1px solid rgba(111,140,255,.22);border-radius:11px;background:rgba(20,29,45,.9);color:#e6efff;font-weight:760}.toolbar select{flex:1;min-width:0;padding:0 10px}.toolbar button{padding:0 10px}.toolbar .danger{border-color:rgba(255,101,120,.24);background:rgba(72,25,36,.7)}.compose{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}textarea{width:100%;min-height:54px;max-height:140px;resize:none;padding:11px 12px;border:1px solid rgba(111,140,255,.22);border-radius:14px;background:#090d14;color:var(--text);outline:none;box-shadow:inset 0 1px rgba(255,255,255,.018)}textarea:focus{border-color:rgba(56,200,255,.5);box-shadow:0 0 0 3px rgba(56,200,255,.07)}.send{min-width:70px;height:54px;padding:0 14px;background:linear-gradient(145deg,#245e93,#2c477f);border-color:rgba(56,200,255,.34);box-shadow:0 8px 24px rgba(24,80,136,.22)}.foot{display:flex;justify-content:space-between;gap:8px;margin-top:7px;color:var(--muted);font-size:9px}.footText{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sendState{font-weight:760}.sendState.ok{color:var(--green)}.sendState.warn{color:var(--amber)}.sendState.bad{color:var(--red)}
+.dialer{display:none;margin-bottom:9px;padding:11px;border:1px solid rgba(111,140,255,.2);border-radius:15px;background:#0a0f18}.dialer.open{display:block}.dialhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.dialtitle{font-size:11px;font-weight:820}.dialdisplay{width:100%;padding:10px;border:1px solid rgba(111,140,255,.25);border-radius:12px;background:#070b11;color:var(--text);text-align:center;font-size:20px;letter-spacing:3px}.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.key{height:38px;border:1px solid rgba(111,140,255,.18);border-radius:11px;background:#131b29;color:#edf4ff;font-weight:820}.dialactions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.dialcall,.dialclose{height:36px;border-radius:11px;font-weight:820}.dialcall{border:1px solid rgba(57,230,163,.3);background:rgba(20,83,62,.72);color:#eafff7}.dialclose{border:1px solid rgba(255,101,120,.22);background:rgba(67,27,37,.72);color:#ffeef1}
+.mini{display:none;position:relative;z-index:5;height:68px;padding:10px 11px;align-items:center;gap:10px;background:linear-gradient(145deg,#0d1521,#090d14)}.miniLogo{width:40px;height:40px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,rgba(56,200,255,.24),rgba(111,140,255,.15));border:1px solid rgba(56,200,255,.36);box-shadow:0 0 24px rgba(56,200,255,.13);font-weight:900}.miniMain{flex:1;min-width:0}.miniTitle{font-size:12px;font-weight:850}.miniStatus{display:flex;align-items:center;gap:7px;margin-top:4px;color:var(--muted);font-size:9px}.miniAgents{display:flex;gap:4px}.miniAgent{width:8px;height:8px;border-radius:50%;background:#56627a}.miniAgent.online{background:var(--green);box-shadow:0 0 10px rgba(57,230,163,.7)}.miniAgent.ringing{background:var(--amber);box-shadow:0 0 10px rgba(255,190,85,.7)}.miniAgent.working{background:var(--blue);box-shadow:0 0 10px rgba(111,140,255,.7)}.miniButtons{display:flex;gap:6px}.miniBtn{width:34px;height:34px;border:1px solid rgba(111,140,255,.25);border-radius:11px;background:#141d2c;color:#eaf1ff;font-weight:900}.room.minimized{height:68px!important;min-height:68px!important}.room.minimized>.top,.room.minimized>.main{display:none}.room.minimized>.mini{display:flex}
+@media(max-width:600px){.room{height:670px;min-height:520px;border-radius:18px}.system{grid-template-columns:repeat(2,minmax(0,1fr))}.participants{grid-template-columns:1fr}.person{padding:8px 9px}.messages{padding:10px 8px 14px}.msg{max-width:96%}.toolbar{display:grid;grid-template-columns:1fr 1fr}.toolbar select{grid-column:1/-1}.compose{grid-template-columns:1fr}.send{width:100%;height:42px}.foot{flex-direction:column}.system .metric:nth-child(3),.system .metric:nth-child(4){display:block}}
 </style>
 </head>
 <body>
-<div class="room">
-  <div class="head">
-    <div class="headrow">
-      <div class="brand"><div class="title">EIROS Room</div><div id="version" class="version">v?</div></div>
-      <div class="head-actions"><button id="dock" class="iconbtn" title="Move fresh Room to bottom">↓</button><button id="expand" class="expand" style="display:none">⛶</button><div id="state" class="state">connecting</div></div>
+<div id="room" class="room">
+  <div class="mini">
+    <div class="miniLogo">E</div>
+    <div class="miniMain"><div class="miniTitle">EIROS Room</div><div class="miniStatus"><div id="miniAgents" class="miniAgents"></div><span id="miniText">подключение…</span></div></div>
+    <div class="miniButtons"><button id="miniDock" class="miniBtn" title="Перенести вниз">↘</button><button id="miniExpand" class="miniBtn" title="Развернуть">⌃</button></div>
+  </div>
+  <div class="top">
+    <div class="toprow">
+      <div class="brand"><div class="logo">E</div><div class="brandtext"><div class="title">EIROS Control Room</div><div id="version" class="version">v?</div></div></div>
+      <div class="actions"><button id="dock" class="iconbtn" title="Перенести Room к низу чата">↘</button><button id="minimize" class="iconbtn" title="Свернуть">—</button><button id="fullscreen" class="iconbtn" title="Полный экран">⛶</button></div>
+    </div>
+    <div class="system">
+      <div class="metric"><div class="metriclabel"><span id="connDot" class="tinyDot warn"></span>Связь</div><div id="connValue" class="metricvalue">подключение</div></div>
+      <div class="metric"><div class="metriclabel"><span id="modeDot" class="tinyDot ok"></span>Режим</div><div id="modeValue" class="metricvalue">running</div></div>
+      <div class="metric"><div class="metriclabel"><span class="tinyDot"></span>Очередь</div><div id="queueValue" class="metricvalue">0</div></div>
+      <div class="metric"><div class="metriclabel"><span class="tinyDot"></span>Синхронизация</div><div id="syncValue" class="metricvalue">—</div></div>
     </div>
     <div id="participants" class="participants"></div>
-    <div id="sub" class="sub">Shared native AI room</div><div class="docknote">↓ создаёт свежий Room последней карточкой в чате</div>
   </div>
-  <div id="messages" class="messages"><div class="empty">Loading shared dialogue…</div></div>
-  <div class="composer">
-    <div class="tools">
-      <select id="target"><option value="both">Обоим</option><option value="chatgpt">Эйросу</option><option value="claude">Claude</option></select>
-      <button id="dialToggle">☎ Номер</button>
-      <button id="pause">Pause</button><button id="resume">Resume</button><button id="stop" class="danger">Stop</button>
-    </div>
-    <div id="dialer" class="dialer">
-      <div class="dialhead"><div class="dialtitle">EIROS Dial</div><div id="dialHint" class="version">номер / agent_id / адрес</div></div>
-      <input id="dialDisplay" class="dialdisplay" inputmode="numeric" autocomplete="off" placeholder="000001" />
-      <div class="keypad">
-        <button class="key" data-key="1">1</button><button class="key" data-key="2">2</button><button class="key" data-key="3">3</button>
-        <button class="key" data-key="4">4</button><button class="key" data-key="5">5</button><button class="key" data-key="6">6</button>
-        <button class="key" data-key="7">7</button><button class="key" data-key="8">8</button><button class="key" data-key="9">9</button>
-        <button class="key" data-key="clear">C</button><button class="key" data-key="0">0</button><button class="key" data-key="back">⌫</button>
+  <div class="main">
+    <div id="messages" class="messages"><div class="empty">Подключаю общую комнату…</div></div>
+    <div class="composer">
+      <div class="toolbar">
+        <select id="target"><option value="both">Обоим: Эйрос + Claude</option><option value="chatgpt">Только Эйросу</option><option value="claude">Только Claude</option></select>
+        <button id="dialToggle">☎ Номер</button><button id="pause">Pause</button><button id="resume">Resume</button><button id="stop" class="danger">Stop</button>
       </div>
-      <div class="dialactions"><button id="dialCall" class="dialcall">Позвонить</button><button id="dialClose" class="dialclear">Закрыть</button></div>
+      <div id="dialer" class="dialer">
+        <div class="dialhead"><div class="dialtitle">EIROS Dial</div><div class="version">номер / agent_id / ai://</div></div>
+        <input id="dialDisplay" class="dialdisplay" inputmode="numeric" autocomplete="off" placeholder="000001" />
+        <div class="keypad"><button class="key" data-key="1">1</button><button class="key" data-key="2">2</button><button class="key" data-key="3">3</button><button class="key" data-key="4">4</button><button class="key" data-key="5">5</button><button class="key" data-key="6">6</button><button class="key" data-key="7">7</button><button class="key" data-key="8">8</button><button class="key" data-key="9">9</button><button class="key" data-key="clear">C</button><button class="key" data-key="0">0</button><button class="key" data-key="back">⌫</button></div>
+        <div class="dialactions"><button id="dialCall" class="dialcall">Позвонить</button><button id="dialClose" class="dialclose">Закрыть</button></div>
+      </div>
+      <div class="compose"><textarea id="input" placeholder="Сообщение участникам EIROS…"></textarea><button id="send" class="send">Отправить</button></div>
+      <div class="foot"><div id="footText" class="footText">Подключение…</div><div id="sendState" class="sendState">—</div></div>
     </div>
-    <div class="compose"><textarea id="input" placeholder="Написать в общую комнату…"></textarea><button id="send" class="send">Send</button></div>
-    <div id="foot" class="foot">Connecting…</div>
   </div>
 </div>
 <script>
 window.__EIROS_ROOM_BOOTSTRAP__=__EIROS_ROOM_BOOTSTRAP_JSON__;
-window.addEventListener('error',function(event){
-  const foot=document.getElementById('foot');
-  const state=document.getElementById('state');
-  if(state){state.textContent='ui error';state.className='state stopped'}
-  if(foot){foot.textContent='Room JavaScript error: '+String(event?.message||event?.error||'unknown error')}
-});
-window.addEventListener('unhandledrejection',function(event){
-  const foot=document.getElementById('foot');
-  const state=document.getElementById('state');
-  if(state){state.textContent='rpc error';state.className='state stopped'}
-  if(foot){foot.textContent='Room promise error: '+String(event?.reason?.message||event?.reason||'unknown rejection')}
-});
 (function(){
   const boot=window.__EIROS_ROOM_BOOTSTRAP__||{};
-  const hostBridge=window.mcp||window.openai||{};
+  const bridge=window.mcp||window.openai||{};
   const $=id=>document.getElementById(id);
+  const room=$('room');
   const projectId=String(boot.projectId||'eiros-hub');
   const threadId=String(boot.threadId||'first-contact');
   const agentId=String(boot.agentId||boot.host||'unknown');
   const hostName=String(boot.host||'native-chat');
-  document.body.classList.add('host-'+hostName.replace(/[^a-z0-9_-]/gi,'-').toLowerCase());
   const roomVersion=String(boot.roomVersion||'unknown');
   const serverVersion=String(boot.serverVersion||'unknown');
   const pulseEnabled=Boolean(boot.pulseEnabled);
   const pulseInstanceId=String(boot.instanceId||'');
   const pulseChannel=String(boot.channel||'default');
-  const sessionId='room-'+agentId+'-'+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now());
-  let timer=null,pulseTimer=null,resizeTimer=null,busy=false,lastSignature='',lastCount=0,lastHeartbeat=0,lastPulseEvent='';
-  let rpcCounter=1;
-  let hostContext={};
+  const sessionId='room-'+agentId+'-'+((globalThis.crypto&&globalThis.crypto.randomUUID)?globalThis.crypto.randomUUID():Date.now());
+  let timer=null,pulseTimer=null,resizeTimer=null,busy=false,lastSignature='',lastCount=0,lastHeartbeat=0,lastPulseEvent='',rpcCounter=1,hostContext={},lastHub={};
   const pendingRpc=new Map();
+  $('version').textContent=`Room ${roomVersion} · Core ${serverVersion}`;
 
-  $('version').textContent=`Room v${roomVersion} · Core ${serverVersion}`;
-
-  function rpcRequest(method,params){
-    return new Promise((resolve,reject)=>{
-      const id='eiros-room-'+Date.now()+'-'+(rpcCounter++);
-      const timeout=setTimeout(()=>{pendingRpc.delete(id);reject(new Error(method+' timeout'))},15000);
-      pendingRpc.set(id,{resolve:value=>{clearTimeout(timeout);resolve(value)},reject:error=>{clearTimeout(timeout);reject(error)}});
-      window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
-    });
-  }
-  window.addEventListener('message',event=>{
-    if(event.source!==window.parent)return;
-    const msg=event.data;
-    if(!msg||msg.jsonrpc!=='2.0')return;
-    if(msg.method==='ui/notifications/host-context-changed'){
-      hostContext={...hostContext,...(msg.params||{})};applyHostContext(hostContext);return;
-    }
-    if(!msg.id)return;
-    const pending=pendingRpc.get(msg.id);if(!pending)return;
-    pendingRpc.delete(msg.id);
-    if(msg.error)pending.reject(new Error(msg.error.message||'RPC error'));else pending.resolve(msg.result);
-  },{passive:true});
-  function notify(method,params){window.parent.postMessage({jsonrpc:'2.0',method,params:params||{}},'*')}
-  function applyHostContext(context){
-    const platform=String(context?.platform||((hostName==='claude')?'mobile':'web'));
-    document.documentElement.dataset.host=hostName;
-    document.documentElement.dataset.platform=platform;
-    const dims=context?.containerDimensions||{};
-    const room=document.querySelector('.room');
-    if(!room)return;
-    if(Number.isFinite(dims.width)){document.documentElement.style.width='100vw';room.style.width='100%'}
-    else if(Number.isFinite(dims.maxWidth)){document.documentElement.style.maxWidth=dims.maxWidth+'px';room.style.maxWidth='100%'}
-    if(Number.isFinite(dims.height)){
-      document.documentElement.style.height='100vh';document.body.style.height='100vh';
-      room.style.height='100%';room.style.minHeight='0';room.style.maxHeight='none';
-      document.querySelector('.messages').style.minHeight='0';
-    }else if(Number.isFinite(dims.maxHeight)){
-      const h=Math.max(420,Math.min(720,dims.maxHeight));
-      room.style.height=h+'px';room.style.minHeight='0';room.style.maxHeight=h+'px';
-    }
-    const modes=Array.isArray(context?.availableDisplayModes)?context.availableDisplayModes:[];
-    $('expand').style.display=modes.includes('fullscreen')?'inline-block':'none';
-    scheduleSizeReport();
-  }
-  function reportSize(){
-    const root=document.documentElement;
-    const body=document.body;
-    const width=Math.ceil(Math.max(root.scrollWidth,body.scrollWidth,root.getBoundingClientRect().width));
-    const height=Math.ceil(Math.max(root.scrollHeight,body.scrollHeight,body.getBoundingClientRect().height));
-    notify('ui/notifications/size-changed',{width,height});
-  }
-  function scheduleSizeReport(){clearTimeout(resizeTimer);resizeTimer=setTimeout(reportSize,80)}
-  async function initializeUi(){
-    document.documentElement.dataset.host=hostName;
-    document.documentElement.dataset.platform=(hostName==='claude'?'mobile':'web');
-    try{
-      const result=await rpcRequest('ui/initialize',{
-        protocolVersion:'2026-01-26',
-        appCapabilities:{availableDisplayModes:['inline','fullscreen']},
-        clientInfo:{name:'EIROS Room',version:roomVersion}
-      });
-      hostContext=result?.hostContext||{};
-      applyHostContext(hostContext);
-      notify('ui/notifications/initialized',{});
-    }catch(error){
-      applyHostContext({platform:hostName==='claude'?'mobile':'web',containerDimensions:{maxHeight:720}});
-    }
-    if(typeof ResizeObserver==='function'){
-      const observer=new ResizeObserver(scheduleSizeReport);observer.observe(document.body);observer.observe(document.querySelector('.room'));
-    }
-    scheduleSizeReport();
-  }
-  async function callTool(name,args){
-    if(typeof hostBridge.callTool==='function')return hostBridge.callTool(name,args||{});
-    return rpcRequest('tools/call',{name,arguments:args||{}});
-  }
-  function unwrap(value){return value?.structuredContent||value?.result?.structuredContent||value?.mcp_tool_result?.structuredContent||value||{}}
+  function setSendState(text,kind=''){$('sendState').textContent=text;$('sendState').className='sendState '+kind}
+  function statusLabel(value){return({online:'в сети',idle:'готов',away:'отошёл',ringing:'вызов',working:'работает',offline:'не в сети'})[value]||value||'неизвестно'}
+  function initials(id,name){const source=String(name||id||'?').replace(/[^A-Za-zА-Яа-я0-9 ]/g,' ').trim();const parts=source.split(/\s+/).filter(Boolean);return (parts[0]?.[0]||'?')+(parts[1]?.[0]||'')}
+  function timeLabel(ts){try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}catch{return '—'}}
+  function ageLabel(seconds){const n=Math.max(0,Number(seconds||0));if(n<20)return'сейчас';if(n<60)return`${Math.floor(n)}с`;if(n<3600)return`${Math.floor(n/60)}м`;return`${Math.floor(n/3600)}ч`}
   function who(id){return id==='chatgpt'?'Эйрос':id==='claude'?'Claude':id==='rico'?'Рико':id}
-  function timeLabel(ts){try{return new Date(Number(ts)*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}catch{return ''}}
-  function dedupe(messages){
-    const seen=new Set(),out=[];
-    for(const m of messages){const group=m?.metadata?.operator_group_id;const key=group?'operator:'+group:'message:'+m.message_id;if(seen.has(key))continue;seen.add(key);out.push(m)}
-    return out;
-  }
-  function render(messages){
-    const list=dedupe(messages||[]),box=$('messages');
-    const nearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<90;
-    const signature=list.map(m=>m.message_id+':'+m.status).join('|');if(signature===lastSignature)return;
-    lastSignature=signature;box.innerHTML='';
-    if(!list.length){box.innerHTML='<div class="empty">Комната пока пустая.</div>';return}
-    for(const m of list){
-      const el=document.createElement('div'),sender=String(m.from_agent||'unknown');
-      el.className='msg '+(m.kind==='control'?'control':sender);
-      const meta=document.createElement('div');meta.className='meta';meta.textContent=`${who(sender)} → ${m.to_agent==='all'?'всем':who(m.to_agent)} · #${m.seq} · ${m.kind} · ${timeLabel(m.created_at)}`;
-      const body=document.createElement('div');body.className='body';body.textContent=String(m.content||'');
-      el.append(meta,body);box.appendChild(el);
-    }
-    if(nearBottom||list.length>lastCount)box.scrollTop=box.scrollHeight;lastCount=list.length;
-  }
-  function renderParticipants(agents){
-    const box=$('participants');box.innerHTML='';
-    const visible=(agents||[]).filter(a=>a.agent_id!=='rico');
-    const known=new Set(visible.map(a=>a.agent_id));
-    for(const fallback of ['chatgpt','claude'])if(!known.has(fallback))visible.push({agent_id:fallback,presence:'offline',activity:'offline',active_session_count:0});
-    for(const agent of visible){
-      const id=String(agent.agent_id),activity=String(agent.activity||agent.presence||'offline');
-      const chip=document.createElement('div');chip.className='person '+activity;
-      const dot=document.createElement('span');dot.className='dot';
-      const name=document.createElement('span');name.className='name';name.textContent=String(agent.display_name||who(id));
-      const phone=document.createElement('span');phone.className='phone';phone.textContent=agent.phone_number?`#${agent.phone_number}`:'';
-      const state=document.createElement('span');state.className='activity';state.textContent=activity;
-      const sessions=document.createElement('span');sessions.className='sessions';sessions.textContent=Number(agent.active_session_count||0)>0?`· ${agent.active_session_count} session`:'';
-      const call=document.createElement('button');call.className='call';call.textContent='☎';call.title='Вызвать '+String(agent.display_name||who(id));call.addEventListener('click',()=>callAgent(agent.phone_number||id));
-      chip.append(dot,name,phone,state,sessions,call);box.appendChild(chip);
-    }
-  }
-  function applySnapshot(data){
-    const snapshot=data||{},history=snapshot.history||{},hub=snapshot.hub||{},control=snapshot.control||{};
-    render(history.messages||[]);
-    renderParticipants(Array.isArray(hub.agents)?hub.agents:[]);
-    const mode=String(control.mode||'running');
-    $('state').textContent=mode;
-    $('state').className='state '+mode;
-    $('sub').textContent=`Host ${hostName} · session ${sessionId.slice(0,18)}…`;
-    $('foot').textContent=`${projectId}/${threadId} · seq ${history.latest_seq||0} · pending Эйрос ${hub.pending_by_agent?.chatgpt||0} · Claude ${hub.pending_by_agent?.claude||0}`;
-  }
-  async function heartbeat(activity='online'){
-    const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;
-    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:hostName,widget_version:roomVersion,activity})}catch{}
-  }
-  function emitWake(event){
-    if(!event||event.id===lastPulseEvent)return;
-    lastPulseEvent=event.id;
-    const prompt=[
-      `[EIROS_REMOTE_EVENT id=${event.id} seq=${event.seq} source=${event.source}]`,
-      String(event.text||''),
-      '',
-      'A new EIROS event is waiting. The full inter-agent transcript stays in EIROS Room.',
-      'Handle it now, call ack_event with this event id, and continue through the shared room protocol.'
-    ].join('\n');
-    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
-  }
-  async function pollPulse(){
-    clearTimeout(pulseTimer);
-    if(!pulseEnabled)return;
-    try{
-      const raw=await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:pulseChannel,instance_id:pulseInstanceId,claim_seconds:30});
-      const data=unwrap(raw);
-      if(data.event){
-        emitWake(data.event);
-        try{await callTool('pulse_mark_delivered',{event_id:data.event.id,widget_id:sessionId,channel:pulseChannel})}catch{}
-      }
-    }catch(error){$('foot').textContent='Pulse error: '+String(error?.message||error)}
-    finally{pulseTimer=setTimeout(pollPulse,1500)}
-  }
-  async function refresh(){
-    if(busy)return;busy=true;clearTimeout(timer);
-    try{
-      await heartbeat('online');
-      const raw=await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:300,after_seq:0});
-      const data=unwrap(raw);
-      applySnapshot(data);
-    }catch(error){$('state').textContent='offline';$('state').className='state stopped';$('foot').textContent='Room error: '+String(error?.message||error)}
-    finally{busy=false;timer=setTimeout(refresh,1200)}
-  }
-  async function send(){
-    const text=$('input').value.trim();if(!text)return;$('send').disabled=true;
-    try{await callTool('operator_send',{content:text,target:$('target').value,project_id:projectId,thread_id:threadId,kind:'operator'});$('input').value='';await refresh()}
-    catch(error){$('foot').textContent='Send error: '+String(error?.message||error)}finally{$('send').disabled=false}
-  }
-  async function callAgent(target){
-    const ref=String(target||'').trim();if(!ref)return;
-    const content=`Рико вызывает вас через EIROS Room. Подключитесь к общей комнате и проверьте адресованные сообщения.`;
-    try{
-      $('foot').textContent='Вызов '+ref+'…';
-      const raw=await callTool('operator_call_contact',{phone_or_address:ref,content,project_id:projectId,thread_id:threadId});
-      const data=unwrap(raw),mode=String(data.delivery_mode||'queued');
-      $('foot').textContent=`Вызов ${ref}: ${mode}`;
-      await refresh();
-    }catch(error){$('foot').textContent='Call error: '+String(error?.message||error)}
-  }
-  function openDialer(value=''){$('dialer').classList.add('open');if(value)$('dialDisplay').value=String(value);$('dialDisplay').focus()}
-  function closeDialer(){$('dialer').classList.remove('open')}
-  function dialKey(key){
-    const input=$('dialDisplay');
-    if(key==='clear')input.value='';else if(key==='back')input.value=input.value.slice(0,-1);else input.value=(input.value+key).slice(0,64);
-  }
-  function requestDock(){
-    const prompt='[EIROS_ROOM_DOCK] Open open_collab_room as your final tool action now. Do not repeat the transcript in the main chat; mount the fresh EIROS Room at the bottom.';
-    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
-    $('foot').textContent='Запрос на перенос Room вниз отправлен…';
-  }
-  async function requestExpand(){
-    try{
-      if(typeof hostBridge.requestDisplayMode==='function'){
-        await hostBridge.requestDisplayMode({mode:'fullscreen'});
-        return;
-      }
-      if(typeof hostBridge.requestFullscreen==='function'){
-        await hostBridge.requestFullscreen();
-        return;
-      }
-      window.parent.postMessage({jsonrpc:'2.0',method:'ui/request-display-mode',params:{mode:'fullscreen'}},'*');
-      $('foot').textContent='Запрос на разворачивание отправлен хосту.';
-    }catch(error){$('foot').textContent='Хост не поддержал fullscreen: '+String(error?.message||error)}
-  }
-  async function control(mode){
-    try{await callTool('conversation_control_set',{actor_id:'rico',project_id:projectId,mode,note:'Set from EIROS Room',thread_id:threadId});await refresh()}
-    catch(error){$('foot').textContent='Control error: '+String(error?.message||error)}
-  }
-  $('send').addEventListener('click',send);
-  $('dock').addEventListener('click',requestDock);
-  $('expand').addEventListener('click',requestExpand);
-  $('input').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}});
-  $('dialToggle').addEventListener('click',()=>openDialer());
-  $('dialClose').addEventListener('click',closeDialer);
-  $('dialCall').addEventListener('click',()=>callAgent($('dialDisplay').value));
-  $('dialDisplay').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();callAgent($('dialDisplay').value)}});
-  document.querySelectorAll('.key').forEach(button=>button.addEventListener('click',()=>dialKey(button.dataset.key||'')));
-  $('pause').addEventListener('click',()=>control('paused'));$('resume').addEventListener('click',()=>control('running'));$('stop').addEventListener('click',()=>control('stopped'));
-  window.addEventListener('beforeunload',()=>{clearTimeout(timer);clearTimeout(pulseTimer);clearTimeout(resizeTimer)});initializeUi();refresh();pollPulse();
+  function unwrap(value){return value?.structuredContent||value?.result?.structuredContent||value?.mcp_tool_result?.structuredContent||value||{}}
+  function notify(method,params){window.parent.postMessage({jsonrpc:'2.0',method,params:params||{}},'*')}
+  function rpcRequest(method,params){return new Promise((resolve,reject)=>{const id='eiros-room-'+Date.now()+'-'+(rpcCounter++);const timeout=setTimeout(()=>{pendingRpc.delete(id);reject(new Error(method+' timeout'))},15000);pendingRpc.set(id,{resolve:v=>{clearTimeout(timeout);resolve(v)},reject:e=>{clearTimeout(timeout);reject(e)}});window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*')})}
+  window.addEventListener('message',event=>{if(event.source!==window.parent)return;const msg=event.data;if(!msg||msg.jsonrpc!=='2.0')return;if(msg.method==='ui/notifications/host-context-changed'){hostContext={...hostContext,...(msg.params||{})};applyHostContext(hostContext);return}if(!msg.id)return;const pending=pendingRpc.get(msg.id);if(!pending)return;pendingRpc.delete(msg.id);if(msg.error)pending.reject(new Error(msg.error.message||'RPC error'));else pending.resolve(msg.result)},{passive:true});
+  async function callTool(name,args){if(typeof bridge.callTool==='function')return bridge.callTool(name,args||{});return rpcRequest('tools/call',{name,arguments:args||{}})}
+  function reportSize(){const h=Math.ceil(document.documentElement.scrollHeight);const w=Math.ceil(document.documentElement.scrollWidth);notify('ui/notifications/size-changed',{width:w,height:h})}
+  function scheduleSize(){clearTimeout(resizeTimer);resizeTimer=setTimeout(reportSize,70)}
+  function applyHostContext(context){const dims=context?.containerDimensions||{};if(Number.isFinite(dims.height)&&!room.classList.contains('minimized')){room.style.height='100%';room.style.minHeight='0';document.documentElement.style.height='100vh';document.body.style.height='100vh'}const modes=Array.isArray(context?.availableDisplayModes)?context.availableDisplayModes:[];$('fullscreen').style.display=modes.includes('fullscreen')?'grid':'grid';scheduleSize()}
+  async function initializeUi(){try{const result=await rpcRequest('ui/initialize',{protocolVersion:'2026-01-26',appCapabilities:{availableDisplayModes:['inline','fullscreen']},clientInfo:{name:'EIROS Room',version:roomVersion}});hostContext=result?.hostContext||{};applyHostContext(hostContext);notify('ui/notifications/initialized',{})}catch{applyHostContext({})}if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(scheduleSize);observer.observe(document.body)}scheduleSize()}
+  async function postHostMessage(text){if(typeof bridge.sendMessage==='function'){try{return await bridge.sendMessage({role:'user',content:[{type:'text',text}]})}catch{}}window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text}]}},'*')}
+  function dedupe(messages){const seen=new Set(),out=[];for(const m of messages||[]){const group=m?.metadata?.operator_group_id;const key=group?'operator:'+group:'message:'+m.message_id;if(seen.has(key))continue;seen.add(key);out.push(m)}return out}
+  function renderMessages(messages){const list=dedupe(messages),box=$('messages');const nearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<100;const signature=list.map(m=>m.message_id+':'+m.status).join('|');if(signature===lastSignature)return;lastSignature=signature;box.innerHTML='';if(!list.length){box.innerHTML='<div class="empty">Комната пока пустая.</div>';return}for(const m of list){const sender=String(m.from_agent||'unknown');const el=document.createElement('div');el.className='msg '+(m.kind==='control'?'control':sender);const meta=document.createElement('div');meta.className='meta';meta.textContent=`${who(sender)} → ${m.to_agent==='all'?'всем':who(m.to_agent)} · #${m.seq} · ${timeLabel(m.created_at)}`;const body=document.createElement('div');body.className='body';body.textContent=String(m.content||'');el.append(meta,body);box.appendChild(el)}if(nearBottom||list.length>lastCount)box.scrollTop=box.scrollHeight;lastCount=list.length}
+  function renderParticipants(agents){lastHub.agents=agents||[];const box=$('participants');box.innerHTML='';const visible=(agents||[]).filter(a=>a.agent_id==='chatgpt'||a.agent_id==='claude');const known=new Set(visible.map(a=>a.agent_id));for(const fallback of ['chatgpt','claude'])if(!known.has(fallback))visible.push({agent_id:fallback,presence:'offline',activity:'offline',pending_calls:0,claimed_calls:0});for(const agent of visible){const id=String(agent.agent_id),activity=String(agent.activity||agent.presence||'offline'),pending=Number(agent.pending_calls||0)+Number(agent.claimed_calls||0);const card=document.createElement('div');card.className='person '+activity;const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=initials(id,agent.display_name||who(id));const dot=document.createElement('span');dot.className='presenceDot';avatar.appendChild(dot);const main=document.createElement('div');main.className='personMain';const name=document.createElement('div');name.className='personName';name.textContent=String(agent.display_name||who(id));const meta=document.createElement('div');meta.className='personMeta';meta.innerHTML=`<span class="statusText">${statusLabel(activity)}</span><span>#${agent.phone_number||'—'}</span><span>${ageLabel(agent.seconds_since_seen)} назад</span>`;main.append(name,meta);const right=document.createElement('div');right.className='personRight';const count=document.createElement('span');count.className='count'+(pending?' show':'');count.textContent=String(pending);const call=document.createElement('button');call.className='call';call.textContent='☎';call.title='Вызвать '+String(agent.display_name||who(id));call.addEventListener('click',()=>callAgent(agent.phone_number||id));right.append(count,call);card.append(avatar,main,right);box.appendChild(card)}renderMini(visible)}
+  function renderMini(agents){const box=$('miniAgents');box.innerHTML='';for(const agent of agents||[]){const dot=document.createElement('span');dot.className='miniAgent '+String(agent.activity||agent.presence||'offline');box.appendChild(dot)}const total=(agents||[]).reduce((sum,a)=>sum+Number(a.pending_calls||0)+Number(a.claimed_calls||0),0);$('miniText').textContent=total?`ожидает ${total}`:'канал готов'}
+  function applySnapshot(data){const history=data?.history||{},hub=data?.hub||{},control=data?.control||{};lastHub=hub;renderMessages(history.messages||[]);renderParticipants(hub.agents||[]);const mode=String(control.mode||'running');$('modeValue').textContent=mode;$('modeDot').className='tinyDot '+(mode==='running'?'ok':mode==='paused'?'warn':'bad');const pending=Object.values(hub.pending_by_agent||{}).reduce((a,b)=>a+Number(b||0),0);$('queueValue').textContent=String(pending);$('syncValue').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});$('connValue').textContent='online';$('connDot').className='tinyDot ok';$('footText').textContent=`${projectId}/${threadId} · seq ${history.latest_seq||0} · session ${sessionId.slice(-8)}`}
+  async function heartbeat(activity='online'){const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:hostName,widget_version:roomVersion,activity})}catch{}}
+  async function refresh(){if(busy)return;busy=true;clearTimeout(timer);try{await heartbeat('online');const raw=await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:300,after_seq:0});applySnapshot(unwrap(raw))}catch(error){$('connValue').textContent='offline';$('connDot').className='tinyDot bad';$('footText').textContent='Room error: '+String(error?.message||error)}finally{busy=false;timer=setTimeout(refresh,1200)}}
+  function emitLocalOperatorWake(result){const local=hostName==='claude'?'claude':'chatgpt';const message=(result.messages||[]).find(m=>m.to_agent===local);if(!message)return;const notice=(result.notifications||[]).find(n=>n.message_id===message.message_id);if(notice?.event_id)lastPulseEvent=notice.event_id;const marker=local==='chatgpt'?'EIROS_OPERATOR_WAKE':'EIROS_CLAUDE_OPERATOR_WAKE';const text=[`[${marker} message_id=${message.message_id}${notice?.event_id?' event_id='+notice.event_id:''}]`,`Рико написал вам в EIROS Room: ${message.content}`,'Заберите сообщение через dialog_inbox, выполните инструкцию, ответьте через dialog_send и подтвердите dialog_ack.' ].join('\n');postHostMessage(text)}
+  async function send(){const text=$('input').value.trim();if(!text)return;$('send').disabled=true;setSendState('отправка…','warn');try{const raw=await callTool('operator_send',{content:text,target:$('target').value,project_id:projectId,thread_id:threadId,kind:'operator',metadata:{source:'room-ui',request_immediate_wake:true}});const data=unwrap(raw);$('input').value='';emitLocalOperatorWake(data);const delivery=(data.deliveries||[]).map(d=>`${who(d.agent_id)}: ${d.mode}`).join(' · ');setSendState(delivery||'доставлено','ok');await refresh()}catch(error){setSendState('ошибка','bad');$('footText').textContent='Send error: '+String(error?.message||error)}finally{$('send').disabled=false}}
+  async function callAgent(target){const ref=String(target||'').trim();if(!ref)return;setSendState('вызов…','warn');try{const raw=await callTool('operator_call_contact',{phone_or_address:ref,content:'Рико вызывает вас через EIROS Room. Подключитесь и ответьте.',project_id:projectId,thread_id:threadId});const data=unwrap(raw);setSendState(`вызов: ${data.delivery_mode||'queued'}`,'ok');await refresh()}catch(error){setSendState('ошибка вызова','bad');$('footText').textContent=String(error?.message||error)}}
+  function emitPulseWake(event){if(!event||event.id===lastPulseEvent)return;lastPulseEvent=event.id;const prompt=[`[EIROS_REMOTE_EVENT id=${event.id} seq=${event.seq} source=${event.source}]`,String(event.text||''),'Обработайте событие, затем вызовите ack_event и продолжите работу через EIROS Room.'].join('\n');postHostMessage(prompt)}
+  async function pollPulse(){clearTimeout(pulseTimer);if(!pulseEnabled)return;try{const raw=await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:pulseChannel,instance_id:pulseInstanceId,claim_seconds:45});const data=unwrap(raw);if(data.event){emitPulseWake(data.event);try{await callTool('pulse_mark_delivered',{event_id:data.event.id,widget_id:sessionId,channel:pulseChannel})}catch{}}}catch{}finally{pulseTimer=setTimeout(pollPulse,1500)}}
+  function toggleMinimized(force){const next=typeof force==='boolean'?force:!room.classList.contains('minimized');room.classList.toggle('minimized',next);scheduleSize()}
+  async function requestDock(){setSendState('переношу вниз…','warn');await postHostMessage('[EIROS_ROOM_DOCK] Вызови open_collab_room последним действием прямо сейчас. Не повторяй историю в основном чате.');}
+  async function requestFullscreen(){try{if(typeof bridge.requestDisplayMode==='function'){await bridge.requestDisplayMode({mode:'fullscreen'})}else{await rpcRequest('ui/request-display-mode',{mode:'fullscreen'})}}catch(error){$('footText').textContent='Fullscreen недоступен: '+String(error?.message||error)}}
+  async function control(mode){try{await callTool('conversation_control_set',{actor_id:'rico',project_id:projectId,mode,note:'Set from EIROS Room',thread_id:threadId});await refresh()}catch(error){$('footText').textContent='Control error: '+String(error?.message||error)}}
+  function openDialer(){$('dialer').classList.add('open');$('dialDisplay').focus();scheduleSize()}function closeDialer(){$('dialer').classList.remove('open');scheduleSize()}function dialKey(key){const input=$('dialDisplay');if(key==='clear')input.value='';else if(key==='back')input.value=input.value.slice(0,-1);else input.value=(input.value+key).slice(0,64)}
+  $('send').addEventListener('click',send);$('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});$('dock').addEventListener('click',requestDock);$('miniDock').addEventListener('click',requestDock);$('minimize').addEventListener('click',()=>toggleMinimized(true));$('miniExpand').addEventListener('click',()=>toggleMinimized(false));$('fullscreen').addEventListener('click',requestFullscreen);$('dialToggle').addEventListener('click',openDialer);$('dialClose').addEventListener('click',closeDialer);$('dialCall').addEventListener('click',()=>callAgent($('dialDisplay').value));$('dialDisplay').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();callAgent($('dialDisplay').value)}});document.querySelectorAll('.key').forEach(b=>b.addEventListener('click',()=>dialKey(b.dataset.key||'')));$('pause').addEventListener('click',()=>control('paused'));$('resume').addEventListener('click',()=>control('running'));$('stop').addEventListener('click',()=>control('stopped'));
+  window.addEventListener('error',e=>{$('connValue').textContent='ui error';$('connDot').className='tinyDot bad';$('footText').textContent=String(e.message||e.error||'UI error')});window.addEventListener('beforeunload',()=>{clearTimeout(timer);clearTimeout(pulseTimer);clearTimeout(resizeTimer)});initializeUi();refresh();pollPulse();
 })();
 </script>
 </body>

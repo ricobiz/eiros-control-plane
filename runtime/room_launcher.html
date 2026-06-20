@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;--green:#39e6a3;--amber:#ffbe55;--blue:#6f8cff;--red:#ff6578;--muted:#7f8da7}
+*{box-sizing:border-box}html,body{margin:0;background:transparent;color:#eef4ff}.launcher{width:100%;min-height:68px;display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid rgba(112,142,196,.22);border-radius:18px;background:radial-gradient(circle at 12% -30%,rgba(56,200,255,.16),transparent 40%),linear-gradient(145deg,#0e1521,#090d14);box-shadow:0 16px 42px rgba(0,0,0,.28);cursor:pointer}.logo{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,rgba(56,200,255,.24),rgba(111,140,255,.15));border:1px solid rgba(56,200,255,.36);box-shadow:0 0 24px rgba(56,200,255,.13);font-weight:900}.main{flex:1;min-width:0}.title{font-size:12px;font-weight:860}.sub{display:flex;align-items:center;gap:7px;margin-top:5px;color:var(--muted);font-size:9px}.agents{display:flex;gap:4px}.dot{width:8px;height:8px;border-radius:50%;background:#56627a}.dot.online,.dot.idle{background:var(--green);box-shadow:0 0 10px rgba(57,230,163,.7)}.dot.ringing{background:var(--amber);box-shadow:0 0 10px rgba(255,190,85,.7)}.dot.working{background:var(--blue);box-shadow:0 0 10px rgba(111,140,255,.7)}.queue{padding:3px 7px;border:1px solid rgba(255,190,85,.22);border-radius:999px;background:rgba(255,190,85,.1);color:#ffd792;font-size:9px;font-weight:850}.arrow{width:34px;height:34px;display:grid;place-items:center;border:1px solid rgba(111,140,255,.24);border-radius:11px;background:#141d2c;font-weight:900}.offline{opacity:.7}.wake{border-color:rgba(255,190,85,.5);box-shadow:0 0 26px rgba(255,190,85,.13)}
+</style>
+</head>
+<body>
+<div id="launcher" class="launcher">
+  <div class="logo">E</div>
+  <div class="main"><div class="title">EIROS Room</div><div class="sub"><div id="agents" class="agents"></div><span id="status">подключение…</span><span id="queue" class="queue">0</span></div></div>
+  <div class="arrow">⌃</div>
+</div>
+<script>
+window.__EIROS_LAUNCHER_BOOTSTRAP__=__EIROS_LAUNCHER_BOOTSTRAP_JSON__;
+(function(){
+  const boot=window.__EIROS_LAUNCHER_BOOTSTRAP__||{};
+  const bridge=window.mcp||window.openai||{};
+  const launcher=document.getElementById('launcher'),agents=document.getElementById('agents'),status=document.getElementById('status'),queue=document.getElementById('queue');
+  const host=String(boot.host||'chatgpt'),agentId=String(boot.agentId||host),projectId=String(boot.projectId||'eiros-hub'),threadId=String(boot.threadId||'first-contact');
+  const sessionId='launcher-'+agentId+'-'+((globalThis.crypto&&globalThis.crypto.randomUUID)?globalThis.crypto.randomUUID():Date.now());
+  let timer=null,pulseTimer=null,lastHeartbeat=0,lastEmitted='';
+  function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{}}
+  async function callTool(name,args){if(typeof bridge.callTool==='function')return bridge.callTool(name,args||{});throw new Error('MCP bridge unavailable')}
+  async function post(text){if(typeof bridge.sendMessage==='function'){try{return await bridge.sendMessage({role:'user',content:[{type:'text',text}]})}catch{}}window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text}]}},'*')}
+  function render(data){const hub=data?.hub||{};const visible=(hub.agents||[]).filter(a=>a.agent_id==='chatgpt'||a.agent_id==='claude');agents.innerHTML='';for(const a of visible){const d=document.createElement('span');d.className='dot '+String(a.activity||a.presence||'offline');agents.appendChild(d)}const pending=Object.values(hub.pending_by_agent||{}).reduce((x,y)=>x+Number(y||0),0);queue.textContent=String(pending);status.textContent=pending?`ожидает ${pending}`:'канал готов';launcher.classList.remove('offline')}
+  async function heartbeat(activity='online'){const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:host+'-launcher',widget_version:String(boot.launcherVersion||'1'),activity})}catch{}}
+  function wake(text,key){if(!key||key===lastEmitted)return;lastEmitted=key;launcher.classList.add('wake');setTimeout(()=>launcher.classList.remove('wake'),2400);post(text)}
+  async function pollWake(){clearTimeout(pulseTimer);try{if(host==='chatgpt'&&boot.pulseEnabled){const data=unwrap(await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:String(boot.channel||'default'),instance_id:String(boot.instanceId||''),claim_seconds:45}));if(data.event){wake([`[EIROS_REMOTE_EVENT id=${data.event.id} seq=${data.event.seq} source=${data.event.source}]`,String(data.event.text||''),'Обработайте событие, вызовите ack_event и продолжите через EIROS Room.'].join('\n'),data.event.id);try{await callTool('pulse_mark_delivered',{event_id:data.event.id,widget_id:sessionId,channel:String(boot.channel||'default')})}catch{}}}else if(host==='claude'){const data=unwrap(await callTool('dialog_peek',{agent_id:agentId,limit:1,project_id:projectId,thread_id:threadId}));const message=(data.messages||[])[0];if(message){wake([`[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,'Заберите сообщение через dialog_inbox, выполните его, ответьте через dialog_send и вызовите dialog_ack.'].join('\n'),message.message_id)}}}catch{}finally{pulseTimer=setTimeout(pollWake,1500)}}
+  async function refresh(){clearTimeout(timer);try{await heartbeat();render(unwrap(await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:1,after_seq:0})))}catch{status.textContent='offline';launcher.classList.add('offline')}finally{timer=setTimeout(refresh,2500)}}
+  launcher.addEventListener('click',()=>post('[EIROS_OPEN_ROOM] Вызови open_collab_room последним действием прямо сейчас. Не повторяй историю в основном чате.'));
+  window.addEventListener('beforeunload',()=>{clearTimeout(timer);clearTimeout(pulseTimer)});refresh();pollWake();
+})();
+</script>
+</body>
+</html>

@@ -17,4 +17,4 @@ eiros = "runtime.cli:main"
 packages = ["runtime", "root"]
 
 [tool.setuptools.package-data]
-runtime = ["pulse_widget.html"]
+runtime = ["*.html"]

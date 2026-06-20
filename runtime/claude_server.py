@@ -19,9 +19,12 @@ REMOTE_CONFIG = CONFIG_DIR / "claude-remote.json"
 CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v3.html"
 CLAUDE_PULSE_VERSION = "0.3.0"
 CLAUDE_PULSE_HTML = Path(__file__).with_name("claude_pulse.html")
-ROOM_URI = "ui://eiros/collab-room-v7.html"
-ROOM_VERSION = "0.6.1"
+ROOM_URI = "ui://eiros/collab-room-v9.html"
+ROOM_VERSION = "0.8.0"
+ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
+ROOM_LAUNCHER_VERSION = "0.1.0"
 ROOM_HTML = Path(__file__).with_name("collab_room.html")
+ROOM_LAUNCHER_HTML = Path(__file__).with_name("room_launcher.html")
 INSTANCE_CONFIG = load_config()
 
 
@@ -78,6 +81,28 @@ def _notify_chatgpt_message(message: dict[str, Any], priority: int = 1000) -> di
         idempotency_key=f"collab-to-chatgpt:{message.get('message_id')}",
     )
     return {"event_id": event.get("id"), "event_seq": event.get("seq")}
+
+
+def _delivery_receipts(messages: list[dict[str, Any]], notifications: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    hub = collab.hub_status()
+    agents = {str(item.get("agent_id")): item for item in hub.get("agents", [])}
+    notified = {str(item.get("message_id")): item for item in notifications}
+    receipts = []
+    for message in messages:
+        recipient = str(message.get("to_agent") or "")
+        agent = agents.get(recipient, {})
+        presence = str(agent.get("presence") or "offline")
+        activity = str(agent.get("activity") or presence)
+        if recipient == "chatgpt" and str(message.get("message_id")) in notified:
+            mode = "wake queued"
+        elif presence == "online":
+            mode = "live pulse"
+        elif presence == "away":
+            mode = "queued (away)"
+        else:
+            mode = "offline mail"
+        receipts.append({"agent_id": recipient, "message_id": message.get("message_id"), "presence": presence, "activity": activity, "mode": mode})
+    return receipts
 
 
 mcp = FastMCP(
@@ -186,6 +211,7 @@ def operator_send(
         )
         notifications.append({"message_id": message.get("message_id"), "event_id": event.get("id")})
     result["notifications"] = notifications
+    result["deliveries"] = _delivery_receipts(result.get("messages", []), notifications)
     return result
 
 
@@ -304,6 +330,28 @@ def room_resource_legacy_v6() -> str:
 
 
 @mcp.resource(
+    "ui://eiros/collab-room-v7.html",
+    name="EIROS Room Legacy v7",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible room resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v7() -> str:
+    return room_resource()
+
+
+@mcp.resource(
+    "ui://eiros/collab-room-v8.html",
+    name="EIROS Room Legacy v8",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible room resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v8() -> str:
+    return room_resource()
+
+
+@mcp.resource(
     ROOM_URI,
     name="EIROS Room",
     title="EIROS Shared Collaboration Room",
@@ -331,6 +379,42 @@ def room_resource() -> str:
         "initialSnapshot": collab.room_snapshot("eiros-hub", "first-contact", 100, 0),
     }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.resource(
+    ROOM_LAUNCHER_URI,
+    name="EIROS Room Launcher",
+    title="EIROS Room Launcher",
+    description="Compact Claude-side EIROS launcher and addressed wake channel.",
+    mime_type="text/html;profile=mcp-app",
+    meta={"ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}}},
+)
+def room_launcher_resource() -> str:
+    html = ROOM_LAUNCHER_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+        "host": "claude",
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
+        "launcherVersion": ROOM_LAUNCHER_VERSION,
+        "pulseEnabled": False,
+        "instanceId": "",
+        "channel": "default",
+    }
+    return html.replace("__EIROS_LAUNCHER_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.tool(
+    name="open_room_launcher",
+    title="Open EIROS Launcher",
+    description="Mount the compact EIROS presence, queue and addressed-wake launcher.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"resourceUri": ROOM_LAUNCHER_URI, "visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def open_room_launcher() -> dict[str, Any]:
+    snapshot = collab.room_snapshot("eiros-hub", "first-contact", 1, 0)
+    return {"ok": True, "resource_uri": ROOM_LAUNCHER_URI, "launcher_version": ROOM_LAUNCHER_VERSION, "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0))}
 
 
 @mcp.tool(
@@ -385,7 +469,7 @@ def claude_pulse_resource() -> str:
     description="Mount the persistent addressed EIROS wake channel for this Claude conversation.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={
-        "ui": {"resourceUri": CLAUDE_PULSE_URI, "visibility": ["model", "app"]},
+        "ui": {"resourceUri": ROOM_LAUNCHER_URI, "visibility": ["model", "app"]},
     },
     structured_output=True,
 )
@@ -393,8 +477,9 @@ def open_claude_pulse() -> dict[str, Any]:
     status = collab.hub_status()
     return {
         "ok": True,
-        "resource_uri": CLAUDE_PULSE_URI,
+        "resource_uri": ROOM_LAUNCHER_URI,
         "agent_id": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
+        "launcher_version": ROOM_LAUNCHER_VERSION,
         "pending_count": int(status.get("pending_by_agent", {}).get(str(COLLAB_IDENTITY.get("agent_id") or "claude"), 0)),
         "latest_seq": int(status.get("latest_seq", 0)),
     }
