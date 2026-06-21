@@ -19,15 +19,16 @@ from runtime.version import __version__
 from runtime import protocol as collab_protocol
 
 STATE_FILE = ROOT / ".eiros-state.json"
+ROOM_TELEMETRY_FILE = ROOT / "runtime" / "room_telemetry.json"
 SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9.html"
-ROOM_VERSION = "0.9.2"
+ROOM_VERSION = "0.9.3"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
-ROOM_LAUNCHER_VERSION = "0.2.2"
+ROOM_LAUNCHER_VERSION = "0.2.3"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
@@ -957,6 +958,99 @@ def project_state_set(
     """Replace shared project state with optimistic revision checking."""
     return collab_engine.set_project(agent_id, project_id, state, expected_revision)
 
+
+
+
+def _read_room_telemetry() -> dict[str, Any]:
+    try:
+        raw = json.loads(ROOM_TELEMETRY_FILE.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {"schema_version": 1, "widgets": {}}
+    except FileNotFoundError:
+        return {"schema_version": 1, "widgets": {}}
+    except Exception as exc:
+        return {"schema_version": 1, "widgets": {}, "read_error": str(exc)}
+
+
+def _write_room_telemetry(store: dict[str, Any]) -> None:
+    ROOM_TELEMETRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    store["schema_version"] = 1
+    store["updated_at"] = int(time.time())
+    widgets = store.setdefault("widgets", {})
+    cutoff = int(time.time()) - 3600
+    for key in list(widgets.keys()):
+        if int((widgets.get(key) or {}).get("updated_at", 0)) < cutoff:
+            widgets.pop(key, None)
+    fd, tmp = tempfile.mkstemp(prefix="room-telemetry-", suffix=".json", dir=str(ROOM_TELEMETRY_FILE.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(store, handle, ensure_ascii=False, indent=2, sort_keys=True)
+        os.replace(tmp, ROOM_TELEMETRY_FILE)
+    finally:
+        try:
+            Path(tmp).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _compact_json(value: Any, max_chars: int = 6000) -> Any:
+    try:
+        text = json.dumps(value, ensure_ascii=False)
+        if len(text) <= max_chars:
+            return value
+        return {"truncated": True, "text": text[:max_chars]}
+    except Exception:
+        return str(value)[:max_chars]
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+)
+def room_telemetry_update(
+    widget_id: str,
+    widget_kind: str = "room",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    status: str = "unknown",
+    snapshot: dict[str, Any] | None = None,
+    error: str = "",
+) -> dict[str, Any]:
+    """Persist latest browser-widget runtime state so the assistant can inspect iframe health."""
+    identity = str(widget_id or "").strip()[:180]
+    if not identity:
+        raise ValueError("widget_id is required")
+    store = _read_room_telemetry()
+    widgets = store.setdefault("widgets", {})
+    item = {
+        "widget_id": identity,
+        "widget_kind": str(widget_kind or "room")[:40],
+        "project_id": str(project_id or "eiros-hub")[:120],
+        "thread_id": str(thread_id or "first-contact")[:160],
+        "status": str(status or "unknown")[:80],
+        "snapshot": _compact_json(snapshot or {}),
+        "error": str(error or "")[:2000],
+        "updated_at": int(time.time()),
+    }
+    widgets[identity] = item
+    _write_room_telemetry(store)
+    return {"ok": True, "widget_id": identity, "updated_at": item["updated_at"]}
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+)
+def room_telemetry_status(limit: int = 20) -> dict[str, Any]:
+    """Read latest self-reported iframe/widget state from EIROS Room and launcher."""
+    store = _read_room_telemetry()
+    widgets = list((store.get("widgets") or {}).values())
+    widgets.sort(key=lambda item: int(item.get("updated_at", 0)), reverse=True)
+    return {
+        "ok": True,
+        "updated_at": store.get("updated_at", 0),
+        "count": len(widgets),
+        "widgets": widgets[: max(1, min(int(limit or 20), 100))],
+        "read_error": store.get("read_error", ""),
+    }
 
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
