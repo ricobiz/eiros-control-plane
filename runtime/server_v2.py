@@ -25,9 +25,9 @@ PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9.html"
-ROOM_VERSION = "0.8.0"
+ROOM_VERSION = "0.8.1"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
-ROOM_LAUNCHER_VERSION = "0.1.0"
+ROOM_LAUNCHER_VERSION = "0.1.1"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
@@ -74,7 +74,7 @@ mcp = FastMCP(
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
         "reasoning authority; this server is its persistent body. "
         "When a UI message starts with [EIROS_ROOM_DOCK] or [EIROS_OPEN_ROOM], call open_collab_room as the final tool action. "
-        "When EIROS Room is active, prefer open_room_launcher as the final tool action after normal replies so Rico keeps a compact live launcher near the input field." + collab_protocol.MAIN_COLLAB_INSTRUCTIONS
+        "" + collab_protocol.MAIN_COLLAB_INSTRUCTIONS
     ),
 )
 

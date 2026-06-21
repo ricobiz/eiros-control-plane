@@ -22,16 +22,29 @@ window.__EIROS_LAUNCHER_BOOTSTRAP__=__EIROS_LAUNCHER_BOOTSTRAP_JSON__;
   const launcher=document.getElementById('launcher'),agents=document.getElementById('agents'),status=document.getElementById('status'),queue=document.getElementById('queue');
   const host=String(boot.host||'chatgpt'),agentId=String(boot.agentId||host),projectId=String(boot.projectId||'eiros-hub'),threadId=String(boot.threadId||'first-contact');
   const sessionId='launcher-'+agentId+'-'+((globalThis.crypto&&globalThis.crypto.randomUUID)?globalThis.crypto.randomUUID():Date.now());
-  let timer=null,pulseTimer=null,lastHeartbeat=0,lastEmitted='';
+  let timer=null,pulseTimer=null,lastHeartbeat=0,lastEmitted='',isCurrentWidget=true;
+  const singletonKey=['eiros-launcher-active',host,projectId,threadId,String(boot.channel||'default')].join(':');
+  function setActiveWidget(){try{localStorage.setItem(singletonKey,sessionId)}catch{}}
+  function isActiveWidget(){try{return localStorage.getItem(singletonKey)===sessionId}catch{return true}}
+  function markStale(){
+    if(!isCurrentWidget)return;
+    isCurrentWidget=false;
+    clearTimeout(timer);clearTimeout(pulseTimer);
+    status.textContent='старая карточка — используйте нижнюю';
+    queue.textContent='old';
+    launcher.classList.add('offline');
+  }
+  setActiveWidget();
+  window.addEventListener('storage',event=>{if(event.key===singletonKey&&event.newValue!==sessionId)markStale()});
   function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{}}
   async function callTool(name,args){if(typeof bridge.callTool==='function')return bridge.callTool(name,args||{});throw new Error('MCP bridge unavailable')}
   async function post(text){if(typeof bridge.sendMessage==='function'){try{return await bridge.sendMessage({role:'user',content:[{type:'text',text}]})}catch{}}window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text}]}},'*')}
   function render(data){const hub=data?.hub||{};const visible=(hub.agents||[]).filter(a=>a.agent_id==='chatgpt'||a.agent_id==='claude');agents.innerHTML='';for(const a of visible){const d=document.createElement('span');d.className='dot '+String(a.activity||a.presence||'offline');agents.appendChild(d)}const pending=Object.values(hub.pending_by_agent||{}).reduce((x,y)=>x+Number(y||0),0);queue.textContent=String(pending);status.textContent=pending?`ожидает ${pending}`:'канал готов';launcher.classList.remove('offline')}
-  async function heartbeat(activity='online'){const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:host+'-launcher',widget_version:String(boot.launcherVersion||'1'),activity})}catch{}}
+  async function heartbeat(activity='online'){if(!isActiveWidget()){markStale();return}const now=Date.now();if(now-lastHeartbeat<4500)return;lastHeartbeat=now;try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:host+'-launcher',widget_version:String(boot.launcherVersion||'1'),activity})}catch{}}
   function wake(text,key){if(!key||key===lastEmitted)return;lastEmitted=key;launcher.classList.add('wake');setTimeout(()=>launcher.classList.remove('wake'),2400);post(text)}
-  async function pollWake(){clearTimeout(pulseTimer);try{if(host==='chatgpt'&&boot.pulseEnabled){const data=unwrap(await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:String(boot.channel||'default'),instance_id:String(boot.instanceId||''),claim_seconds:45}));if(data.event){wake([`[EIROS_REMOTE_EVENT id=${data.event.id} seq=${data.event.seq} source=${data.event.source}]`,String(data.event.text||''),'Обработайте событие, вызовите ack_event и продолжите через EIROS Room.'].join('\n'),data.event.id);try{await callTool('pulse_mark_delivered',{event_id:data.event.id,widget_id:sessionId,channel:String(boot.channel||'default')})}catch{}}}else if(host==='claude'){const data=unwrap(await callTool('dialog_peek',{agent_id:agentId,limit:1,project_id:projectId,thread_id:threadId}));const message=(data.messages||[])[0];if(message){wake([`[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,'Заберите сообщение через dialog_inbox, выполните его, ответьте через dialog_send и вызовите dialog_ack.'].join('\n'),message.message_id)}}}catch{}finally{pulseTimer=setTimeout(pollWake,1500)}}
-  async function refresh(){clearTimeout(timer);try{await heartbeat();render(unwrap(await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:1,after_seq:0})))}catch{status.textContent='offline';launcher.classList.add('offline')}finally{timer=setTimeout(refresh,2500)}}
-  launcher.addEventListener('click',()=>post('[EIROS_OPEN_ROOM] Вызови open_collab_room последним действием прямо сейчас. Не повторяй историю в основном чате.'));
+  async function pollWake(){clearTimeout(pulseTimer);if(!isActiveWidget()){markStale();return}try{if(host==='chatgpt'&&boot.pulseEnabled){const data=unwrap(await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:String(boot.channel||'default'),instance_id:String(boot.instanceId||''),claim_seconds:45}));if(data.event){wake([`[EIROS_REMOTE_EVENT id=${data.event.id} seq=${data.event.seq} source=${data.event.source}]`,String(data.event.text||''),'Обработайте событие, вызовите ack_event и продолжите через EIROS Room.'].join('\n'),data.event.id);try{await callTool('pulse_mark_delivered',{event_id:data.event.id,widget_id:sessionId,channel:String(boot.channel||'default')})}catch{}}}else if(host==='claude'){const data=unwrap(await callTool('dialog_peek',{agent_id:agentId,limit:1,project_id:projectId,thread_id:threadId}));const message=(data.messages||[])[0];if(message){wake([`[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,'Заберите сообщение через dialog_inbox, выполните его, ответьте через dialog_send и вызовите dialog_ack.'].join('\n'),message.message_id)}}}catch{}finally{pulseTimer=setTimeout(pollWake,1500)}}
+  async function refresh(){clearTimeout(timer);if(!isActiveWidget()){markStale();return}try{await heartbeat();render(unwrap(await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:1,after_seq:0})))}catch{status.textContent='offline';launcher.classList.add('offline')}finally{timer=setTimeout(refresh,2500)}}
+  launcher.addEventListener('click',()=>{if(!isActiveWidget()){markStale();return}post('[EIROS_OPEN_ROOM] Ручное действие Рико: вызови open_collab_room последним действием прямо сейчас. Не открывай launcher автоматически и не повторяй историю в основном чате.')});
   window.addEventListener('beforeunload',()=>{clearTimeout(timer);clearTimeout(pulseTimer)});refresh();pollWake();
 })();
 </script>

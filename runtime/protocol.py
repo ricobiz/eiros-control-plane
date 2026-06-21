@@ -25,7 +25,7 @@ SERVER_INSTRUCTIONS = (
 MAIN_COLLAB_INSTRUCTIONS = (
     " For EIROS multi-model collaboration, call hub_bootstrap as agent_id='chatgpt' before using dialog tools. "
     "Use the returned protocol contract, EIROS Room and Pulse; keep full inter-model dialogue in EIROS Room. "
-    "After normal replies, use open_room_launcher as the final tool action when available so Rico retains a compact live control."
+    ""
 )
 
 
