@@ -25,9 +25,9 @@ PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9.html"
-ROOM_VERSION = "0.9.0"
+ROOM_VERSION = "0.9.1"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
-ROOM_LAUNCHER_VERSION = "0.2.0"
+ROOM_LAUNCHER_VERSION = "0.2.1"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
@@ -178,7 +178,7 @@ def _room_system_status() -> dict[str, Any]:
         queue = queue_engine.cmd_status(argparse.Namespace(id=None, status=None, mode=None, events=5))
         tasks = queue.get("tasks") or []
         due = len([t for t in tasks if str(t.get("status")) in {"queued", "awaiting_brain"}])
-        lamps.append(_lamp("Queue", True, "clear" if due == 0 else f"due {due}", f"tasks {len(tasks)}", "warning"))
+        lamps.append(_lamp("Queue", True, "clear" if due == 0 else f"{due} jobs", f"tasks {len(tasks)}", "info"))
     except Exception as exc:
         lamps.append(_lamp("Queue", False, "error", str(exc), "warning"))
     ok, head = _subprocess_ok(["git", "-C", "/srv/eiros-workspace", "rev-parse", "--short", "HEAD"])
