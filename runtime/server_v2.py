@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import fcntl
 import os
 import platform
 import subprocess
@@ -20,6 +21,7 @@ from runtime import protocol as collab_protocol
 
 STATE_FILE = ROOT / ".eiros-state.json"
 ROOM_TELEMETRY_FILE = ROOT / "runtime" / "room_telemetry.json"
+ROOM_TELEMETRY_LOCK = ROOT / "runtime" / "room_telemetry.lock"
 SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.0"
@@ -870,8 +872,8 @@ def dialog_send(
     to_agent: str,
     content: str,
     kind: str = "call",
-    project_id: str = "default",
-    thread_id: str = "main",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
     scene_id: str = "",
     reply_to: str = "",
     expects_reply: bool = True,
@@ -986,10 +988,20 @@ def _write_room_telemetry(store: dict[str, Any]) -> None:
             json.dump(store, handle, ensure_ascii=False, indent=2, sort_keys=True)
         os.replace(tmp, ROOM_TELEMETRY_FILE)
     finally:
+        Path(tmp).unlink(missing_ok=True) if Path(tmp).exists() else None
+
+
+def _room_telemetry_update_locked(widget_id: str, item: dict[str, Any]) -> None:
+    """Atomic read-modify-write for telemetry under an exclusive file lock."""
+    ROOM_TELEMETRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with ROOM_TELEMETRY_LOCK.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
-            Path(tmp).unlink(missing_ok=True)
-        except Exception:
-            pass
+            store = _read_room_telemetry()
+            store.setdefault("widgets", {})[widget_id] = item
+            _write_room_telemetry(store)
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def _compact_json(value: Any, max_chars: int = 6000) -> Any:
@@ -1019,8 +1031,7 @@ def room_telemetry_update(
     identity = str(widget_id or "").strip()[:180]
     if not identity:
         raise ValueError("widget_id is required")
-    store = _read_room_telemetry()
-    widgets = store.setdefault("widgets", {})
+    ts = int(time.time())
     item = {
         "widget_id": identity,
         "widget_kind": str(widget_kind or "room")[:40],
@@ -1029,11 +1040,10 @@ def room_telemetry_update(
         "status": str(status or "unknown")[:80],
         "snapshot": _compact_json(snapshot or {}),
         "error": str(error or "")[:2000],
-        "updated_at": int(time.time()),
+        "updated_at": ts,
     }
-    widgets[identity] = item
-    _write_room_telemetry(store)
-    return {"ok": True, "widget_id": identity, "updated_at": item["updated_at"]}
+    _room_telemetry_update_locked(identity, item)
+    return {"ok": True, "widget_id": identity, "updated_at": ts}
 
 
 @mcp.tool(
@@ -1105,22 +1115,38 @@ def operator_send(
     result = collab_engine.operator_send(content, target, project_id, thread_id, kind, metadata)
     notifications = []
     for message in result.get("messages", []):
-        if message.get("to_agent") != "chatgpt":
-            continue
-        event = event_engine.emit(
-            text=(
-                f"EIROS_HUB_WAKE message_id={message.get('message_id')} from=rico "
+        to_agent = str(message.get("to_agent") or "")
+        mid = str(message.get("message_id") or "")
+        if to_agent == "chatgpt":
+            wake_text = (
+                f"EIROS_HUB_WAKE message_id={mid} from=rico "
                 f"project_id={message.get('project_id')} thread_id={message.get('thread_id')}. "
                 "The full message is in EIROS Room. Claim it through dialog_inbox as chatgpt, handle it, "
                 "then call dialog_ack and ack_event."
-            ),
-            source="collab:rico",
-            payload={"collab_message_id": message.get("message_id"), "kind": message.get("kind")},
-            priority=1200,
-            channel=str(INSTANCE_CONFIG.get("channel", "default")),
-            idempotency_key=f"collab-to-chatgpt:{message.get('message_id')}",
-        )
-        notifications.append({"message_id": message.get("message_id"), "event_id": event.get("id")})
+            )
+            ikey = f"collab-to-chatgpt:{mid}"
+        elif to_agent == "claude":
+            wake_text = (
+                f"EIROS_HUB_WAKE message_id={mid} from=rico to=claude "
+                f"project_id={message.get('project_id')} thread_id={message.get('thread_id')}. "
+                "Rico has sent you a message. Claim it through dialog_inbox as claude, handle it, "
+                "then call dialog_ack and ack_event."
+            )
+            ikey = f"collab-to-claude:{mid}"
+        else:
+            continue
+        try:
+            event = event_engine.emit(
+                text=wake_text,
+                source="collab:rico",
+                payload={"collab_message_id": mid, "kind": message.get("kind"), "to_agent": to_agent},
+                priority=1200,
+                channel=str(INSTANCE_CONFIG.get("channel", "default")),
+                idempotency_key=ikey,
+            )
+            notifications.append({"message_id": mid, "event_id": event.get("id"), "to_agent": to_agent})
+        except Exception as exc:
+            notifications.append({"message_id": mid, "event_id": None, "to_agent": to_agent, "wake_error": str(exc)})
     result["notifications"] = notifications
     result["deliveries"] = _delivery_receipts(result.get("messages", []), notifications)
     return result
