@@ -25,9 +25,9 @@ PULSE_VERSION = "0.4.0"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9.html"
-ROOM_VERSION = "0.8.1"
+ROOM_VERSION = "0.9.0"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
-ROOM_LAUNCHER_VERSION = "0.1.1"
+ROOM_LAUNCHER_VERSION = "0.2.0"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
@@ -87,6 +87,110 @@ def _observed_client(ctx: Context) -> dict[str, str]:
         "version": str(getattr(info, "version", "") or ""),
     }
 
+
+
+def _room_agent_profile(agent_id: str, host: str = "chatgpt") -> dict[str, Any]:
+    identity = str(agent_id or "").strip().lower() or "chatgpt"
+    if identity == "chatgpt":
+        return {
+            "display_name": "ChatGPT / EIROS",
+            "client_kind": "chatgpt-native-room",
+            "platform_class": "chatgpt",
+            "instance_id": str(INSTANCE_CONFIG.get("instance_id") or "chatgpt-native"),
+            "assistant_name": "EIROS",
+            "owner_display_name": "Rico",
+            "capabilities": ["room", "wake", "operator", "bridge"],
+        }
+    if identity == "claude":
+        return {
+            "display_name": "Claude",
+            "client_kind": "claude-room",
+            "platform_class": "claude",
+            "instance_id": "claude-room-placeholder",
+            "assistant_name": "Claude",
+            "owner_display_name": "Rico",
+            "capabilities": ["room", "wake", "mail"],
+        }
+    return {
+        "display_name": identity,
+        "client_kind": str(host or "room")[:80],
+        "platform_class": str(host or "ai")[:80],
+        "instance_id": f"room-{identity}",
+        "assistant_name": identity,
+        "owner_display_name": "Rico",
+        "capabilities": ["room"],
+    }
+
+
+def _ensure_room_agent(agent_id: str, host: str = "chatgpt") -> dict[str, Any]:
+    profile = _room_agent_profile(agent_id, host)
+    try:
+        return collab_engine.bootstrap_agent(
+            agent_id=str(agent_id or "chatgpt"),
+            display_name=profile["display_name"],
+            client_kind=profile["client_kind"],
+            capabilities=profile["capabilities"],
+            discoverable=True,
+            accepts_calls=True,
+            accepts_mail=True,
+            platform_class=profile["platform_class"],
+            instance_id=profile["instance_id"],
+            assistant_name=profile["assistant_name"],
+            owner_display_name=profile["owner_display_name"],
+        )
+    except Exception:
+        # Do not break UI rendering just because the collaboration store is temporarily locked.
+        return {"agent_id": str(agent_id or "chatgpt"), "display_name": profile["display_name"], "error": "bootstrap failed"}
+
+
+def _subprocess_ok(command: list[str], timeout: float = 2.0) -> tuple[bool, str]:
+    try:
+        proc = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
+        out = (proc.stdout or proc.stderr or "").strip()
+        return proc.returncode == 0, out
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _lamp(name: str, ok: bool, state: str = "", detail: str = "", severity: str = "critical") -> dict[str, Any]:
+    return {"name": name, "ok": bool(ok), "state": state or ("ok" if ok else "down"), "detail": detail, "severity": severity}
+
+
+def _room_system_status() -> dict[str, Any]:
+    lamps: list[dict[str, Any]] = []
+    for label, service in [
+        ("Tunnel", "eiros-tunnel.service"),
+        ("Worker", "eiros-worker.service"),
+        ("Broker", "eiros-root-broker.service"),
+    ]:
+        ok, out = _subprocess_ok(["systemctl", "is-active", service])
+        state = (out or "unknown").splitlines()[0] if out else "unknown"
+        lamps.append(_lamp(label, ok and state == "active", state, service))
+    current = Path("/opt/eiros-control-plane/current")
+    lamps.append(_lamp("MCP", current.exists(), "ready" if current.exists() else "missing", str(current)))
+    try:
+        events = event_engine.status(5, str(INSTANCE_CONFIG.get("channel", "default")))
+        pending = int(events.get("pending_count", 0))
+        lamps.append(_lamp("Pulse", True, "ready" if pending == 0 else f"pending {pending}", f"seq {events.get('latest_seq', 0)}", "warning"))
+    except Exception as exc:
+        lamps.append(_lamp("Pulse", False, "error", str(exc), "warning"))
+    try:
+        queue = queue_engine.cmd_status(argparse.Namespace(id=None, status=None, mode=None, events=5))
+        tasks = queue.get("tasks") or []
+        due = len([t for t in tasks if str(t.get("status")) in {"queued", "awaiting_brain"}])
+        lamps.append(_lamp("Queue", True, "clear" if due == 0 else f"due {due}", f"tasks {len(tasks)}", "warning"))
+    except Exception as exc:
+        lamps.append(_lamp("Queue", False, "error", str(exc), "warning"))
+    ok, head = _subprocess_ok(["git", "-C", "/srv/eiros-workspace", "rev-parse", "--short", "HEAD"])
+    lamps.append(_lamp("Git", ok, head if ok else "error", "/srv/eiros-workspace", "warning"))
+    return {
+        "ok": all(l.get("ok") or l.get("severity") == "warning" for l in lamps),
+        "lamps": lamps,
+        "server_version": SERVER_VERSION,
+        "room_version": ROOM_VERSION,
+        "launcher_version": ROOM_LAUNCHER_VERSION,
+        "time": int(time.time()),
+    }
 
 def _notify_chatgpt_message(message: dict[str, Any], priority: int = 1000) -> dict[str, Any] | None:
     if message.get("to_agent") != str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"):
@@ -866,6 +970,7 @@ def room_heartbeat(
     activity: str = "online",
 ) -> dict[str, Any]:
     """Refresh one active room or pulse session for presence indicators."""
+    _ensure_room_agent(agent_id, host)
     return collab_engine.session_heartbeat(agent_id, session_id, host, widget_version, activity)
 
 
@@ -875,7 +980,19 @@ def room_heartbeat(
 )
 def room_snapshot(project_id: str = "eiros-hub", thread_id: str = "first-contact", limit: int = 200, after_seq: int = 0) -> dict[str, Any]:
     """Read shared room history, participant presence and operator control state."""
-    return collab_engine.room_snapshot(project_id, thread_id, limit, after_seq)
+    _ensure_room_agent(str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"), "chatgpt")
+    snapshot = collab_engine.room_snapshot(project_id, thread_id, limit, after_seq)
+    snapshot["system"] = _room_system_status()
+    return snapshot
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+)
+def room_system_status() -> dict[str, Any]:
+    """Read real EIROS service lamps for the operator room."""
+    return _room_system_status()
 
 
 @mcp.tool(
@@ -1221,6 +1338,7 @@ def open_room_launcher() -> dict[str, Any]:
     structured_output=True,
 )
 def open_collab_room() -> dict[str, Any]:
+    _ensure_room_agent(str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"), "chatgpt")
     snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0)
     return {
         "ok": True,
