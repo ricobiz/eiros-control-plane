@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/><style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:transparent}.anchor{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #1a3a5c;border-radius:12px;background:#0a1929;min-height:36px}.dot{width:8px;height:8px;border-radius:50%;background:#71717a;flex-shrink:0}.dot.ok{background:#19c37d;box-shadow:0 0 8px rgba(25,195,125,.5)}.dot.warn{background:#f5b849;box-shadow:0 0 8px rgba(245,184,73,.45)}.dot.bad{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.45)}.label{font-size:10px;color:#7a9bbf;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}
+</style></head><body>
+<div class="anchor"><span id="dot" class="dot"></span><span id="label" class="label">Pulse Anchor · connecting</span><span id="badge" class="badge">v__ANCHOR_VERSION__</span></div>
+<script>window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;(()=>{
+  const boot=window.__EIROS_ANCHOR_BOOTSTRAP__||{};
+  const bridge=window.mcp||window.openai||{};
+  const dot=document.getElementById('dot');
+  const label=document.getElementById('label');
+  const agentId=String(boot.agentId||'chatgpt');
+  const projectId=String(boot.projectId||'eiros-hub');
+  const threadId=String(boot.threadId||'first-contact');
+  const anchorVersion=String(boot.anchorVersion||'0.2.17-anchor-tool');
+  const rand=Math.random().toString(36).slice(2,8);
+  const sessionId='launcher-'+agentId+'-'+Date.now()+'-'+rand;
+  let pollTimer=null,hbTimer=null,lastEvent='',lastHb=0,stopped=false;
+  function setDot(cls){dot.className='dot '+(cls||'');}
+  function setLabel(txt){label.textContent=String(txt||'');}
+  async function callTool(n,a){
+    if(typeof bridge.callTool==='function')return bridge.callTool(n,a||{});
+    throw new Error('bridge unavailable');
+  }
+  function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
+  async function post(text){
+    if(typeof bridge.sendMessage==='function'){
+      try{return await bridge.sendMessage({role:'user',content:[{type:'text',text}]});}catch{}
+    }
+    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text}]}},'*');
+  }
+  async function heartbeat(){
+    const now=Date.now();
+    if(now-lastHb<4500)return;
+    lastHb=now;
+    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt',widget_version:anchorVersion,activity:'online'});}catch{}
+  }
+  async function poll(){
+    clearTimeout(pollTimer);
+    if(stopped)return;
+    try{
+      await heartbeat();
+      const raw=await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:String(boot.channel||'default'),instance_id:String(boot.instanceId||''),claim_seconds:45});
+      const d=unwrap(raw);
+      if(d.event&&d.event.id!==lastEvent){
+        const evtId=d.event.id,evtSeq=d.event.seq,evtSrc=d.event.source,evtTxt=d.event.text||'';
+        setDot('warn');
+        setLabel('Event #'+evtSeq+' · delivering');
+        await post('[EIROS_REMOTE_EVENT id='+evtId+' seq='+evtSeq+' source='+evtSrc+']\n'+evtTxt+'\nHandle this event, then call ack_event.');
+        lastEvent=evtId;
+        try{await callTool('pulse_mark_delivered',{event_id:evtId,widget_id:sessionId,channel:String(boot.channel||'default')});}catch{}
+        setDot('ok');
+        setLabel('Pulse Anchor · delivered');
+        pollTimer=setTimeout(poll,2000);
+      }else{
+        setDot('ok');
+        setLabel('Pulse Anchor · listening');
+        pollTimer=setTimeout(poll,1700);
+      }
+    }catch(e){
+      setDot('bad');
+      setLabel('Pulse Anchor · offline');
+      pollTimer=setTimeout(poll,4000);
+    }
+  }
+  poll();
+})();</script></body></html>

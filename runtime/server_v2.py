@@ -34,8 +34,11 @@ ROOM_LAUNCHER_VERSION = "0.2.3"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
+PULSE_ANCHOR_HTML = CODE_ROOT / "runtime" / "pulse_anchor.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 ROOM_LAUNCHER_HTML = CODE_ROOT / "runtime" / "room_launcher.html"
+PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v1.html"
+PULSE_ANCHOR_VERSION = "0.2.17-anchor-tool"
 INSTANCE_CONFIG = load_config()
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
@@ -881,7 +884,7 @@ def dialog_send(
     idempotency_key: str = "",
 ) -> dict[str, Any]:
     """Send one durable addressed collaboration message."""
-    return collab_engine.send_message(
+    result = collab_engine.send_message(
         from_agent=from_agent,
         to_agent=to_agent,
         content=content,
@@ -894,6 +897,10 @@ def dialog_send(
         metadata=metadata,
         idempotency_key=idempotency_key,
     )
+    notice = _notify_chatgpt_message(result)
+    if notice:
+        result["pulse_wake"] = notice
+    return result
 
 
 @mcp.tool(
@@ -1551,6 +1558,34 @@ def _render_pulse_html() -> str:
     return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
+def _render_pulse_anchor_html() -> str:
+    html = PULSE_ANCHOR_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "anchorVersion": PULSE_ANCHOR_VERSION,
+        "serverVersion": SERVER_VERSION,
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+    }
+    return html.replace("__EIROS_ANCHOR_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False)).replace(
+        "__ANCHOR_VERSION__", PULSE_ANCHOR_VERSION
+    )
+
+
+@mcp.resource(
+    PULSE_ANCHOR_URI,
+    name="EIROS Pulse Anchor",
+    title="EIROS Pulse Anchor",
+    description="Minimal wake-receiver widget — polls pulse_poll and injects remote events into the conversation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource() -> str:
+    return _render_pulse_anchor_html()
+
+
 @mcp.resource(
     "ui://eiros/pulse-lite-v3.html",
     name="EIROS Pulse Legacy v3",
@@ -1598,23 +1633,23 @@ def pulse_resource() -> str:
         idempotentHint=True,
     ),
     meta={
-        "ui": {"resourceUri": ROOM_LAUNCHER_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": ROOM_LAUNCHER_URI,
-        "openai/toolInvocation/invoking": "Docking EIROS launcher and Pulse…",
-        "openai/toolInvocation/invoked": "EIROS launcher and Pulse are active.",
+        "ui": {"resourceUri": PULSE_ANCHOR_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_ANCHOR_URI,
+        "openai/toolInvocation/invoking": "Docking EIROS Pulse Anchor…",
+        "openai/toolInvocation/invoked": "EIROS Pulse Anchor active.",
     },
     structured_output=True,
 )
 def open_pulse() -> dict[str, Any]:
-    """Mount the Pulse widget and return only a compact reconnect summary."""
+    """Mount the Pulse Anchor widget and return only a compact reconnect summary."""
     selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
     resume = build_resume_context(channel=selected_channel, reason="connector_reconnected")
     status = event_engine.status(20, selected_channel)
     return {
         "ok": True,
         "server_version": SERVER_VERSION,
-        "resource_uri": ROOM_LAUNCHER_URI,
-        "launcher_version": ROOM_LAUNCHER_VERSION,
+        "resource_uri": PULSE_ANCHOR_URI,
+        "anchor_version": PULSE_ANCHOR_VERSION,
         "instance_id": INSTANCE_CONFIG.get("instance_id"),
         "channel": selected_channel,
         "resume_required": bool(resume.get("resume_required")),
@@ -1647,13 +1682,16 @@ def reconnect_context() -> dict[str, Any]:
     meta={"ui": {"visibility": ["app"]}},
     structured_output=True,
 )
-def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "") -> dict[str, Any]:
+def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "", claim_seconds: int = 0) -> dict[str, Any]:
     """Poll one durable remote event for the active Pulse widget and bound channel."""
+    if str(widget_id).startswith("room-"):
+        return {"ok": True, "event": None, "filtered": True, "reason": "room widgets do not claim pulse events"}
     polling = INSTANCE_CONFIG.get("polling", {})
+    effective_claim = int(claim_seconds) if claim_seconds > 0 else int(polling.get("claim_seconds", 45))
     return event_engine.poll(
         widget_id=widget_id, cursor=max(0, int(cursor)), channel=channel, instance_id=instance_id,
         leader_lease_seconds=int(polling.get("leader_lease_seconds", 25)),
-        claim_seconds=int(polling.get("claim_seconds", 45)),
+        claim_seconds=effective_claim,
     )
 
 

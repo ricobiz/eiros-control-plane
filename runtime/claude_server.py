@@ -19,6 +19,9 @@ REMOTE_CONFIG = CONFIG_DIR / "claude-remote.json"
 CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v3.html"
 CLAUDE_PULSE_VERSION = "0.3.0"
 CLAUDE_PULSE_HTML = Path(__file__).with_name("claude_pulse.html")
+CLAUDE_INBOX_URI = "ui://eiros/claude-inbox-v1.html"
+CLAUDE_INBOX_VERSION = "0.1.0"
+CLAUDE_INBOX_HTML = Path(__file__).with_name("claude_inbox.html")
 ROOM_URI = "ui://eiros/collab-room-v9.html"
 ROOM_VERSION = "0.8.0"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
@@ -469,19 +472,60 @@ def claude_pulse_resource() -> str:
     description="Mount the persistent addressed EIROS wake channel for this Claude conversation.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={
-        "ui": {"resourceUri": ROOM_LAUNCHER_URI, "visibility": ["model", "app"]},
+        "ui": {"resourceUri": CLAUDE_PULSE_URI, "visibility": ["model", "app"]},
     },
     structured_output=True,
 )
 def open_claude_pulse() -> dict[str, Any]:
     status = collab.hub_status()
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "claude")
     return {
         "ok": True,
-        "resource_uri": ROOM_LAUNCHER_URI,
-        "agent_id": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
-        "launcher_version": ROOM_LAUNCHER_VERSION,
-        "pending_count": int(status.get("pending_by_agent", {}).get(str(COLLAB_IDENTITY.get("agent_id") or "claude"), 0)),
+        "resource_uri": CLAUDE_PULSE_URI,
+        "agent_id": agent_id,
+        "pulse_version": CLAUDE_PULSE_VERSION,
+        "pending_count": int(status.get("pending_by_agent", {}).get(agent_id, 0)),
         "latest_seq": int(status.get("latest_seq", 0)),
+    }
+
+
+@mcp.resource(
+    CLAUDE_INBOX_URI,
+    name="EIROS Claude Inbox",
+    title="EIROS Claude Addressed Inbox",
+    description="Addressed message inbox viewer for Claude with live polling.",
+    mime_type="text/html;profile=mcp-app",
+    meta={"ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}}},
+)
+def claude_inbox_resource() -> str:
+    html = CLAUDE_INBOX_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
+        "displayName": str(COLLAB_IDENTITY.get("assistant_name") or "Claude"),
+        "serverVersion": SERVER_VERSION,
+        "inboxVersion": CLAUDE_INBOX_VERSION,
+    }
+    return html.replace("__EIROS_INBOX_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.tool(
+    name="open_claude_inbox",
+    title="Open EIROS Claude Inbox",
+    description="Mount the addressed message inbox for this Claude conversation.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"resourceUri": CLAUDE_INBOX_URI, "visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def open_claude_inbox() -> dict[str, Any]:
+    status = collab.hub_status()
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "claude")
+    pending = int(status.get("pending_by_agent", {}).get(agent_id, 0))
+    return {
+        "ok": True,
+        "resource_uri": CLAUDE_INBOX_URI,
+        "agent_id": agent_id,
+        "inbox_version": CLAUDE_INBOX_VERSION,
+        "pending_count": pending,
     }
 
 
@@ -669,8 +713,8 @@ def dialog_send(
     to_agent: str,
     content: str,
     kind: str = "call",
-    project_id: str = "default",
-    thread_id: str = "main",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
     scene_id: str = "",
     reply_to: str = "",
     expects_reply: bool = True,

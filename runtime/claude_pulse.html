@@ -106,9 +106,10 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
         set('attempts',attempts);
         set('message',`#${message.seq} ${message.from_agent} → claude\n${message.content}`);
         if(message.message_id!==lastEmitted){
-          lastEmitted=message.message_id;
+          const _mid=message.message_id;
           emitToClaude(message);
-          set('status',`Wake sent for ${message.message_id}. Full text remains in EIROS Room; waiting for Claude to claim, reply and acknowledge.`);
+          lastEmitted=_mid;
+          set('status',`Wake sent for ${_mid}. Full text remains in EIROS Room; waiting for Claude to claim, reply and acknowledge.`);
         }
         schedule(1500);
       }else{

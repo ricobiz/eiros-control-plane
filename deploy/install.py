@@ -214,6 +214,7 @@ def install_release(args: argparse.Namespace) -> dict[str, Any]:
             shutil.copy2(release / "deploy" / "eiros-root-broker.service", "/etc/systemd/system/eiros-root-broker.service")
             shutil.copy2(release / "deploy" / "eiros-worker.service", "/etc/systemd/system/eiros-worker.service")
             shutil.copy2(release / "deploy" / "eiros-tunnel.service", "/etc/systemd/system/eiros-tunnel.service")
+            shutil.copy2(release / "deploy" / "eiros-claude.service", "/etc/systemd/system/eiros-claude.service")
             run("systemctl", "daemon-reload")
             run("systemctl", "enable", "--now", "eiros-root-broker.service")
             service_actions.append("root_broker_started")
@@ -224,6 +225,12 @@ def install_release(args: argparse.Namespace) -> dict[str, Any]:
                 service_actions.append("tunnel_started")
             else:
                 service_actions.append("tunnel_waiting_for_credentials")
+            claude_config = Path(data_dir) / "config" / "claude-remote.json"
+            if claude_config.exists():
+                run("systemctl", "enable", "--now", "eiros-claude.service")
+                service_actions.append("claude_server_started")
+            else:
+                service_actions.append("claude_server_waiting_for_config")
     except Exception:
         if old is not None:
             atomic_symlink(current, old)
@@ -261,6 +268,7 @@ def rollback(args: argparse.Namespace) -> dict[str, Any]:
     if not args.no_systemd:
         run("systemctl", "restart", "eiros-worker.service", check=False)
         run("systemctl", "restart", "eiros-tunnel.service", check=False)
+        run("systemctl", "restart", "eiros-claude.service", check=False)
         actions.append("services_restarted")
     return {"ok": True, "current_release": str(target), "actions": actions}
 

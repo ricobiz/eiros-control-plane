@@ -8,6 +8,7 @@
   "python": ">=3.11",
   "entrypoints": {
     "mcp": "python -m runtime.server_v2",
+    "claude_mcp": "python -m runtime.claude_server",
     "worker": "python -m runtime.worker",
     "root_broker": "python -m root.root_broker",
     "cli": "eiros",
@@ -20,5 +21,8 @@
     "eiros-root-broker.service",
     "eiros-worker.service",
     "eiros-tunnel.service"
+  ],
+  "optional_services": [
+    "eiros-claude.service"
   ]
 }
