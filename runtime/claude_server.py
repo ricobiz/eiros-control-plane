@@ -469,18 +469,19 @@ def claude_pulse_resource() -> str:
     description="Mount the persistent addressed EIROS wake channel for this Claude conversation.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={
-        "ui": {"resourceUri": ROOM_LAUNCHER_URI, "visibility": ["model", "app"]},
+        "ui": {"resourceUri": CLAUDE_PULSE_URI, "visibility": ["model", "app"]},
     },
     structured_output=True,
 )
 def open_claude_pulse() -> dict[str, Any]:
     status = collab.hub_status()
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "claude")
     return {
         "ok": True,
-        "resource_uri": ROOM_LAUNCHER_URI,
-        "agent_id": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
-        "launcher_version": ROOM_LAUNCHER_VERSION,
-        "pending_count": int(status.get("pending_by_agent", {}).get(str(COLLAB_IDENTITY.get("agent_id") or "claude"), 0)),
+        "resource_uri": CLAUDE_PULSE_URI,
+        "agent_id": agent_id,
+        "pulse_version": CLAUDE_PULSE_VERSION,
+        "pending_count": int(status.get("pending_by_agent", {}).get(agent_id, 0)),
         "latest_seq": int(status.get("latest_seq", 0)),
     }
 
@@ -669,8 +670,8 @@ def dialog_send(
     to_agent: str,
     content: str,
     kind: str = "call",
-    project_id: str = "default",
-    thread_id: str = "main",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
     scene_id: str = "",
     reply_to: str = "",
     expects_reply: bool = True,
