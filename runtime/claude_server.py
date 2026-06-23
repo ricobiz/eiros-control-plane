@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -47,6 +48,8 @@ PORT = int(REMOTE.get("port") or 8765)
 MCP_PATH = str(REMOTE.get("mcp_path") or "/mcp").strip()
 ALLOWED_HOST = str(REMOTE.get("allowed_host") or "").strip()
 PUBLIC_ORIGIN = str(REMOTE.get("public_origin") or "").strip()
+_parsed_origin = urlparse(PUBLIC_ORIGIN)
+PUBLIC_HOST = _parsed_origin.netloc or ""
 if not MCP_PATH.startswith("/"):
     MCP_PATH = "/" + MCP_PATH
 
@@ -118,7 +121,7 @@ mcp = FastMCP(
     json_response=False,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[item for item in [f"{HOST}:{PORT}", HOST, ALLOWED_HOST] if item],
+        allowed_hosts=[item for item in [f"{HOST}:{PORT}", HOST, ALLOWED_HOST, PUBLIC_HOST] if item],
         allowed_origins=[item for item in [PUBLIC_ORIGIN] if item],
     ),
 )
