@@ -4,7 +4,6 @@
 <div class="anchor"><span id="dot" class="dot"></span><span id="label" class="label">Pulse Anchor · connecting</span><span id="badge" class="badge">v__ANCHOR_VERSION__</span></div>
 <script>window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;(()=>{
   const boot=window.__EIROS_ANCHOR_BOOTSTRAP__||{};
-  const bridge=window.mcp||window.openai||{};
   const dot=document.getElementById('dot');
   const label=document.getElementById('label');
   const agentId=String(boot.agentId||'chatgpt');
@@ -16,16 +15,27 @@
   let pollTimer=null,hbTimer=null,lastEvent='',lastHb=0,stopped=false;
   function setDot(cls){dot.className='dot '+(cls||'');}
   function setLabel(txt){label.textContent=String(txt||'');}
+  // callTool may live on either host object; try both rather than picking one blindly.
   async function callTool(n,a){
-    if(typeof bridge.callTool==='function')return bridge.callTool(n,a||{});
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.callTool==='function')return h.callTool(n,a||{});
+    }
     throw new Error('bridge unavailable');
   }
   function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
+  // Deliver one model turn. Returns 'host' on a confirmed host-bridge send,
+  // 'fallback' on best-effort postMessage (unconfirmed), 'failed' if nothing worked.
+  // window.mcp may exist without sendMessage while window.openai carries it,
+  // so probe each host for sendMessage instead of selecting one bridge up front.
   async function post(text){
-    if(typeof bridge.sendMessage==='function'){
-      try{return await bridge.sendMessage({role:'user',content:[{type:'text',text}]});}catch{}
+    const payload={role:'user',content:[{type:'text',text}]};
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.sendMessage==='function'){
+        try{await h.sendMessage(payload);return 'host';}catch(e){}
+      }
     }
-    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text}]}},'*');
+    try{window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:payload},'*');return 'fallback';}catch(e){}
+    return 'failed';
   }
   async function heartbeat(){
     const now=Date.now();
@@ -38,17 +48,32 @@
     if(stopped)return;
     try{
       await heartbeat();
-      const raw=await callTool('pulse_poll',{widget_id:sessionId,cursor:0,channel:String(boot.channel||'default'),instance_id:String(boot.instanceId||''),claim_seconds:45});
+      const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel:String(boot.channel||'default'),instance_id:String(boot.instanceId||''),claim_seconds:45});
       const d=unwrap(raw);
       if(d.event&&d.event.id!==lastEvent){
         const evtId=d.event.id,evtSeq=d.event.seq,evtSrc=d.event.source,evtTxt=d.event.text||'';
         setDot('warn');
         setLabel('Event #'+evtSeq+' · delivering');
-        await post('[EIROS_REMOTE_EVENT id='+evtId+' seq='+evtSeq+' source='+evtSrc+']\n'+evtTxt+'\nHandle this event, then call ack_event.');
-        lastEvent=evtId;
-        try{await callTool('pulse_mark_delivered',{event_id:evtId,widget_id:sessionId,channel:String(boot.channel||'default')});}catch{}
-        setDot('ok');
-        setLabel('Pulse Anchor · delivered');
+        const mode=await post('[EIROS_REMOTE_EVENT id='+evtId+' seq='+evtSeq+' source='+evtSrc+']\n'+evtTxt+'\nHandle this event, then call ack_event.');
+        if(mode==='host'){
+          // Confirmed host delivery: a model turn was created, so mark delivered.
+          lastEvent=evtId;
+          try{await callTool('pulse_mark_delivered',{event_id:evtId,widget_id:sessionId,channel:String(boot.channel||'default')});}catch{}
+          setDot('ok');
+          setLabel('Pulse Anchor · delivered #'+evtSeq);
+        }else if(mode==='fallback'){
+          // Best-effort postMessage only; the host could not confirm a turn,
+          // so we do NOT mark delivered. Guard lastEvent to avoid re-posting
+          // every cycle; the event stays unacked in the backend as a clue.
+          lastEvent=evtId;
+          setDot('warn');
+          setLabel('Event #'+evtSeq+' · sent (unconfirmed)');
+        }else{
+          // No host bridge at all: leave lastEvent so the claim can expire and
+          // the event is retried later once a real bridge is present.
+          setDot('bad');
+          setLabel('Event #'+evtSeq+' · no host bridge');
+        }
         pollTimer=setTimeout(poll,2000);
       }else{
         setDot('ok');

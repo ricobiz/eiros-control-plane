@@ -115,10 +115,11 @@ def summarize_events(events: list[dict[str, Any]], timestamp: int) -> dict[str, 
     return counts
 
 def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = '',
-         leader_lease_seconds: int = 25, claim_seconds: int = 45) -> dict[str, Any]:
+         leader_lease_seconds: int = 25, claim_seconds: int = 45, agent_id: str = '') -> dict[str, Any]:
     identity = str(widget_id or '').strip()[:200]
     if not identity:
         raise ValueError('widget_id is required')
+    requester_agent = str(agent_id or '').strip()[:120]
     settings = cfg()
     actual_instance = str(settings.get('instance_id') or '')
     if instance_id and str(instance_id) != actual_instance:
@@ -148,6 +149,10 @@ def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = 
                 claim_alive = int(claim.get('until', 0)) > timestamp
                 if claim_alive:
                     continue
+                if requester_agent:
+                    addressed = str((event.get('payload') or {}).get('to_agent') or '').strip()
+                    if addressed and addressed != requester_agent:
+                        continue
                 candidates.append(event)
             candidates.sort(key=lambda entry: (-int(entry.get('priority', 0)), int(entry.get('seq', 0))))
             if candidates:
