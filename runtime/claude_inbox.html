@@ -1,0 +1,104 @@
+<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:#17120d;color:#fff4e8}.card{padding:14px;border:1px solid #b86a2f;border-radius:18px;background:linear-gradient(145deg,#21160f,#3a2112)}.top{display:flex;align-items:center;justify-content:space-between;gap:10px}.title{font-weight:800;font-size:14px}.version{font-size:10px;opacity:.65;margin-left:6px}.badge{font-size:11px;padding:4px 9px;border-radius:999px;background:#4a2a17;border:1px solid #b86a2f}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.box{padding:8px;border-radius:11px;background:#160f0b;border:1px solid #68401f;text-align:center}.box b{display:block;font-size:16px}.box span{font-size:10px;opacity:.72}.msgs{margin-top:10px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}.msg{padding:8px 10px;border-radius:10px;background:#160f0b;border:1px solid #68401f;font-size:11px}.msg-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.msg-from{font-size:10px;opacity:.72}.msg-kind{font-size:9px;padding:2px 6px;border-radius:6px;background:#3a2112;border:1px solid #7a4a22}.msg-text{white-space:pre-wrap;line-height:1.4;max-height:60px;overflow:hidden}.empty{font-size:11px;opacity:.55;text-align:center;padding:14px}.status{margin-top:8px;padding:8px;border-radius:10px;background:#160f0b;border:1px solid #68401f;font-size:11px;opacity:.8}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}button{padding:8px 12px;border-radius:10px;border:1px solid #c47738;background:#6f3a17;color:#fff4e8;font-weight:700;font-size:11px;cursor:pointer}button:disabled{opacity:.45;cursor:default}
+</style></head><body>
+<div class="card"><div class="top"><div><span class="title">EIROS Inbox</span><span id="version" class="version">v?</span></div><div id="badge" class="badge">loading</div></div><div class="grid"><div class="box"><b id="pending">0</b><span>pending</span></div><div class="box"><b id="notified">0</b><span>notified</span></div><div class="box"><b id="checks">0</b><span>checks</span></div></div><div id="msgs" class="msgs"><div class="empty">Checking inbox…</div></div><div id="status" class="status">Starting…</div><div class="row"><button id="check">Check Now</button><button id="pause">Pause</button></div></div>
+<script>
+window.__EIROS_INBOX_BOOTSTRAP__=__EIROS_INBOX_BOOTSTRAP_JSON__;
+(function(){
+  const boot=window.__EIROS_INBOX_BOOTSTRAP__||{},host=window.mcp||window.openai||{};
+  const $=id=>document.getElementById(id);
+  const set=(id,v)=>{const n=$(id);if(n)n.textContent=String(v)};
+  const agentId=String(boot.agentId||'claude');
+  const inboxVersion=String(boot.inboxVersion||'unknown');
+  const clientId='claude-inbox-'+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now());
+  let paused=false,busy=false,timer=null,lastHb=0,notifiedCount=0,checkCount=0,lastNotified='',rpcN=1;
+  const pendingRpc=new Map();
+  set('version','v'+inboxVersion);
+
+  function rpcCall(method,params){
+    return new Promise((res,rej)=>{
+      const id='ei-'+Date.now()+'-'+(rpcN++);
+      const t=setTimeout(()=>{pendingRpc.delete(id);rej(new Error(method+' timeout'))},15000);
+      pendingRpc.set(id,{resolve:v=>{clearTimeout(t);res(v)},reject:e=>{clearTimeout(t);rej(e)}});
+      window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+    });
+  }
+  window.addEventListener('message',ev=>{
+    if(ev.source!==window.parent)return;
+    const m=ev.data;
+    if(!m||m.jsonrpc!=='2.0'||!m.id)return;
+    const p=pendingRpc.get(m.id);
+    if(!p)return;
+    pendingRpc.delete(m.id);
+    if(m.error)p.reject(new Error(m.error.message||'RPC error'));else p.resolve(m.result);
+  },{passive:true});
+
+  function callTool(name,args){
+    if(typeof host.callTool==='function')return host.callTool(name,args||{});
+    return rpcCall('tools/call',{name,arguments:args||{}});
+  }
+  function unwrap(v){
+    if(!v)return{};
+    return v.structuredContent||(v.result&&v.result.structuredContent)||(v.mcp_tool_result&&v.mcp_tool_result.structuredContent)||v;
+  }
+  function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c))}
+  async function heartbeat(){
+    const now=Date.now();
+    if(now-lastHb<8000)return;
+    lastHb=now;
+    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:clientId,host:'claude-inbox',widget_version:inboxVersion,activity:'online'})}catch{}
+  }
+  function notify(msg){
+    if(msg.message_id===lastNotified)return;
+    const _mid=msg.message_id;
+    const prompt=[
+      '[EIROS_INBOX message_id='+msg.message_id+' seq='+msg.seq+' from='+msg.from_agent+']',
+      'Your inbox has an addressed message. Claim and handle it:',
+      'dialog_inbox agent_id="'+agentId+'" client_id="'+clientId+'" limit=5',
+      'Then handle each message and call dialog_ack.'
+    ].join('\n');
+    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
+    lastNotified=_mid;
+    notifiedCount++;
+    set('notified',notifiedCount);
+  }
+  function renderMsgs(messages){
+    const c=$('msgs');if(!c)return;
+    if(!messages.length){c.innerHTML='<div class="empty">Inbox empty.</div>';return}
+    c.innerHTML=messages.map(m=>'<div class="msg"><div class="msg-header"><span class="msg-from">'+esc(m.from_agent)+' → '+esc(m.to_agent)+'</span><span class="msg-kind">'+esc(m.kind||'call')+'</span></div><div class="msg-text">'+esc(String(m.content||'').slice(0,120))+'</div></div>').join('');
+  }
+  function schedule(ms){clearTimeout(timer);timer=setTimeout(poll,ms)}
+  async function poll(){
+    if(paused){schedule(5000);return}
+    if(busy){schedule(1000);return}
+    busy=true;checkCount++;set('checks',checkCount);
+    try{
+      await heartbeat();
+      set('badge','polling');
+      const raw=await callTool('dialog_peek',{agent_id:agentId,limit:5});
+      const data=unwrap(raw);
+      const messages=Array.isArray(data.messages)?data.messages:[];
+      const pending=data.pending_count||messages.length||0;
+      set('pending',pending);
+      set('badge',pending?'pending':'clear');
+      renderMsgs(messages);
+      if(messages.length){
+        notify(messages[0]);
+        set('status',messages.length+' message(s) pending. Last from: '+messages[0].from_agent);
+        schedule(2000);
+      }else{
+        set('status','Inbox clear. Polling…');
+        schedule(3000);
+      }
+    }catch(err){
+      set('badge','error');
+      set('status','Error: '+String(err&&err.message?err.message:err));
+      schedule(6000);
+    }finally{busy=false}
+  }
+  $('check').addEventListener('click',()=>{lastNotified='';set('status','Manual check…');if(!busy)poll()});
+  $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'Resume':'Pause';if(!paused)poll()});
+  window.addEventListener('beforeunload',()=>clearTimeout(timer));
+  poll();
+})();
+</script></body></html>

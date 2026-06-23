@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 SOCKET_PATH = Path("/run/eiros-root.sock")
-ALLOWED_SERVICES = {"eiros-worker.service", "eiros-tunnel.service"}
+ALLOWED_SERVICES = {"eiros-worker.service", "eiros-tunnel.service", "eiros-claude.service"}
 
 
 def request(payload: dict[str, Any], timeout: int = 100) -> dict[str, Any]:

@@ -15,7 +15,7 @@ from typing import Any, Callable
 SOCKET_PATH = Path("/run/eiros-root.sock")
 AUDIT_PATH = Path("/var/log/eiros/root-broker.jsonl")
 ALLOWED_USER = "eiros"
-ALLOWED_SERVICES = {"eiros-worker.service", "eiros-tunnel.service"}
+ALLOWED_SERVICES = {"eiros-worker.service", "eiros-tunnel.service", "eiros-claude.service"}
 MAX_REQUEST_BYTES = 65536
 
 
