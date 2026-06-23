@@ -1682,7 +1682,7 @@ def reconnect_context() -> dict[str, Any]:
     meta={"ui": {"visibility": ["app"]}},
     structured_output=True,
 )
-def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "", claim_seconds: int = 0) -> dict[str, Any]:
+def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "", claim_seconds: int = 0, agent_id: str = "") -> dict[str, Any]:
     """Poll one durable remote event for the active Pulse widget and bound channel."""
     if str(widget_id).startswith("room-"):
         return {"ok": True, "event": None, "filtered": True, "reason": "room widgets do not claim pulse events"}
@@ -1691,7 +1691,7 @@ def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: 
     return event_engine.poll(
         widget_id=widget_id, cursor=max(0, int(cursor)), channel=channel, instance_id=instance_id,
         leader_lease_seconds=int(polling.get("leader_lease_seconds", 25)),
-        claim_seconds=effective_claim,
+        claim_seconds=effective_claim, agent_id=agent_id,
     )
 
 
