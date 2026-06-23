@@ -1,0 +1,15 @@
+{
+  "host": "127.0.0.1",
+  "port": 8765,
+  "mcp_path": "/mcp",
+  "allowed_host": "localhost:8765",
+  "public_origin": "https://YOUR_DOMAIN_OR_IP",
+  "collab_identity": {
+    "agent_id": "claude",
+    "assistant_name": "Claude",
+    "platform_class": "claude",
+    "instance_id": "claude-main",
+    "owner_display_name": "Rico",
+    "owner_kind": "person"
+  }
+}

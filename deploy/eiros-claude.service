@@ -1,0 +1,24 @@
+[Unit]
+Description=EIROS Claude MCP HTTP Server
+After=network-online.target eiros-worker.service
+Wants=network-online.target
+Requires=eiros-worker.service
+
+[Service]
+Type=simple
+User=eiros
+Group=eiros
+EnvironmentFile=-/etc/eiros/eiros.env
+WorkingDirectory=/opt/eiros-control-plane/current
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.claude_server
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/eiros /home/eiros
+
+[Install]
+WantedBy=multi-user.target
