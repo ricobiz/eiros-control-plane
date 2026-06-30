@@ -172,8 +172,8 @@ def _room_system_status() -> dict[str, Any]:
         ok, out = _subprocess_ok(["systemctl", "is-active", service])
         state = (out or "unknown").splitlines()[0] if out else "unknown"
         lamps.append(_lamp(label, ok and state == "active", state, service))
-    current = Path("/opt/eiros-control-plane/current")
-    lamps.append(_lamp("MCP", current.exists(), "ready" if current.exists() else "missing", str(current)))
+    current = CODE_ROOT / "runtime" / "server_v2.py"
+    lamps.append(_lamp("MCP", current.is_file(), "ready" if current.is_file() else "missing", str(current)))
     try:
         events = event_engine.status(5, str(INSTANCE_CONFIG.get("channel", "default")))
         pending = int(events.get("pending_count", 0))
@@ -187,8 +187,9 @@ def _room_system_status() -> dict[str, Any]:
         lamps.append(_lamp("Queue", True, "clear" if due == 0 else f"{due} jobs", f"tasks {len(tasks)}", "info"))
     except Exception as exc:
         lamps.append(_lamp("Queue", False, "error", str(exc), "warning"))
-    ok, head = _subprocess_ok(["git", "-C", "/srv/eiros-workspace", "rev-parse", "--short", "HEAD"])
-    lamps.append(_lamp("Git", ok, head if ok else "error", "/srv/eiros-workspace", "warning"))
+    git_root = str(CODE_ROOT)
+    ok, head = _subprocess_ok(["git", "-C", git_root, "rev-parse", "--short", "HEAD"])
+    lamps.append(_lamp("Git", ok, head if ok else "error", git_root, "warning"))
     return {
         "ok": all(l.get("ok") or l.get("severity") == "warning" for l in lamps),
         "lamps": lamps,
