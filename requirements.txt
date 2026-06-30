@@ -1,1 +1,14 @@
-mcp==1.28.0
+openai
+xai
+anthropic
+fastapi
+uvicorn
+redis
+pydantic
+httpx
+websockets
+python-dotenv
+# Added for multi-AI and nonstop
+asyncio
+structlog
+prometheus-client
