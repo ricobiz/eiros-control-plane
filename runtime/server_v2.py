@@ -44,7 +44,7 @@ COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
 # Custom widget origins are opt-in. During development ChatGPT's managed sandbox
 # is more reliable and avoids blank/grey iframe failures from stale origin metadata.
-USE_CUSTOM_WIDGET_DOMAIN = os.environ.get("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", "").strip().lower() in {"1", "true", "yes"}
+USE_CUSTOM_WIDGET_DOMAIN = bool(CONFIGURED_WIDGET_DOMAIN) or os.environ.get("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", "").strip().lower() in {"1", "true", "yes"}
 WIDGET_DOMAIN = CONFIGURED_WIDGET_DOMAIN if USE_CUSTOM_WIDGET_DOMAIN else ""
 PULSE_RESOURCE_META: dict[str, Any] = {
     "ui": {
