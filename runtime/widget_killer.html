@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:transparent;color:#ececec}
+.box{min-height:42px;display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid #3f3f46;border-radius:13px;background:#111}
+.dot{width:8px;height:8px;border-radius:50%;background:#19c37d;box-shadow:0 0 8px rgba(25,195,125,.5)}
+.main{flex:1;min-width:0}.title{font-size:12px;font-weight:750}.sub{font-size:10px;color:#a1a1aa;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:10px;color:#f5b849;border:1px solid #3f3f46;border-radius:999px;padding:2px 6px}
+</style>
+</head>
+<body>
+<div class="box"><span class="dot"></span><div class="main"><div class="title">EIROS Widgets Closed</div><div id="sub" class="sub">sending kill signal…</div></div><span id="badge" class="badge">killer</span></div>
+<script>
+window.__EIROS_KILLER_BOOTSTRAP__=__EIROS_KILLER_BOOTSTRAP_JSON__;
+(()=>{const boot=window.__EIROS_KILLER_BOOTSTRAP__||{};
+const projectId=String(boot.projectId||'eiros-hub'),threadId=String(boot.threadId||'first-contact'),generation=String(boot.generation||Date.now());
+const killKey=['eiros-ui-kill',projectId,threadId].join(':');
+const payload=JSON.stringify({generation,ts:Date.now(),reason:String(boot.reason||'manual close')});
+try{localStorage.setItem(killKey,payload);document.getElementById('sub').textContent='kill signal sent · '+projectId+' / '+threadId;document.getElementById('badge').textContent='gen '+generation;}
+catch(e){document.getElementById('sub').textContent='kill failed: '+String(e&&e.message||e);document.getElementById('badge').textContent='error';}
+})();
+</script>
+</body>
+</html>

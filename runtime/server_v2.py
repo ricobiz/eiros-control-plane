@@ -24,21 +24,27 @@ ROOM_TELEMETRY_FILE = ROOT / "runtime" / "room_telemetry.json"
 ROOM_TELEMETRY_LOCK = ROOT / "runtime" / "room_telemetry.lock"
 SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
-PULSE_VERSION = "0.4.0"
+PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9.html"
 ROOM_VERSION = "0.9.3"
-ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
-ROOM_LAUNCHER_VERSION = "0.2.3"
+ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
+ROOM_LAUNCHER_VERSION = "0.2.3d-static-proof"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 PULSE_ANCHOR_HTML = CODE_ROOT / "runtime" / "pulse_anchor.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 ROOM_LAUNCHER_HTML = CODE_ROOT / "runtime" / "room_launcher.html"
-PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v1.html"
-PULSE_ANCHOR_VERSION = "0.2.17-anchor-tool"
+UI_KILLER_URI = "ui://eiros/widget-killer-v1.html"
+UI_KILLER_VERSION = "0.1.0-kill-signal"
+UI_KILLER_HTML = CODE_ROOT / "runtime" / "widget_killer.html"
+CONTROL_PILL_URI = "ui://eiros/control-pill-v1.html"
+CONTROL_PILL_VERSION = "0.1.0-static-kill-first"
+CONTROL_PILL_HTML = CODE_ROOT / "runtime" / "control_pill.html"
+PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v2-addressed.html"
+PULSE_ANCHOR_VERSION = "0.2.20-addressed-uri2"
 INSTANCE_CONFIG = load_config()
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
@@ -1393,6 +1399,116 @@ def room_resource() -> str:
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
+
+UI_KILLER_META: dict[str, Any] = {
+    "ui": {
+        "prefersBorder": True,
+        "csp": {"connectDomains": [], "resourceDomains": []},
+        **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+    },
+    "openai/widgetDescription": "EIROS kill switch that retires older EIROS widgets in the current chat.",
+    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+}
+
+
+@mcp.resource(
+    UI_KILLER_URI,
+    name="EIROS Widget Killer",
+    title="EIROS Widget Killer",
+    description="Broadcasts a local kill signal so old EIROS widgets stop timers and collapse.",
+    mime_type="text/html;profile=mcp-app",
+    meta=UI_KILLER_META,
+)
+def widget_killer_resource() -> str:
+    html = UI_KILLER_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+        "generation": int(time.time()),
+        "reason": "close_eiros_widgets",
+        "killerVersion": UI_KILLER_VERSION,
+    }
+    return html.replace("__EIROS_KILLER_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.tool(
+    name="close_eiros_widgets",
+    title="Close EIROS Widgets",
+    description="Retire old EIROS widgets in this conversation before opening a fresh control widget.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={
+        "ui": {"resourceUri": UI_KILLER_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": UI_KILLER_URI,
+        "openai/toolInvocation/invoking": "Closing old EIROS widgets…",
+        "openai/toolInvocation/invoked": "Old EIROS widgets retired.",
+    },
+    structured_output=True,
+)
+def close_eiros_widgets(reason: str = "manual close") -> dict[str, Any]:
+    return {
+        "ok": True,
+        "resource_uri": UI_KILLER_URI,
+        "killer_version": UI_KILLER_VERSION,
+        "generation": int(time.time()),
+        "reason": reason,
+    }
+
+
+CONTROL_PILL_META: dict[str, Any] = {
+    "ui": {
+        "prefersBorder": True,
+        "csp": {"connectDomains": [], "resourceDomains": []},
+        **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+    },
+    "openai/widgetDescription": "Fresh EIROS control pill. It retires older EIROS widgets before becoming active.",
+    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
+}
+
+
+@mcp.resource(
+    CONTROL_PILL_URI,
+    name="EIROS Control Pill",
+    title="EIROS Control Pill",
+    description="Fresh lightweight EIROS control widget with kill-first behavior.",
+    mime_type="text/html;profile=mcp-app",
+    meta=CONTROL_PILL_META,
+)
+def control_pill_resource() -> str:
+    html = CONTROL_PILL_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+        "generation": int(time.time()),
+        "controlPillVersion": CONTROL_PILL_VERSION,
+    }
+    return html.replace("__EIROS_CONTROL_PILL_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.tool(
+    name="open_control_pill",
+    title="Open EIROS Control Pill",
+    description="Open a fresh EIROS control pill that first retires old EIROS widgets.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={
+        "ui": {"resourceUri": CONTROL_PILL_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": CONTROL_PILL_URI,
+        "openai/toolInvocation/invoking": "Opening fresh EIROS Control Pill…",
+        "openai/toolInvocation/invoked": "EIROS Control Pill opened.",
+    },
+    structured_output=True,
+)
+def open_control_pill() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "resource_uri": CONTROL_PILL_URI,
+        "control_pill_version": CONTROL_PILL_VERSION,
+        "generation": int(time.time()),
+        "note": "The widget writes eiros-ui-kill before becoming active.",
+    }
+
+
 ROOM_LAUNCHER_META: dict[str, Any] = {
     "ui": {
         "prefersBorder": True,
@@ -1484,16 +1600,37 @@ def _widget_test_html() -> str:
     return """<!doctype html>
 <html>
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <style>
-html,body{margin:0;padding:0;background:#071a2d;color:#e8f7ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.card{margin:0;padding:20px;border:2px solid #28a7ff;border-radius:16px;background:#0b3555;min-height:112px;display:flex;flex-direction:column;justify-content:center}
-h2{margin:0 0 8px;font-size:20px}p{margin:0;line-height:1.4;opacity:.88}.stamp{margin-top:10px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.7}
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:transparent;color:#ececec}
+.box{min-height:46px;display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid #3f3f46;border-radius:13px;background:#111}
+.dot{width:8px;height:8px;border-radius:50%;background:#19c37d;box-shadow:0 0 8px rgba(25,195,125,.5)}
+.main{flex:1;min-width:0}.title{font-size:12px;font-weight:750}.sub{font-size:10px;color:#a1a1aa;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:10px;color:#f5b849;border:1px solid #3f3f46;border-radius:999px;padding:2px 6px}
 </style>
 </head>
-<body><div class="card"><h2>EIROS Widget Render: OK</h2><p>Static MCP Apps iframe loaded. No JavaScript, no external assets, no custom origin.</p><div class="stamp">widget-test-v2</div></div></body>
+<body>
+<div class="box"><span class="dot"></span><div class="main"><div class="title">EIROS Kill Switch</div><div id="sub" class="sub">sending kill signal…</div></div><span id="badge" class="badge">widget-test</span></div>
+<script>
+(()=> {
+  const projectId='eiros-hub', threadId='first-contact', generation=String(Date.now());
+  const killKey=['eiros-ui-kill',projectId,threadId].join(':');
+  const payload=JSON.stringify({generation,ts:Date.now(),reason:'open_widget_test kill-switch'});
+  try{
+    localStorage.setItem(killKey,payload);
+    document.getElementById('sub').textContent='kill signal sent · '+generation;
+    document.getElementById('badge').textContent='killed';
+  }catch(e){
+    document.getElementById('sub').textContent='kill failed: '+String(e&&e.message||e);
+    document.getElementById('badge').textContent='error';
+  }
+})();
+</script>
+</body>
 </html>"""
+
 
 
 WIDGET_TEST_META: dict[str, Any] = {

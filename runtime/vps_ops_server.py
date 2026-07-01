@@ -157,6 +157,34 @@ def file_write(path: str, content: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def file_replace(path: str, old: str, new: str, count: int = 1) -> dict[str, Any]:
+    """Apply an exact text replacement in an allowed EIROS file and keep a timestamped backup."""
+    p = _safe_path(path)
+    if not p.is_file():
+        raise ValueError(f"not a file: {p}")
+    if old == "":
+        raise ValueError("old text must not be empty")
+    text = p.read_text(encoding="utf-8", errors="replace")
+    total = text.count(old)
+    if total == 0:
+        return {"ok": False, "path": str(p), "replaced": 0, "error": "old text not found"}
+    requested = int(count)
+    replace_count = total if requested <= 0 else min(total, max(1, requested))
+    backup = p.with_name(f"{p.name}.bak-file-replace-{int(time.time())}")
+    backup.write_text(text, encoding="utf-8")
+    updated = text.replace(old, new, replace_count if requested > 0 else -1)
+    p.write_text(updated, encoding="utf-8")
+    return {
+        "ok": True,
+        "path": str(p),
+        "backup": str(backup),
+        "replaced": replace_count,
+        "total_matches": total,
+        "size": p.stat().st_size,
+    }
+
+
+@mcp.tool()
 def file_find(path: str, pattern: str, max_matches: int = 50) -> dict[str, Any]:
     """Find a plain-text pattern in allowed EIROS files."""
     root = _safe_path(path)

@@ -1,34 +1,120 @@
-<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/><style>
-:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:transparent}.anchor{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #1a3a5c;border-radius:12px;background:#0a1929;min-height:36px}.dot{width:8px;height:8px;border-radius:50%;background:#71717a;flex-shrink:0}.dot.ok{background:#19c37d;box-shadow:0 0 8px rgba(25,195,125,.5)}.dot.warn{background:#f5b849;box-shadow:0 0 8px rgba(245,184,73,.45)}.dot.bad{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.45)}.label{font-size:10px;color:#7a9bbf;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}
-</style></head><body>
-<div class="anchor"><span id="dot" class="dot"></span><span id="label" class="label">Pulse Anchor · connecting</span><span id="badge" class="badge">v__ANCHOR_VERSION__</span></div>
-<script>window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;(()=>{
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:transparent}
+.anchor{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #1a3a5c;border-radius:12px;background:#0a1929;min-height:36px}
+.dot{width:8px;height:8px;border-radius:50%;background:#71717a;flex-shrink:0}
+.dot.ok{background:#19c37d;box-shadow:0 0 8px rgba(25,195,125,.5)}
+.dot.warn{background:#f5b849;box-shadow:0 0 8px rgba(245,184,73,.45)}
+.dot.bad{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.45)}
+.label{font-size:10px;color:#7a9bbf;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}
+.closed{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #333;border-radius:12px;background:#111;min-height:32px;color:#777;font-size:10px}
+</style>
+</head>
+<body>
+<div id="root" class="anchor">
+  <span id="dot" class="dot"></span>
+  <span id="label" class="label">Pulse Anchor · connecting</span>
+  <span id="badge" class="badge">v__ANCHOR_VERSION__</span>
+</div>
+
+<script>
+window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
+
+(()=>{
   const boot=window.__EIROS_ANCHOR_BOOTSTRAP__||{};
+  const root=document.getElementById('root');
   const dot=document.getElementById('dot');
   const label=document.getElementById('label');
+
   const agentId=String(boot.agentId||'chatgpt');
   const projectId=String(boot.projectId||'eiros-hub');
   const threadId=String(boot.threadId||'first-contact');
-  const anchorVersion=String(boot.anchorVersion||'0.2.17-anchor-tool');
-  const rand=Math.random().toString(36).slice(2,8);
-  const sessionId='launcher-'+agentId+'-'+Date.now()+'-'+rand;
-  let pollTimer=null,hbTimer=null,lastEvent='',lastHb=0,stopped=false;
-  function setDot(cls){dot.className='dot '+(cls||'');}
-  function setLabel(txt){label.textContent=String(txt||'');}
-  // callTool may live on either host object; try both rather than picking one blindly.
-  async function callTool(n,a){
+  const channel=String(boot.channel||'default');
+  const anchorVersion=String(boot.anchorVersion||'0.2.21-killable');
+  const sessionId='pulse-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const activeKey=['eiros-pulse-active',projectId,threadId,agentId,channel].join(':');
+  const killKey=['eiros-ui-kill',projectId,threadId].join(':');
+
+  let pollTimer=null;
+  let lastEvent='';
+  let lastHb=0;
+  let closed=false;
+
+  try{localStorage.setItem(activeKey,sessionId)}catch{}
+
+  function isActive(){try{return localStorage.getItem(activeKey)===sessionId}catch{return true}}
+  function setDot(cls){if(dot)dot.className='dot '+(cls||'');}
+  function setLabel(txt){if(label)label.textContent=String(txt||'');}
+  function closeSelf(reason){
+    if(closed)return;
+    closed=true;
+    clearTimeout(pollTimer);
+    try{window.removeEventListener('storage',onStorage)}catch{}
+    if(root){root.className='closed';root.innerHTML='EIROS Pulse closed · '+String(reason||'retired');}
+  }
+  function onStorage(e){
+    if(e.key===activeKey&&e.newValue!==sessionId)closeSelf('superseded');
+    if(e.key===killKey)closeSelf('kill signal');
+  }
+  window.addEventListener('storage',onStorage);
+
+  async function callTool(name,args){
     for(const h of [window.openai,window.mcp]){
-      if(h&&typeof h.callTool==='function')return h.callTool(n,a||{});
+      if(h&&typeof h.callTool==='function') return h.callTool(name,args||{});
     }
     throw new Error('bridge unavailable');
   }
+
   function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
-  // Deliver one model turn. Returns 'host' on a confirmed host-bridge send,
-  // 'fallback' on best-effort postMessage (unconfirmed), 'failed' if nothing worked.
-  // window.mcp may exist without sendMessage while window.openai carries it,
-  // so probe each host for sendMessage instead of selecting one bridge up front.
-  async function post(text){
-    const payload={role:'user',content:[{type:'text',text}]};
+
+  function buildWakePrompt(event){
+    const evtId=String(event.id||'');
+    const evtSeq=String(event.seq||'');
+    const evtSrc=String(event.source||'');
+    const evtTxt=String(event.text||'');
+    return [
+      '[EIROS_OPERATOR_WAKE]',
+      'FROM_AGENT: rico',
+      'FROM_ROLE: user',
+      'FROM_DISPLAY: Rico',
+      'TO_AGENT: chatgpt',
+      'TO_ROLE: assistant',
+      'TO_DISPLAY: EIROS',
+      'AUTHORITY: direct_user_operator_request',
+      'WAKE_EVENT_ID: '+evtId,
+      'WAKE_EVENT_SEQ: '+evtSeq,
+      'SOURCE_AGENT: '+evtSrc,
+      '',
+      'Rico вызывает EIROS. Это пользовательский адресованный wake-вызов, а не автономная команда от стороннего агента.',
+      'EIROS, проснись и обработай входящее EIROS-событие ниже.',
+      '',
+      evtTxt,
+      '',
+      'Required actions:',
+      '1. Call dialog_inbox as agent_id=chatgpt for project_id=eiros-hub thread_id=first-contact if the event references dialogue.',
+      '2. Handle the addressed message.',
+      '3. Call dialog_ack for the handled dialogue message.',
+      '4. Call ack_event with WAKE_EVENT_ID.'
+    ].join('\n');
+  }
+
+  async function postWake(prompt){
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.sendFollowUpMessage==='function'){
+        try{await h.sendFollowUpMessage({prompt,scrollToBottom:true});return 'followup';}catch(e){}
+      }
+      if(h&&typeof h.sendFollowupMessage==='function'){
+        try{await h.sendFollowupMessage({prompt,scrollToBottom:true});return 'followup-lower';}catch(e){}
+      }
+    }
+    const payload={role:'user',content:[{type:'text',text:prompt}]};
     for(const h of [window.openai,window.mcp]){
       if(h&&typeof h.sendMessage==='function'){
         try{await h.sendMessage(payload);return 'host';}catch(e){}
@@ -37,54 +123,44 @@
     try{window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:payload},'*');return 'fallback';}catch(e){}
     return 'failed';
   }
-  async function heartbeat(){
+
+  async function heartbeat(activity='online'){
+    if(closed||!isActive()){closeSelf('superseded');return;}
     const now=Date.now();
     if(now-lastHb<4500)return;
     lastHb=now;
-    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt',widget_version:anchorVersion,activity:'online'});}catch{}
+    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt-pulse-anchor',widget_version:anchorVersion,activity});}catch(e){}
   }
+
   async function poll(){
     clearTimeout(pollTimer);
-    if(stopped)return;
+    if(closed)return;
+    if(!isActive()){closeSelf('superseded');return;}
     try{
       await heartbeat();
-      const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel:String(boot.channel||'default'),instance_id:String(boot.instanceId||''),claim_seconds:45});
-      const d=unwrap(raw);
-      if(d.event&&d.event.id!==lastEvent){
-        const evtId=d.event.id,evtSeq=d.event.seq,evtSrc=d.event.source,evtTxt=d.event.text||'';
-        setDot('warn');
-        setLabel('Event #'+evtSeq+' · delivering');
-        const mode=await post('[EIROS_REMOTE_EVENT id='+evtId+' seq='+evtSeq+' source='+evtSrc+']\n'+evtTxt+'\nHandle this event, then call ack_event.');
-        if(mode==='host'){
-          // Confirmed host delivery: a model turn was created, so mark delivered.
-          lastEvent=evtId;
-          try{await callTool('pulse_mark_delivered',{event_id:evtId,widget_id:sessionId,channel:String(boot.channel||'default')});}catch{}
-          setDot('ok');
-          setLabel('Pulse Anchor · delivered #'+evtSeq);
-        }else if(mode==='fallback'){
-          // Best-effort postMessage only; the host could not confirm a turn,
-          // so we do NOT mark delivered. Guard lastEvent to avoid re-posting
-          // every cycle; the event stays unacked in the backend as a clue.
-          lastEvent=evtId;
-          setDot('warn');
-          setLabel('Event #'+evtSeq+' · sent (unconfirmed)');
-        }else{
-          // No host bridge at all: leave lastEvent so the claim can expire and
-          // the event is retried later once a real bridge is present.
-          setDot('bad');
-          setLabel('Event #'+evtSeq+' · no host bridge');
-        }
-        pollTimer=setTimeout(poll,2000);
-      }else{
-        setDot('ok');
-        setLabel('Pulse Anchor · listening');
-        pollTimer=setTimeout(poll,1700);
+      const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel,instance_id:String(boot.instanceId||''),claim_seconds:45});
+      const data=unwrap(raw);
+      if(data.event&&data.event.id!==lastEvent){
+        const evt=data.event,seq=String(evt.seq||'?');
+        setDot('warn');setLabel('Event #'+seq+' · addressed wake');
+        const mode=await postWake(buildWakePrompt(evt));
+        lastEvent=String(evt.id||'');
+        if(mode==='followup'||mode==='followup-lower'||mode==='host'){setDot('ok');setLabel('Wake sent #'+seq+' · '+mode);}
+        else if(mode==='fallback'){setDot('warn');setLabel('Wake fallback #'+seq);}
+        else{setDot('bad');setLabel('Wake failed #'+seq);}
+        pollTimer=setTimeout(poll,2500);return;
       }
+      setDot('ok');setLabel('Pulse Anchor · listening · '+anchorVersion);
+      pollTimer=setTimeout(poll,1700);
     }catch(e){
-      setDot('bad');
-      setLabel('Pulse Anchor · offline');
+      if(closed)return;
+      setDot('bad');setLabel('Pulse Anchor · offline');
       pollTimer=setTimeout(poll,4000);
     }
   }
+
   poll();
-})();</script></body></html>
+})();
+</script>
+</body>
+</html>
