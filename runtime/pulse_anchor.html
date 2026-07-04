@@ -39,8 +39,8 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   const channel=String(boot.channel||'default');
   const anchorVersion=String(boot.anchorVersion||'0.2.21-killable');
   const sessionId='pulse-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-  const activeKey=['eiros-pulse-active',projectId,threadId,agentId,channel].join(':');
-  const killKey=['eiros-ui-kill',projectId,threadId].join(':');
+  const activeKey=['eiros-wake-listener-active',projectId,threadId,agentId,channel].join(':');
+  const killKey=['eiros-wake-listener-kill',projectId,threadId].join(':');
 
   let pollTimer=null;
   let lastEvent='';
@@ -57,11 +57,11 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     closed=true;
     clearTimeout(pollTimer);
     try{window.removeEventListener('storage',onStorage)}catch{}
-    if(root){root.className='closed';root.innerHTML='EIROS Pulse closed · '+String(reason||'retired');}
+    if(root){root.className='closed';root.innerHTML='EIROS Wake Listener closed · '+String(reason||'retired');}
   }
   function onStorage(e){
     if(e.key===activeKey&&e.newValue!==sessionId)closeSelf('superseded');
-    if(e.key===killKey)closeSelf('kill signal');
+    if(e.key===killKey)closeSelf('listener kill');
   }
   window.addEventListener('storage',onStorage);
 
@@ -150,7 +150,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
         else{setDot('bad');setLabel('Wake failed #'+seq);}
         pollTimer=setTimeout(poll,2500);return;
       }
-      setDot('ok');setLabel('Pulse Anchor · listening · '+anchorVersion);
+      setDot('ok');setLabel('Wake Listener · listening · '+anchorVersion);
       pollTimer=setTimeout(poll,1700);
     }catch(e){
       if(closed)return;
