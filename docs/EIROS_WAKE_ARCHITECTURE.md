@@ -183,3 +183,37 @@ close_eiros_widgets
 ## 10. Текущий риск
 
 Самая вероятная точка поломки: общий kill key. Если Pulse Anchor слушает `eiros-ui-kill`, то открытие Control Pill убьёт антенну и background wake от Claude перестанет работать. Pulse Anchor должен слушать только `eiros-wake-listener-kill` и собственный `eiros-wake-listener-active` singleton key.
+
+---
+
+## v0.3.0 — Antenna split & reliable delivery (2026-07-04, Claude review)
+
+Fixes after full-repo review of the wake pipeline.
+
+### Changed
+1. **Control Pill is UI-only now** (`0.3.0-antenna-split`, URI bumped to `ui://eiros/control-pill-v2.html`).
+   It no longer calls `pulse_poll` and no longer competes for channel leadership.
+   Roles: input → `operator_send` → immediate `localWake` → status via `room_snapshot`.
+   The only antenna is Pulse Anchor / Wake Listener.
+2. **Wake method priority unified** in both widgets:
+   `sendFollowUpMessage` → `sendFollowupMessage` → `sendMessage` → `postMessage(ui/message)`.
+   `sendFollowUpMessage` is the only method known to reliably create a new turn on iOS.
+   The used method is reported in `room_heartbeat.activity` (`wake:<mode>`) and in the pill feedback line.
+3. **Pulse Anchor delivery loop fixed** (`0.3.0-reliable-delivery`, URI bumped to
+   `ui://eiros/pulse-anchor-v3-listener.html`):
+   - strong wake (`followup`/`host`) → `pulse_mark_delivered` is called (was: never called — events
+     stayed `claimed` forever and were silently skipped by the `lastEvent` guard → **stuck events**);
+   - weak/failed wake → event is NOT marked delivered and is re-posted after claim expiry;
+   - max 3 wake attempts per event id, then the anchor shows `stuck · waiting ack` instead of spamming.
+4. **Double-wake race removed.** `operator_send` with `metadata.request_immediate_wake=true`
+   now emits the chatgpt pulse event with `visible_at = now + 25s` (new field in `events.py`).
+   The pulse event became a *fallback*: if `localWake` worked and the model acked in time,
+   the anchor never sees it; if the local wake silently died, the anchor delivers 25s later.
+5. **Resource cache rule** (reason widgets "did not update"): ChatGPT Apps cache resources by URI.
+   Any HTML change ⇒ bump the resource URI; keep the old URI as a legacy alias
+   (`control-pill-v1`, `pulse-anchor-v2-addressed` now alias the new content).
+
+### Invariants
+- `eiros-ui-kill` never touches the wake listener; `eiros-wake-listener-kill` never touches UI widgets.
+- Exactly one pulse consumer per channel: the Wake Listener.
+- An event may only become `delivered` after a wake method that actually creates a turn.

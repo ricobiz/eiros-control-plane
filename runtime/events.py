@@ -40,7 +40,7 @@ def migrate(data: dict[str, Any]) -> dict[str, Any]:
         leader = data.pop('leader', None); data['leaders'] = {'default': leader} if leader else {}
     data.setdefault('leaders', {})
     for event in data['events']:
-        event.setdefault('channel', 'default'); event.setdefault('delivery_attempts', 0); event.setdefault('last_delivery_error', None)
+        event.setdefault('channel', 'default'); event.setdefault('delivery_attempts', 0); event.setdefault('last_delivery_error', None); event.setdefault('visible_at', 0)
     data['schema_version'] = SCHEMA_VERSION
     return data
 
@@ -65,7 +65,7 @@ def read_store() -> dict[str, Any]:
         fcntl.flock(lock.fileno(), fcntl.LOCK_SH); store = load_store(); fcntl.flock(lock.fileno(), fcntl.LOCK_UN); return store
 
 def emit(text: str, source: str = 'remote', payload: dict[str, Any] | None = None, priority: int = 0,
-         idempotency_key: str = '', channel: str = '') -> dict[str, Any]:
+         idempotency_key: str = '', channel: str = '', visible_after: int = 0) -> dict[str, Any]:
     message = str(text or '').strip()
     if not message:
         raise ValueError('Event text is required')
@@ -85,6 +85,7 @@ def emit(text: str, source: str = 'remote', payload: dict[str, Any] | None = Non
             'source': str(source or 'remote')[:120], 'text': message, 'payload': payload or {},
             'priority': max(-1000, min(int(priority), 1000)), 'idempotency_key': key or None,
             'status': 'pending', 'created_at': now(), 'claim': None, 'delivery_attempts': 0,
+            'visible_at': (now() + max(0, min(int(visible_after), 3600))) if visible_after else 0,
             'last_delivery_error': None, 'delivered_at': None, 'acked_at': None, 'ack_result': None,
         }
         store['events'].append(event)
@@ -144,6 +145,8 @@ def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = 
                 if event.get('channel') != target:
                     continue
                 if event.get('status') == 'acked':
+                    continue
+                if int(event.get('visible_at') or 0) > timestamp:
                     continue
                 claim = event.get('claim') or {}
                 claim_alive = int(claim.get('until', 0)) > timestamp

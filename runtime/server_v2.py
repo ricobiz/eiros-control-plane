@@ -40,11 +40,13 @@ ROOM_LAUNCHER_HTML = CODE_ROOT / "runtime" / "room_launcher.html"
 UI_KILLER_URI = "ui://eiros/widget-killer-v1.html"
 UI_KILLER_VERSION = "0.1.0-kill-signal"
 UI_KILLER_HTML = CODE_ROOT / "runtime" / "widget_killer.html"
-CONTROL_PILL_URI = "ui://eiros/control-pill-v1.html"
-CONTROL_PILL_VERSION = "0.2.1-immediate-wake"
+CONTROL_PILL_URI = "ui://eiros/control-pill-v2.html"
+CONTROL_PILL_LEGACY_URI = "ui://eiros/control-pill-v1.html"
+CONTROL_PILL_VERSION = "0.3.0-antenna-split"
 CONTROL_PILL_HTML = CODE_ROOT / "runtime" / "control_pill.html"
-PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v2-addressed.html"
-PULSE_ANCHOR_VERSION = "0.2.22-listener-lifecycle"
+PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v3-listener.html"
+PULSE_ANCHOR_LEGACY_URI = "ui://eiros/pulse-anchor-v2-addressed.html"
+PULSE_ANCHOR_VERSION = "0.3.0-reliable-delivery"
 INSTANCE_CONFIG = load_config()
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
@@ -1127,6 +1129,7 @@ def operator_send(
 ) -> dict[str, Any]:
     """Send one Rico operator message to ChatGPT, Claude or both."""
     result = collab_engine.operator_send(content, target, project_id, thread_id, kind, metadata)
+    immediate_wake = bool((metadata or {}).get("request_immediate_wake"))
     notifications = []
     for message in result.get("messages", []):
         to_agent = str(message.get("to_agent") or "")
@@ -1157,6 +1160,7 @@ def operator_send(
                 priority=1200,
                 channel=str(INSTANCE_CONFIG.get("channel", "default")),
                 idempotency_key=ikey,
+                visible_after=25 if (immediate_wake and to_agent == "chatgpt") else 0,
             )
             notifications.append({"message_id": mid, "event_id": event.get("id"), "to_agent": to_agent})
         except Exception as exc:
@@ -1486,6 +1490,18 @@ def control_pill_resource() -> str:
     return html.replace("__EIROS_CONTROL_PILL_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
+@mcp.resource(
+    CONTROL_PILL_LEGACY_URI,
+    name="EIROS Control Pill Legacy v1",
+    title="EIROS Control Pill",
+    description="Backward-compatible control pill resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+    meta=CONTROL_PILL_META,
+)
+def control_pill_resource_legacy_v1() -> str:
+    return control_pill_resource()
+
+
 @mcp.tool(
     name="open_control_pill",
     title="Open EIROS Control Pill",
@@ -1722,6 +1738,18 @@ def _render_pulse_anchor_html() -> str:
 )
 def pulse_anchor_resource() -> str:
     return _render_pulse_anchor_html()
+
+
+@mcp.resource(
+    PULSE_ANCHOR_LEGACY_URI,
+    name="EIROS Pulse Anchor Legacy v2",
+    title="EIROS Pulse Anchor",
+    description="Backward-compatible pulse anchor resource for already-open sessions.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v2() -> str:
+    return pulse_anchor_resource()
 
 
 @mcp.resource(

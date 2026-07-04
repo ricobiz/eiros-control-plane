@@ -37,13 +37,14 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   const projectId=String(boot.projectId||'eiros-hub');
   const threadId=String(boot.threadId||'first-contact');
   const channel=String(boot.channel||'default');
-  const anchorVersion=String(boot.anchorVersion||'0.2.21-killable');
+  const anchorVersion=String(boot.anchorVersion||'0.3.0-reliable-delivery');
   const sessionId='pulse-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
   const activeKey=['eiros-wake-listener-active',projectId,threadId,agentId,channel].join(':');
   const killKey=['eiros-wake-listener-kill',projectId,threadId].join(':');
 
   let pollTimer=null;
-  let lastEvent='';
+  const attempts={};
+  let lastWakeMode='';
   let lastHb=0;
   let closed=false;
 
@@ -129,7 +130,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     const now=Date.now();
     if(now-lastHb<4500)return;
     lastHb=now;
-    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt-pulse-anchor',widget_version:anchorVersion,activity});}catch(e){}
+    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt-pulse-anchor',widget_version:anchorVersion,activity:lastWakeMode?(activity+'·wake:'+lastWakeMode):activity});}catch(e){}
   }
 
   async function poll(){
@@ -140,14 +141,22 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
       await heartbeat();
       const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel,instance_id:String(boot.instanceId||''),claim_seconds:45});
       const data=unwrap(raw);
-      if(data.event&&data.event.id!==lastEvent){
-        const evt=data.event,seq=String(evt.seq||'?');
-        setDot('warn');setLabel('Event #'+seq+' · addressed wake');
+      if(data.event){
+        const evt=data.event,seq=String(evt.seq||'?'),id=String(evt.id||'');
+        const tries=(attempts[id]||0)+1;attempts[id]=tries;
+        if(tries>3){
+          setDot('bad');setLabel('Event #'+seq+' stuck after '+(tries-1)+' tries · waiting ack');
+          pollTimer=setTimeout(poll,8000);return;
+        }
+        setDot('warn');setLabel('Event #'+seq+' · wake try '+tries);
         const mode=await postWake(buildWakePrompt(evt));
-        lastEvent=String(evt.id||'');
-        if(mode==='followup'||mode==='followup-lower'||mode==='host'){setDot('ok');setLabel('Wake sent #'+seq+' · '+mode);}
-        else if(mode==='fallback'){setDot('warn');setLabel('Wake fallback #'+seq);}
-        else{setDot('bad');setLabel('Wake failed #'+seq);}
+        lastWakeMode=mode+':#'+seq;
+        if(mode==='followup'||mode==='followup-lower'||mode==='host'){
+          setDot('ok');setLabel('Wake sent #'+seq+' · '+mode);
+          try{await callTool('pulse_mark_delivered',{event_id:id,widget_id:sessionId,channel});}catch(e){}
+        }
+        else if(mode==='fallback'){setDot('warn');setLabel('Wake fallback #'+seq+' · will retry');}
+        else{setDot('bad');setLabel('Wake failed #'+seq+' · will retry');}
         pollTimer=setTimeout(poll,2500);return;
       }
       setDot('ok');setLabel('Wake Listener · listening · '+anchorVersion);
