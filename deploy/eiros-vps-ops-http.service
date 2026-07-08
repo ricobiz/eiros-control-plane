@@ -1,0 +1,18 @@
+[Unit]
+Description=EIROS VPS Ops direct Streamable HTTP MCP (port 8790, for nginx-fronted access)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/eiros-control-plane
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.vps_ops_server
+Restart=always
+RestartSec=3
+User=root
+Group=root
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target

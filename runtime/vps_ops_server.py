@@ -31,6 +31,10 @@ mcp = FastMCP(
         "Use vps_health and vps_snapshot first. Use service_status and service_journal "
         "for allowlisted services. File tools are restricted to EIROS workspace/log paths."
     ),
+    stateless_http=True,
+    json_response=True,
+    host="127.0.0.1",
+    port=8790,
 )
 
 
@@ -274,4 +278,4 @@ def root_exec(command: str, cwd: str = "/opt/eiros-control-plane", timeout_secon
 # ==== /EIROS FULL ROOT EXECUTOR ====
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="streamable-http")
