@@ -28,7 +28,7 @@ PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9-4-localwake.html"
-ROOM_VERSION = "0.9.13-room-only-pulse-guard"
+ROOM_VERSION = "0.9.14-room-claims-pulse"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
 ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
@@ -1974,8 +1974,7 @@ def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: 
         }
 
     """Poll one durable remote event for the active Pulse widget and bound channel."""
-    if str(widget_id).startswith("room-"):
-        return {"ok": True, "event": None, "filtered": True, "reason": "room widgets do not claim pulse events"}
+    # Room widgets are the primary wake relay in room-only mode; allow them to claim events.
     polling = INSTANCE_CONFIG.get("polling", {})
     effective_claim = int(claim_seconds) if claim_seconds > 0 else int(polling.get("claim_seconds", 45))
     return event_engine.poll(
