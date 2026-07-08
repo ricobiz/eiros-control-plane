@@ -28,7 +28,7 @@ PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9-4-localwake.html"
-ROOM_VERSION = "0.9.12-room-followup-first"
+ROOM_VERSION = "0.9.13-room-only-pulse-guard"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
 ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
@@ -1961,6 +1961,18 @@ def reconnect_context() -> dict[str, Any]:
     structured_output=True,
 )
 def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "", claim_seconds: int = 0, agent_id: str = "") -> dict[str, Any]:
+    # Room-only wake relay: old standalone Pulse Anchor iframes may survive in ChatGPT/iOS cache.
+    # They must not claim/deliver wake events; Room is the only wake relay.
+    if str(widget_id or '').startswith('pulse-'):
+        return {
+            'ok': True,
+            'disabled': True,
+            'reason': 'standalone_anchor_disabled_room_only',
+            'event': None,
+            'events': [],
+            'cursor': locals().get('cursor', 0),
+        }
+
     """Poll one durable remote event for the active Pulse widget and bound channel."""
     if str(widget_id).startswith("room-"):
         return {"ok": True, "event": None, "filtered": True, "reason": "room widgets do not claim pulse events"}
