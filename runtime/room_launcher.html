@@ -8,7 +8,7 @@
 *{box-sizing:border-box}
 body{margin:0;background:transparent;color:#ececec}
 .box{min-height:78px;padding:10px 12px;border:1px solid #3f3f46;border-radius:16px;background:#0f0f10;box-shadow:0 12px 34px rgba(0,0,0,.25)}
-.row{display:flex;align-items:center;gap:10px}.mark{width:30px;height:30px;border-radius:9px;background:#303030;border:1px solid #3f3f46;display:grid;place-items:center;font-weight:800}.main{flex:1;min-width:0}.title{font-size:12px;font-weight:700}.sub{margin-top:4px;color:#19c37d;font-size:11px}.ver{margin-top:8px;font-size:10px;color:#a1a1aa;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.pill{display:inline-block;margin-left:6px;padding:2px 6px;border:1px solid #3f3f46;border-radius:999px;color:#f5b849}
+.row{display:flex;align-items:center;gap:10px}.mark{width:30px;height:30px;border-radius:9px;background:#303030;border:1px solid #3f3f46;display:grid;place-items:center;font-weight:800}.main{flex:1;min-width:0}.title{font-size:12px;font-weight:700}.sub{margin-top:4px;color:#19c37d;font-size:11px}.ver{margin-top:8px;font-size:10px;color:#a1a1aa;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.pill{display:inline-block;margin-left:6px;padding:2px 6px;border:1px solid #3f3f46;border-radius:999px;color:#f5b849}.rld{width:28px;height:28px;border:1px solid #3f3f46;border-radius:9px;background:#18181a;color:#a1a1aa;font-size:13px;display:grid;place-items:center}
 </style>
 </head>
 <body>
@@ -17,10 +17,33 @@ body{margin:0;background:transparent;color:#ececec}
     <div class="mark">E</div>
     <div class="main">
       <div class="title">EIROS Control</div>
-      <div class="sub">STATIC RENDER OK <span class="pill">no JS</span></div>
+      <div class="sub">RENDER OK <span class="pill">manual ↻</span></div>
     </div>
+    <button id="reload" class="rld" title="Reload widget">↻</button>
   </div>
   <div class="ver">launcher static proof · __LAUNCHER_VISIBLE_VERSION__</div>
 </div>
+<script>
+(()=> {
+  const btn=document.getElementById('reload');
+  const sub=document.querySelector('.sub');
+  const bridge=window.mcp||window.openai||{};
+  function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result||v||{}}
+  async function refresh(){
+    if(!sub)return;
+    sub.textContent='REFRESHING…';
+    try{
+      if(typeof bridge.callTool!=='function') throw new Error('bridge unavailable');
+      const raw=await bridge.callTool('room_snapshot',{project_id:'eiros-hub',thread_id:'first-contact',limit:1,after_seq:0});
+      const d=unwrap(raw);
+      const p=Object.values(d.hub?.pending_by_agent||{}).reduce((a,b)=>a+Number(b||0),0);
+      sub.innerHTML='READY · '+new Date().toLocaleTimeString()+' <span class="pill">'+(p?('P '+p):'clear')+'</span>';
+    }catch(e){
+      sub.textContent='REFRESH ERROR';
+    }
+  }
+  btn?.addEventListener('click',refresh);
+})();
+</script>
 </body>
 </html>

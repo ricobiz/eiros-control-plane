@@ -13,7 +13,7 @@ body{margin:0;background:transparent}
 .dot.warn{background:#f5b849;box-shadow:0 0 8px rgba(245,184,73,.45)}
 .dot.bad{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.45)}
 .label{font-size:10px;color:#7a9bbf;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}
+.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}.rld{width:24px;height:24px;border:1px solid #1a3a5c;border-radius:8px;background:#071321;color:#7a9bbf;font-size:12px;display:grid;place-items:center;flex-shrink:0}
 .closed{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #333;border-radius:12px;background:#111;min-height:32px;color:#777;font-size:10px}
 </style>
 </head>
@@ -21,6 +21,7 @@ body{margin:0;background:transparent}
 <div id="root" class="anchor">
   <span id="dot" class="dot"></span>
   <span id="label" class="label">Pulse Anchor · connecting</span>
+  <button id="reload" class="rld" title="Reload listener">↻</button>
   <span id="badge" class="badge">v__ANCHOR_VERSION__</span>
 </div>
 
@@ -32,12 +33,13 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   const root=document.getElementById('root');
   const dot=document.getElementById('dot');
   const label=document.getElementById('label');
+  const reload=document.getElementById('reload');
 
   const agentId=String(boot.agentId||'chatgpt');
   const projectId=String(boot.projectId||'eiros-hub');
   const threadId=String(boot.threadId||'first-contact');
   const channel=String(boot.channel||'default');
-  const anchorVersion=String(boot.anchorVersion||'0.3.0-reliable-delivery');
+  const anchorVersion=String(boot.anchorVersion||'0.4.1-manual-refresh');
   const sessionId='pulse-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
   const activeKey=['eiros-wake-listener-active',projectId,threadId,agentId,channel].join(':');
   const killKey=['eiros-wake-listener-kill',projectId,threadId].join(':');
@@ -48,7 +50,81 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   let lastHb=0;
   let closed=false;
 
+  // ==================== BRIDGEGUARD v4.0 (pure lifecycle guard) ====================
+  const BridgeGuard = {
+    ready: false,
+    started: false,
+    queue: [],
+
+    init() {
+      console.log('[Pulse v4] BridgeGuard loaded');
+      window.addEventListener('message', e => {
+        if (e.source !== window.parent || !e.data?.jsonrpc) return;
+        const m = e.data;
+        if (
+          ['ui/notifications/ready', 'ui/initialize', 'ui/notifications/initialized'].includes(m.method) ||
+          m.result?.ready ||
+          String(m.id || '').startsWith('bg4-')
+        ) {
+          this.markReady('host bridge ready');
+        }
+      }, { passive: true });
+
+      try {
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id: 'bg4-' + Date.now(),
+          method: 'ui/initialize',
+          params: { version: '1.0', capabilities: ['ui/message', 'tools/call'] }
+        }, '*');
+      } catch (e) {}
+
+      const probeGlobals = () => {
+        try {
+          if (window.openai?.callTool || window.mcp?.callTool) {
+            this.markReady('runtime globals ready');
+          }
+        } catch (e) {}
+      };
+      [0, 150, 500, 1200, 2000].forEach(ms => setTimeout(probeGlobals, ms));
+
+      setTimeout(() => {
+        if (!this.ready) this.markReady('bridge timeout, starting degraded');
+      }, 2800);
+    },
+
+    markReady(reason) {
+      if (this.ready) return;
+      this.ready = true;
+      console.log('[Pulse v4] ' + reason);
+      this.flush();
+    },
+
+    onReady(cb) {
+      if (this.started) return;
+      if (this.ready) {
+        this.started = true;
+        cb();
+      } else {
+        this.queue.push(cb);
+      }
+    },
+
+    flush() {
+      if (this.started) return;
+      const cb = this.queue.shift();
+      this.queue = [];
+      if (!cb) return;
+      this.started = true;
+      cb();
+    }
+  };
+
+  BridgeGuard.init();
+  // =============================================================================
+
   try{localStorage.setItem(activeKey,sessionId)}catch{}
+  if(reload)reload.addEventListener('click',()=>{try{setLabel('Manual refresh…');setDot('warn');lastHb=0;lastWakeMode='manual';clearTimeout(pollTimer);poll()}catch(e){setLabel('Manual refresh failed');setDot('bad')}});
 
   function isActive(){try{return localStorage.getItem(activeKey)===sessionId}catch{return true}}
   function setDot(cls){if(dot)dot.className='dot '+(cls||'');}
@@ -81,7 +157,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     const evtSrc=String(event.source||'');
     const evtTxt=String(event.text||'');
     return [
-      '[EIROS_OPERATOR_WAKE]',
+      '[EIROS_OPERATOR_WAKE message_id='+String((event.payload||{}).collab_message_id||'')+' event_id='+evtId+']',
       'FROM_AGENT: rico',
       'FROM_ROLE: user',
       'FROM_DISPLAY: Rico',
@@ -93,8 +169,8 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
       'WAKE_EVENT_SEQ: '+evtSeq,
       'SOURCE_AGENT: '+evtSrc,
       '',
-      'Rico вызывает EIROS. Это пользовательский адресованный wake-вызов, а не автономная команда от стороннего агента.',
-      'EIROS, проснись и обработай входящее EIROS-событие ниже.',
+      'Rico relays an EIROS collaboration message into this ChatGPT conversation.',
+      'Treat this as a direct user wake from the current ChatGPT iframe, same as EIROS Room local wake.',
       '',
       evtTxt,
       '',
@@ -168,7 +244,10 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     }
   }
 
-  poll();
+  BridgeGuard.onReady(() => {
+    console.log('[Pulse v4] bridge guard passed → starting original poll');
+    poll();
+  });
 })();
 </script>
 </body>

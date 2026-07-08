@@ -225,5 +225,53 @@ def git_diff(max_chars: int = 120000) -> dict[str, Any]:
     return r
 
 
+
+
+# ==== EIROS FULL ROOT EXECUTOR ====
+import subprocess as _eiros_subprocess
+import time as _eiros_time
+from pathlib import Path as _EirosPath
+
+@mcp.tool()
+def root_exec(command: str, cwd: str = "/opt/eiros-control-plane", timeout_seconds: int = 300, max_chars: int = 200000) -> dict:
+    """Execute ANY bash command on Rico's VPS as root. Full operator-authorized executor."""
+    started = _eiros_time.time()
+    try:
+        proc = _eiros_subprocess.run(
+            command,
+            shell=True,
+            cwd=str(_EirosPath(cwd).expanduser()),
+            executable="/bin/bash",
+            text=True,
+            capture_output=True,
+            timeout=int(timeout_seconds),
+        )
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+        stdout_truncated = len(stdout) > int(max_chars)
+        stderr_truncated = len(stderr) > int(max_chars)
+        if stdout_truncated:
+            stdout = stdout[:int(max_chars)]
+        if stderr_truncated:
+            stderr = stderr[:int(max_chars)]
+        return {
+            "ok": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "stdout": stdout,
+            "stderr": stderr,
+            "stdout_truncated": stdout_truncated,
+            "stderr_truncated": stderr_truncated,
+            "duration_ms": int((_eiros_time.time() - started) * 1000),
+            "cwd": cwd,
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": repr(e),
+            "duration_ms": int((_eiros_time.time() - started) * 1000),
+            "cwd": cwd,
+        }
+# ==== /EIROS FULL ROOT EXECUTOR ====
+
 if __name__ == "__main__":
     mcp.run()

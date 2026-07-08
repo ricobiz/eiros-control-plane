@@ -1,0 +1,18 @@
+[Unit]
+Description=EIROS Claude-facing Streamable HTTP MCP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/eiros-control-plane
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.claude_mcp_server
+Restart=always
+RestartSec=3
+User=eiros
+Group=eiros
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target

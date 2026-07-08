@@ -27,10 +27,10 @@ PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v9.html"
-ROOM_VERSION = "0.9.3"
+ROOM_URI = "ui://eiros/collab-room-v9-4-localwake.html"
+ROOM_VERSION = "0.9.12-room-followup-first"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
-ROOM_LAUNCHER_VERSION = "0.2.3d-static-proof"
+ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
@@ -42,11 +42,11 @@ UI_KILLER_VERSION = "0.1.0-kill-signal"
 UI_KILLER_HTML = CODE_ROOT / "runtime" / "widget_killer.html"
 CONTROL_PILL_URI = "ui://eiros/control-pill-v2.html"
 CONTROL_PILL_LEGACY_URI = "ui://eiros/control-pill-v1.html"
-CONTROL_PILL_VERSION = "0.3.0-antenna-split"
+CONTROL_PILL_VERSION = "0.3.3-server-heartbeat"
 CONTROL_PILL_HTML = CODE_ROOT / "runtime" / "control_pill.html"
-PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v3-listener.html"
+PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v4-4-relay-user-wake.html"
 PULSE_ANCHOR_LEGACY_URI = "ui://eiros/pulse-anchor-v2-addressed.html"
-PULSE_ANCHOR_VERSION = "0.3.0-reliable-delivery"
+PULSE_ANCHOR_VERSION = "0.4.4-relay-user-wake"
 INSTANCE_CONFIG = load_config()
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
@@ -231,6 +231,41 @@ def _notify_chatgpt_message(message: dict[str, Any], priority: int = 1000) -> di
         idempotency_key=f"collab-to-chatgpt:{message.get('message_id')}",
     )
     return {"event_id": event.get("id"), "event_seq": event.get("seq")}
+
+
+
+def _ack_linked_pulse_events(message_id: str, actor: str = "chatgpt") -> list[dict[str, Any]]:
+    mid = str(message_id or "").strip()
+    if not mid:
+        return []
+    cleaned = []
+    try:
+        data = event_engine.status(500, str(INSTANCE_CONFIG.get("channel", "default")))
+        for event in data.get("events", []):
+            payload = event.get("payload") or {}
+            if str(payload.get("collab_message_id") or "") != mid:
+                continue
+            if str(event.get("status") or "") == "acked":
+                continue
+            try:
+                acked = event_engine.acknowledge(
+                    str(event.get("id")),
+                    f"auto-clean after dialog_ack for collab_message_id={mid}",
+                    actor,
+                )
+                cleaned.append({
+                    "event_id": acked.get("id"),
+                    "seq": acked.get("seq"),
+                    "status": acked.get("status"),
+                })
+            except Exception as exc:
+                cleaned.append({
+                    "event_id": event.get("id"),
+                    "error": str(exc),
+                })
+    except Exception as exc:
+        cleaned.append({"error": str(exc)})
+    return cleaned
 
 
 def _delivery_receipts(messages: list[dict[str, Any]], notifications: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -932,7 +967,9 @@ def dialog_inbox(
 )
 def dialog_ack(agent_id: str, message_id: str, result: str = "") -> dict[str, Any]:
     """Acknowledge an addressed collaboration message after handling it."""
-    return collab_engine.acknowledge(agent_id, message_id, result)
+    ack = collab_engine.acknowledge(agent_id, message_id, result)
+    ack["linked_pulse_acks"] = _ack_linked_pulse_events(message_id, agent_id)
+    return ack
 
 
 @mcp.tool(
@@ -1116,6 +1153,50 @@ def room_system_status() -> dict[str, Any]:
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+)
+def room_cleanup_stale(
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    channel: str = "",
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Clean stale Pulse wake events whose linked dialog messages are already acknowledged."""
+    history = collab_engine.history(project_id, thread_id, 500, 0)
+    messages = {str(m.get("message_id") or ""): m for m in history.get("messages", [])}
+    before = event_engine.status(500, channel or str(INSTANCE_CONFIG.get("channel", "default")))
+    cleaned = []
+    skipped = 0
+    for event in before.get("events", []):
+        if str(event.get("status") or "") == "acked":
+            continue
+        mid = str((event.get("payload") or {}).get("collab_message_id") or "")
+        if not mid:
+            skipped += 1
+            continue
+        msg = messages.get(mid)
+        if not msg or str(msg.get("status") or "") != "acked":
+            skipped += 1
+            continue
+        item = {"event_id": event.get("id"), "seq": event.get("seq"), "message_id": mid, "dry_run": bool(dry_run)}
+        if not dry_run:
+            acked = event_engine.acknowledge(str(event.get("id")), f"manual room_cleanup_stale for acked dialog message {mid}", "room-clean")
+            item["status"] = acked.get("status")
+        cleaned.append(item)
+    after = event_engine.status(20, channel or str(INSTANCE_CONFIG.get("channel", "default")))
+    return {
+        "ok": True,
+        "cleaned_count": len(cleaned),
+        "cleaned": cleaned,
+        "skipped_count": skipped,
+        "pending_before": before.get("pending_count", 0),
+        "pending_after": after.get("pending_count", 0),
+        "dry_run": bool(dry_run),
+    }
+
+
+@mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
     meta={"ui": {"visibility": ["app"]}},
 )
@@ -1276,6 +1357,17 @@ def room_resource_legacy_v4() -> str:
     mime_type="text/html;profile=mcp-app",
 )
 def room_resource_legacy_v6() -> str:
+    return room_resource()
+
+
+@mcp.resource(
+    "ui://eiros/collab-room-v9.html",
+    name="EIROS Room Legacy v9 cached descriptor",
+    title="EIROS Shared Collaboration Room",
+    description="Backward-compatible v9 resource for cached ChatGPT tool descriptors; serves current Room HTML.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v9() -> str:
     return room_resource()
 
 
@@ -1516,6 +1608,11 @@ def control_pill_resource_legacy_v1() -> str:
     structured_output=True,
 )
 def open_control_pill() -> dict[str, Any]:
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
+    try:
+        collab_engine.session_heartbeat(agent_id, f"server-open-pill-{int(time.time())}", "chatgpt-open-control-pill", CONTROL_PILL_VERSION, "online")
+    except Exception:
+        pass
     return {
         "ok": True,
         "resource_uri": CONTROL_PILL_URI,
@@ -1574,6 +1671,11 @@ def room_launcher_resource() -> str:
     structured_output=True,
 )
 def open_room_launcher() -> dict[str, Any]:
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
+    try:
+        collab_engine.session_heartbeat(agent_id, f"server-open-launcher-{int(time.time())}", "chatgpt-open-room-launcher", ROOM_LAUNCHER_VERSION, "online")
+    except Exception:
+        pass
     snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 1, 0)
     return {
         "ok": True,
@@ -1598,7 +1700,12 @@ def open_room_launcher() -> dict[str, Any]:
     structured_output=True,
 )
 def open_collab_room() -> dict[str, Any]:
-    _ensure_room_agent(str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"), "chatgpt")
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
+    _ensure_room_agent(agent_id, "chatgpt")
+    try:
+        collab_engine.session_heartbeat(agent_id, f"server-open-room-{int(time.time())}", "chatgpt-open-collab-room", ROOM_VERSION, "online")
+    except Exception:
+        pass
     snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0)
     return {
         "ok": True,
@@ -1809,6 +1916,11 @@ def pulse_resource() -> str:
 def open_pulse() -> dict[str, Any]:
     """Mount the Pulse Anchor widget and return only a compact reconnect summary."""
     selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
+    try:
+        collab_engine.session_heartbeat(agent_id, f"server-open-pulse-{int(time.time())}", "chatgpt-open-pulse", PULSE_ANCHOR_VERSION, "online")
+    except Exception:
+        pass
     resume = build_resume_context(channel=selected_channel, reason="connector_reconnected")
     status = event_engine.status(20, selected_channel)
     return {
