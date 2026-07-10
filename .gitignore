@@ -37,6 +37,7 @@ memory/
 
 # Temporary and backup files
 *.bak
+*.bak-*
 *.backup
 *.tar
 *.tar.gz
@@ -66,3 +67,11 @@ config/claude-remote.json
 runtime/claude-public-origin.txt
 runtime/queue.json.*
 runtime/collab.json.*
+
+# Local Claude VPS Ops capability route
+runtime/.claude_vps_ops_route_key
+deploy/eiros-br-be.secure.nginx.conf
+deploy/claude-sslip.secure.nginx.conf
+runtime/.claude_vps_ops_url
+deploy/test_private_route.py
+deploy/test_private_route_https.py
