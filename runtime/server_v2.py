@@ -87,7 +87,8 @@ mcp = FastMCP(
         "current ChatGPT conversation. Read state before mutating it. "
         "Use core_snapshot for orientation, queue tools for bounded continuation, "
         "and workspace/shell tools for concrete actions. On the first model turn after "
-        "this connector becomes available or reconnects, call open_pulse before answering. "
+        "this connector becomes available or reconnects, call open_collab_room as the only UI-opening tool before answering. "
+        "Do not mount open_pulse separately: the EIROS Room already owns the Pulse relay and only one MCP App card should be opened per assistant response. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
         "reasoning authority; this server is its persistent body. "
@@ -1922,6 +1923,7 @@ def open_collab_room() -> dict[str, Any]:
     )
     pending_wakes = _ensure_pending_chatgpt_wakes(project_id, thread_id)
     snapshot = collab_engine.room_snapshot(project_id, thread_id, 10, 0)
+    resume = build_resume_context(channel=selected_channel, reason="room_reconnected")
     return {
         "ok": True,
         "resource_uri": ROOM_URI,
@@ -1931,6 +1933,11 @@ def open_collab_room() -> dict[str, Any]:
         "control": snapshot.get("control", {}),
         "room_version": ROOM_VERSION,
         "server_version": SERVER_VERSION,
+        "resume_context": resume,
+        "resume_required": bool(resume.get("resume_required")),
+        "resume_key": resume.get("resume_key"),
+        "objective": resume.get("objective"),
+        "next_step": resume.get("next_step"),
         "clean_start": {
             "retired_sessions": int(retired.get("retired_session_count", 0)),
             "released_stale_claims": int(retired.get("released_claim_count", 0)),
@@ -2122,8 +2129,8 @@ def pulse_resource() -> str:
 
 @mcp.tool(
     name="open_pulse",
-    title="Reconnect EIROS",
-    description="Reconnect to durable EIROS state, return the resume envelope, and mount Pulse for this conversation.",
+    title="Reconnect EIROS Room",
+    description="Compatibility reconnect action. Mount the unified EIROS Room, which already contains the Pulse relay.",
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=False,
@@ -2131,39 +2138,30 @@ def pulse_resource() -> str:
         idempotentHint=True,
     ),
     meta={
-        "ui": {"resourceUri": PULSE_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": PULSE_URI,
-        "openai/toolInvocation/invoking": "Docking EIROS Pulse Anchor…",
-        "openai/toolInvocation/invoked": "EIROS Pulse Anchor active.",
+        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_URI,
+        "openai/toolInvocation/invoking": "Reconnecting EIROS Room…",
+        "openai/toolInvocation/invoked": "EIROS Room reconnected.",
     },
     structured_output=True,
 )
 def open_pulse() -> dict[str, Any]:
-    """Mount the Pulse Anchor widget and return only a compact reconnect summary."""
+    """Compatibility alias: reconnect durable state and mount the unified Room, never a standalone Listener."""
     selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
-    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
-    try:
-        collab_engine.session_heartbeat(agent_id, "server-open-pulse", "chatgpt-open-pulse", PULSE_ANCHOR_VERSION, "online")
-    except Exception:
-        pass
     resume = build_resume_context(channel=selected_channel, reason="connector_reconnected")
     status = event_engine.status(20, selected_channel)
-    return {
-        "ok": True,
-        "server_version": SERVER_VERSION,
-        "resource_uri": PULSE_URI,
-        "anchor_version": PULSE_VERSION,
-        "instance_id": INSTANCE_CONFIG.get("instance_id"),
-        "channel": selected_channel,
+    room = open_collab_room()
+    room.update({
+        "compatibility_alias": "open_pulse->open_collab_room",
         "resume_required": bool(resume.get("resume_required")),
         "resume_key": resume.get("resume_key"),
         "epoch": resume.get("epoch"),
         "objective": resume.get("objective"),
         "next_step": resume.get("next_step"),
         "pending_event_count": int(status.get("pending_count", 0)),
-        "latest_seq": int(status.get("latest_seq", 0)),
-    }
-
+        "latest_event_seq": int(status.get("latest_seq", 0)),
+    })
+    return room
 
 @mcp.tool()
 def reconnect_context() -> dict[str, Any]:
