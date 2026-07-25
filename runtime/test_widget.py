@@ -32,7 +32,7 @@ def main():
  assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
  assert "initialSystem" in room_rendered
  assert len(room_rendered.encode("utf-8")) < 50000
- assert server_v2.ROOM_URI.startswith("ui://eiros/collab-room-v9-18-") and server_v2.ROOM_URI.endswith(".html")
+ assert server_v2.ROOM_URI == "ui://eiros/collab-room-v9-19-clean-start.html"
  assert "EIROS Control" in room_rendered
  assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
  assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered and "EIROS_SCHEDULED_WAKE" in room_rendered
@@ -53,7 +53,7 @@ def main():
   server_v2.collab_engine.hub_status=original_status
  assert receipts[0]["mode"]=="wake queued"
  assert receipts[1]["mode"]=="offline mail"
- checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin","room DOM bindings","lean room bootstrap","room cache-busted URI","dark control room","operator wake path","scheduled user-origin wake","pending message preservation","legacy v9.14/v9.16 aliases","compact launcher","launcher pulse","delivery receipts","singleton stale guard","service lamp dashboard","english-only control UI","compact mobile layout","empty room render fix","micro service lamps","widget telemetry"]
+ checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin","room DOM bindings","lean room bootstrap","room cache-busted URI","dark control room","operator wake path","scheduled user-origin wake","pending message preservation","legacy v9.14/v9.16/v9.18 aliases","compact launcher","launcher pulse","delivery receipts","singleton stale guard","service lamp dashboard","english-only control UI","compact mobile layout","empty room render fix","micro service lamps","widget telemetry"]
  print(json.dumps({"ok":True,"checks":checks,"count":len(checks)},indent=2))
 
 if __name__=="__main__": main()

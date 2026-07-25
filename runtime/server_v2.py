@@ -28,7 +28,8 @@ PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v9-18-touch-green.html"
+ROOM_URI = "ui://eiros/collab-room-v9-19-clean-start.html"
+ROOM_LEGACY_V918_URI = "ui://eiros/collab-room-v9-18-touch-green.html"
 ROOM_LEGACY_V914_URI = "ui://eiros/collab-room-v9-14-room-claims-pulse.html"
 ROOM_LEGACY_V916_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
 ROOM_VERSION = "0.9.19-clean-start"
@@ -1481,6 +1482,17 @@ def conversation_control_set(
 def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
     """Read current shared project room control state."""
     return collab_engine.get_control(project_id)
+
+
+@mcp.resource(
+    ROOM_LEGACY_V918_URI,
+    name="EIROS Room Legacy v9.18",
+    title="EIROS Shared Collaboration Room",
+    description="Cached v9.18 URI served with the current clean-start Room implementation.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v918() -> str:
+    return room_resource()
 
 
 @mcp.resource(
