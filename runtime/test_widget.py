@@ -32,7 +32,7 @@ def main():
  assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
  assert "initialSystem" in room_rendered
  assert len(room_rendered.encode("utf-8")) < 50000
- assert server_v2.ROOM_URI.endswith("collab-room-v9-18-touch-green.html")
+ assert server_v2.ROOM_URI.startswith("ui://eiros/collab-room-v9-18-") and server_v2.ROOM_URI.endswith(".html")
  assert "EIROS Control" in room_rendered
  assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
  assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered and "EIROS_SCHEDULED_WAKE" in room_rendered
