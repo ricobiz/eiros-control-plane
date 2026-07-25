@@ -415,7 +415,7 @@ def room_resource() -> str:
         "pulseEnabled": False,
         "instanceId": "",
         "channel": "default",
-        "initialSnapshot": collab.room_snapshot("eiros-hub", "first-contact", 100, 0),
+        "initialSnapshot": collab.room_snapshot("eiros-hub", "first-contact", 10, 0),
     }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
@@ -465,7 +465,7 @@ def open_room_launcher() -> dict[str, Any]:
     structured_output=True,
 )
 def open_collab_room() -> dict[str, Any]:
-    snapshot = collab.room_snapshot("eiros-hub", "first-contact", 100, 0)
+    snapshot = collab.room_snapshot("eiros-hub", "first-contact", 10, 0)
     return {
         "ok": True,
         "resource_uri": ROOM_URI,
