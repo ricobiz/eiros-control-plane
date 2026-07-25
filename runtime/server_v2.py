@@ -2010,8 +2010,8 @@ def pulse_resource() -> str:
         idempotentHint=True,
     ),
     meta={
-        "ui": {"resourceUri": PULSE_ANCHOR_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": PULSE_ANCHOR_URI,
+        "ui": {"resourceUri": PULSE_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_URI,
         "openai/toolInvocation/invoking": "Docking EIROS Pulse Anchor…",
         "openai/toolInvocation/invoked": "EIROS Pulse Anchor active.",
     },
@@ -2030,8 +2030,8 @@ def open_pulse() -> dict[str, Any]:
     return {
         "ok": True,
         "server_version": SERVER_VERSION,
-        "resource_uri": PULSE_ANCHOR_URI,
-        "anchor_version": PULSE_ANCHOR_VERSION,
+        "resource_uri": PULSE_URI,
+        "anchor_version": PULSE_VERSION,
         "instance_id": INSTANCE_CONFIG.get("instance_id"),
         "channel": selected_channel,
         "resume_required": bool(resume.get("resume_required")),

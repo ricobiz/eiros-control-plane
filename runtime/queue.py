@@ -5,6 +5,7 @@ import fcntl
 import json
 import os
 import socket
+import stat
 import tempfile
 import time
 import uuid
@@ -37,6 +38,12 @@ def empty_store() -> dict[str, Any]:
 
 def atomic_write(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    previous = None
+    try:
+        current = path.stat()
+        previous = (current.st_uid, current.st_gid, stat.S_IMODE(current.st_mode))
+    except FileNotFoundError:
+        pass
     fd, temp_name = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -44,6 +51,15 @@ def atomic_write(path: Path, data: dict[str, Any]) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
+            if previous is not None:
+                uid, gid, mode = previous
+                os.fchmod(handle.fileno(), mode)
+                try:
+                    os.fchown(handle.fileno(), uid, gid)
+                except PermissionError:
+                    pass
+            else:
+                os.fchmod(handle.fileno(), 0o660)
         os.replace(temp_name, path)
     finally:
         if os.path.exists(temp_name):
