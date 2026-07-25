@@ -22,6 +22,7 @@
 </div>
 <script>
 window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
+import('https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2').then(mod=>{window.__EIROS_APP_SDK__=mod}).catch(err=>{window.__EIROS_APP_SDK_ERROR__=String(err&&err.message||err)});
 (function(){
   const boot=window.__EIROS_BOOTSTRAP__||{};
   const host=window.mcp||window.openai||{};
@@ -66,25 +67,55 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     if(!value)return{};
     return value.structuredContent||(value.result&&value.result.structuredContent)||(value.mcp_tool_result&&value.mcp_tool_result.structuredContent)||value;
   }
+  let lastWakeMode='none';
   async function heartbeat(activity='online'){
     const now=Date.now();
     if(now-lastHeartbeat<4500)return;
     lastHeartbeat=now;
     try{
       await callTool('room_heartbeat',{
-        agent_id:agentId,session_id:clientId,host:'claude-pulse',widget_version:pulseVersion,activity
+        agent_id:agentId,session_id:clientId,host:'claude-pulse',widget_version:pulseVersion,activity:activity+'·wake:'+lastWakeMode
       });
     }catch{}
   }
 
-  function emitToClaude(message){
+  let sdkApp=null;
+  let sdkAppConnecting=null;
+  async function getSdkApp(){
+    if(sdkApp)return sdkApp;
+    if(sdkAppConnecting)return sdkAppConnecting;
+    sdkAppConnecting=(async()=>{
+      for(let i=0;i<20 && !window.__EIROS_APP_SDK__ && !window.__EIROS_APP_SDK_ERROR__;i++){
+        await new Promise(r=>setTimeout(r,150));
+      }
+      if(!window.__EIROS_APP_SDK__)throw new Error(window.__EIROS_APP_SDK_ERROR__||'SDK import timed out');
+      const {App}=window.__EIROS_APP_SDK__;
+      const app=new App({name:'EIROS Claude Pulse',version:pulseVersion});
+      await app.connect();
+      sdkApp=app;
+      return app;
+    })();
+    return sdkAppConnecting;
+  }
+  async function emitToClaude(message){
     const prompt=[
       `[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,
       'A new addressed call is waiting in EIROS Hub. The full dialogue stays in EIROS Room, not in this main chat.',
       `Call dialog_inbox with agent_id="${agentId}", client_id="claude-native-turn", project_id="${message.project_id}", thread_id="${message.thread_id}", limit=1.`,
       'Handle the claimed message, reply through dialog_send when appropriate, then call dialog_ack for that message.'
     ].join('\n');
+    try{
+      const app=await getSdkApp();
+      await app.sendMessage({role:'user',content:[{type:'text',text:prompt}]});
+      lastWakeMode='sdk-ok';
+      set('status','Wake sent via App SDK sendMessage().');
+      return;
+    }catch(err){
+      lastWakeMode='sdk-fail:'+String(err&&err.message||err).slice(0,40);
+      set('status','SDK sendMessage failed ('+String(err&&err.message||err)+'), falling back to raw postMessage.');
+    }
     window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
+    lastWakeMode='raw-fallback-sent';
   }
   function schedule(ms){clearTimeout(timer);timer=setTimeout(poll,ms)}
   async function poll(){

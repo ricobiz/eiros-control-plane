@@ -22,13 +22,14 @@ from runtime import protocol as collab_protocol
 STATE_FILE = ROOT / ".eiros-state.json"
 ROOM_TELEMETRY_FILE = ROOT / "runtime" / "room_telemetry.json"
 ROOM_TELEMETRY_LOCK = ROOT / "runtime" / "room_telemetry.lock"
+BRAIN_INBOX_FILE = ROOT / "runtime" / "brain-inbox.json"
 SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v9-4-localwake.html"
-ROOM_VERSION = "0.9.14-room-claims-pulse"
+ROOM_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
+ROOM_VERSION = "0.9.16-autonomy"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
 ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
@@ -364,6 +365,60 @@ def read_json_file(path: Path, fallback: dict[str, Any]) -> dict[str, Any]:
         return fallback
 
 
+def _brain_inbox_update(task_id: str, revision: int = 0, status: str = "", remove: bool = False) -> dict[str, Any]:
+    """Update the durable scheduler-to-model inbox after a model claims or resolves a task."""
+    target = str(task_id or "").strip()
+    current = read_json_file(BRAIN_INBOX_FILE, {"revision": 0, "updated_at": 0, "items": []})
+    items = []
+    changed = 0
+    for raw in current.get("items", []):
+        item = dict(raw)
+        if str(item.get("id") or "") != target:
+            items.append(item)
+            continue
+        if revision and int(item.get("revision", 0)) != int(revision):
+            items.append(item)
+            continue
+        changed += 1
+        if remove:
+            continue
+        item["status"] = str(status or item.get("status") or "pending_model_turn")
+        item["updated_at"] = int(time.time())
+        items.append(item)
+    current["items"] = items[-1000:]
+    current["revision"] = int(current.get("revision", 0)) + 1
+    current["updated_at"] = int(time.time())
+    atomic_json_write(BRAIN_INBOX_FILE, current)
+    return {"ok": True, "task_id": target, "changed": changed, "removed": bool(remove)}
+
+
+def _brain_inbox_prune(dry_run: bool = False) -> dict[str, Any]:
+    """Remove inbox entries that no longer correspond to the current awaiting/running task revision."""
+    current = read_json_file(BRAIN_INBOX_FILE, {"revision": 0, "updated_at": 0, "items": []})
+    queue_store = queue_engine.read_store()
+    tasks = {str(item.get("id") or ""): item for item in queue_store.get("tasks", [])}
+    kept = []
+    removed = []
+    for raw in current.get("items", []):
+        item = dict(raw)
+        task = tasks.get(str(item.get("id") or ""))
+        valid = bool(
+            task
+            and int(task.get("revision", 0)) == int(item.get("revision", 0))
+            and str(task.get("status") or "") in {"awaiting_brain", "running"}
+        )
+        if valid:
+            kept.append(item)
+        else:
+            removed.append(item)
+    if not dry_run:
+        current["items"] = kept[-1000:]
+        current["revision"] = int(current.get("revision", 0)) + 1
+        current["updated_at"] = int(time.time())
+        atomic_json_write(BRAIN_INBOX_FILE, current)
+    return {"ok": True, "removed_count": len(removed), "kept_count": len(kept), "removed": removed, "dry_run": bool(dry_run)}
+
+
 @mcp.tool()
 def health() -> dict[str, Any]:
     """Check whether the Eiros MCP execution environment is alive."""
@@ -572,7 +627,11 @@ def queue_claim(owner: str, lease_seconds: int = 180, mode: str = "brain") -> di
         lease_seconds=max(15, min(int(lease_seconds), 3600)),
         mode=selected_mode,
     )
-    return queue_engine.cmd_claim(args)
+    result = queue_engine.cmd_claim(args)
+    if result.get("claimed"):
+        task = result.get("task") or {}
+        _brain_inbox_update(str(task.get("id") or ""), int(task.get("revision", 0)) - 1, "claimed", False)
+    return result
 
 
 @mcp.tool()
@@ -615,7 +674,9 @@ def queue_commit(
         run_at=max(0, int(run_at)),
         delay_seconds=max(0, int(delay_seconds)),
     )
-    return queue_engine.cmd_commit(args)
+    result = queue_engine.cmd_commit(args)
+    _brain_inbox_update(task_id, 0, "resolved", True)
+    return result
 
 
 @mcp.tool()
@@ -638,14 +699,18 @@ def queue_fail(
         next_step=next_step or None,
         retry_after_seconds=max(0, int(retry_after_seconds)),
     )
-    return queue_engine.cmd_fail(args)
+    result = queue_engine.cmd_fail(args)
+    _brain_inbox_update(task_id, 0, "failed", True)
+    return result
 
 
 @mcp.tool()
 def queue_cancel(task_id: str, reason: str) -> dict[str, Any]:
     """Cancel a queued or running task and clear its lease."""
     args = argparse.Namespace(id=task_id, reason=reason)
-    return queue_engine.cmd_cancel(args)
+    result = queue_engine.cmd_cancel(args)
+    _brain_inbox_update(task_id, 0, "cancelled", True)
+    return result
 
 
 def ensure_worker() -> dict[str, Any]:
@@ -698,7 +763,9 @@ def queue_reschedule(task_id: str, run_at: int = 0, delay_seconds: int = 0) -> d
         run_at=max(0, int(run_at)),
         delay_seconds=max(0, int(delay_seconds)),
     )
-    return queue_engine.cmd_reschedule(args)
+    result = queue_engine.cmd_reschedule(args)
+    _brain_inbox_update(task_id, 0, "rescheduled", True)
+    return result
 
 
 @mcp.tool()
@@ -1161,38 +1228,74 @@ def room_cleanup_stale(
     thread_id: str = "first-contact",
     channel: str = "",
     dry_run: bool = False,
+    stale_session_seconds: int = 180,
+    pending_message_seconds: int = 300,
 ) -> dict[str, Any]:
-    """Clean stale Pulse wake events whose linked dialog messages are already acknowledged."""
+    """Recycle stale room sessions, stale outbound messages, Pulse wakes and terminal brain inbox entries."""
+    room = collab_engine.cleanup_room_state(
+        project_id=project_id,
+        thread_id=thread_id,
+        stale_session_seconds=stale_session_seconds,
+        pending_message_seconds=pending_message_seconds,
+        dry_run=dry_run,
+    )
+
     history = collab_engine.history(project_id, thread_id, 500, 0)
     messages = {str(m.get("message_id") or ""): m for m in history.get("messages", [])}
-    before = event_engine.status(500, channel or str(INSTANCE_CONFIG.get("channel", "default")))
-    cleaned = []
-    skipped = 0
+    selected_channel = channel or str(INSTANCE_CONFIG.get("channel", "default"))
+    before = event_engine.status(500, selected_channel)
+    cleaned_events = []
+    skipped_events = 0
     for event in before.get("events", []):
         if str(event.get("status") or "") == "acked":
             continue
         mid = str((event.get("payload") or {}).get("collab_message_id") or "")
         if not mid:
-            skipped += 1
+            skipped_events += 1
             continue
         msg = messages.get(mid)
         if not msg or str(msg.get("status") or "") != "acked":
-            skipped += 1
+            skipped_events += 1
             continue
         item = {"event_id": event.get("id"), "seq": event.get("seq"), "message_id": mid, "dry_run": bool(dry_run)}
         if not dry_run:
-            acked = event_engine.acknowledge(str(event.get("id")), f"manual room_cleanup_stale for acked dialog message {mid}", "room-clean")
+            acked = event_engine.acknowledge(
+                str(event.get("id")),
+                f"room recycle cleanup for acked dialog message {mid}",
+                "room-clean",
+            )
             item["status"] = acked.get("status")
-        cleaned.append(item)
-    after = event_engine.status(20, channel or str(INSTANCE_CONFIG.get("channel", "default")))
+        cleaned_events.append(item)
+    after = event_engine.status(20, selected_channel)
+
+    inbox_path = ROOT / "runtime" / "brain-inbox.json"
+    inbox = read_json_file(inbox_path, {"revision": 0, "updated_at": 0, "items": []})
+    queue_store = queue_engine.read_store()
+    terminal = {
+        str(task.get("id"))
+        for task in queue_store.get("tasks", [])
+        if str(task.get("status") or "") in queue_engine.TERMINAL
+    }
+    old_items = list(inbox.get("items") or [])
+    kept_items = [item for item in old_items if str(item.get("id") or "") not in terminal]
+    removed_brain = [item for item in old_items if str(item.get("id") or "") in terminal]
+    if removed_brain and not dry_run:
+        inbox["items"] = kept_items
+        inbox["revision"] = int(inbox.get("revision", 0)) + 1
+        inbox["updated_at"] = int(time.time())
+        atomic_json_write(inbox_path, inbox)
+
     return {
         "ok": True,
-        "cleaned_count": len(cleaned),
-        "cleaned": cleaned,
-        "skipped_count": skipped,
-        "pending_before": before.get("pending_count", 0),
-        "pending_after": after.get("pending_count", 0),
-        "dry_run": bool(dry_run),
+        **room,
+        "cleaned_event_count": len(cleaned_events),
+        "cleaned_events": cleaned_events,
+        "skipped_event_count": skipped_events,
+        "pulse_pending_before": before.get("pending_count", 0),
+        "pulse_pending_after": after.get("pending_count", 0),
+        "cleaned_brain_inbox_count": len(removed_brain),
+        "brain_inbox_before": len(old_items),
+        "brain_inbox_after": len(kept_items),
     }
 
 
@@ -1610,7 +1713,7 @@ def control_pill_resource_legacy_v1() -> str:
 def open_control_pill() -> dict[str, Any]:
     agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
     try:
-        collab_engine.session_heartbeat(agent_id, f"server-open-pill-{int(time.time())}", "chatgpt-open-control-pill", CONTROL_PILL_VERSION, "online")
+        collab_engine.session_heartbeat(agent_id, "server-open-pill", "chatgpt-open-control-pill", CONTROL_PILL_VERSION, "online")
     except Exception:
         pass
     return {
@@ -1673,7 +1776,7 @@ def room_launcher_resource() -> str:
 def open_room_launcher() -> dict[str, Any]:
     agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
     try:
-        collab_engine.session_heartbeat(agent_id, f"server-open-launcher-{int(time.time())}", "chatgpt-open-room-launcher", ROOM_LAUNCHER_VERSION, "online")
+        collab_engine.session_heartbeat(agent_id, "server-open-launcher", "chatgpt-open-room-launcher", ROOM_LAUNCHER_VERSION, "online")
     except Exception:
         pass
     snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 1, 0)
@@ -1703,7 +1806,7 @@ def open_collab_room() -> dict[str, Any]:
     agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
     _ensure_room_agent(agent_id, "chatgpt")
     try:
-        collab_engine.session_heartbeat(agent_id, f"server-open-room-{int(time.time())}", "chatgpt-open-collab-room", ROOM_VERSION, "online")
+        collab_engine.session_heartbeat(agent_id, "server-open-room", "chatgpt-open-collab-room", ROOM_VERSION, "online")
     except Exception:
         pass
     snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0)
@@ -1918,7 +2021,7 @@ def open_pulse() -> dict[str, Any]:
     selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
     agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
     try:
-        collab_engine.session_heartbeat(agent_id, f"server-open-pulse-{int(time.time())}", "chatgpt-open-pulse", PULSE_ANCHOR_VERSION, "online")
+        collab_engine.session_heartbeat(agent_id, "server-open-pulse", "chatgpt-open-pulse", PULSE_ANCHOR_VERSION, "online")
     except Exception:
         pass
     resume = build_resume_context(channel=selected_channel, reason="connector_reconnected")

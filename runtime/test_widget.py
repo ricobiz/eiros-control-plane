@@ -19,8 +19,8 @@ def main():
  assert len(scripts)==1 and scripts[0].count("(function(){")==1
  diagnostic=server_v2.widget_test_resource()
  assert diagnostic==server_v2.widget_test_resource_legacy()
- assert "EIROS Widget Render: OK" in diagnostic
- assert "<script" not in diagnostic.lower()
+ assert "EIROS Kill Switch" in diagnostic
+ assert "eiros-ui-kill" in diagnostic and "<script" in diagnostic.lower()
  assert server_v2.WIDGET_TEST_URI.endswith("widget-test-v2.html")
  assert "domain" not in server_v2.WIDGET_TEST_META["ui"]
  assert "openai/widgetDomain" not in server_v2.WIDGET_TEST_META
@@ -32,14 +32,16 @@ def main():
  assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
  assert "initialSnapshot" not in room_rendered
  assert len(room_rendered.encode("utf-8")) < 40000
- assert server_v2.ROOM_URI.endswith("collab-room-v9.html")
+ assert server_v2.ROOM_URI.endswith("collab-room-v9-16-autonomy.html")
  assert "EIROS Control" in room_rendered
  assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
+ assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered and "EIROS_SCHEDULED_WAKE" in room_rendered
+ assert "noticeUntil" in room_rendered and "Refreshed ·" in room_rendered
  assert "lampShort" in room_rendered and "lastSig=null" in room_rendered and "room_telemetry_update" in room_rendered and "Both agents" in room_rendered
  launcher_rendered=server_v2.room_launcher_resource()
  assert "__EIROS_LAUNCHER_BOOTSTRAP_JSON__" not in launcher_rendered
- assert "pulse_poll" in launcher_rendered and "EIROS_OPEN_ROOM" in launcher_rendered and "room_telemetry_update" in launcher_rendered
- assert server_v2.ROOM_LAUNCHER_URI.endswith("room-launcher-v1.html")
+ assert "launcher static proof" in launcher_rendered and "room_snapshot" in launcher_rendered and "REFRESHING" in launcher_rendered
+ assert server_v2.ROOM_LAUNCHER_URI.endswith("room-launcher-v1d-static-proof.html")
  original_status=server_v2.collab_engine.hub_status
  try:
   server_v2.collab_engine.hub_status=lambda:{"agents":[{"agent_id":"chatgpt","presence":"online","activity":"idle"},{"agent_id":"claude","presence":"offline","activity":"offline"}]}

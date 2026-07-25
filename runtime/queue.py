@@ -160,6 +160,18 @@ def due(task: dict[str, Any], current: int | None = None) -> bool:
     )
 
 
+def claimable(task: dict[str, Any], current: int | None = None) -> bool:
+    """Return true for a due queued task or a brain task already signalled to the model."""
+    current = now() if current is None else current
+    within_budget = (
+        int(task.get("attempts", 0)) < int(task.get("max_attempts", 1))
+        and int(task.get("step", 0)) < int(task.get("max_steps", 1))
+    )
+    if task.get("mode", "brain") == "brain" and task.get("status") == "awaiting_brain":
+        return within_budget
+    return due(task, current)
+
+
 def next_wakeup(mode: str = "") -> dict[str, Any]:
     store = read_store()
     current = now()
@@ -244,7 +256,7 @@ def cmd_claim(args: argparse.Namespace) -> dict[str, Any]:
         mode = getattr(args, "mode", "brain") or "brain"
         candidates = [
             normalize_task(item) for item in store["tasks"]
-            if due(item, current) and (mode == "any" or item.get("mode", "brain") == mode)
+            if claimable(item, current) and (mode == "any" or item.get("mode", "brain") == mode)
         ]
         candidates.sort(key=lambda item: (-int(item["priority"]), int(item["run_at"]), int(item["created_at"])))
         if not candidates:

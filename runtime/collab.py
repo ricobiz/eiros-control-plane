@@ -726,6 +726,8 @@ def send_message(
                     return existing
         seq = int(store["next_seq"])
         store["next_seq"] = seq + 1
+        created_at = now()
+        auto_delivered_to_rico = recipient == "rico"
         message = {
             "message_id": str(uuid.uuid4()),
             "seq": seq,
@@ -740,12 +742,13 @@ def send_message(
             "expects_reply": bool(expects_reply),
             "metadata": metadata or {},
             "idempotency_key": key or None,
-            "status": "pending",
-            "created_at": now(),
+            "status": "acked" if auto_delivered_to_rico else "pending",
+            "created_at": created_at,
             "claim": None,
             "delivery_attempts": 0,
-            "acked_at": None,
-            "ack_result": None,
+            "acked_at": created_at if auto_delivered_to_rico else None,
+            "ack_result": "delivered to Rico through shared room" if auto_delivered_to_rico else None,
+            "ack_agent": "room" if auto_delivered_to_rico else None,
         }
         store["messages"].append(message)
         return message
@@ -983,6 +986,117 @@ def release(agent_id: str, message_id: str, reason: str = "") -> dict[str, Any]:
             return message
     raise RuntimeError(f"message not found: {target}")
 
+
+
+def cleanup_room_state(
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    stale_session_seconds: int = 180,
+    pending_message_seconds: int = 300,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Retire stale widget sessions and acknowledge stale outbound room messages.
+
+    Rico-origin operator requests are preserved for at least 24 hours so the recycle
+    control cannot silently discard a fresh user instruction.
+    """
+    project = str(project_id or "eiros-hub").strip()[:120] or "eiros-hub"
+    thread = str(thread_id or "first-contact").strip()[:160] or "first-contact"
+    session_age_limit = max(15, min(int(stale_session_seconds), 86400))
+    message_age_limit = max(60, min(int(pending_message_seconds), 2592000))
+    timestamp = now()
+
+    def apply_cleanup(store: dict[str, Any], mutate: bool) -> dict[str, Any]:
+        removed_sessions: list[dict[str, Any]] = []
+        cleaned_messages: list[dict[str, Any]] = []
+        sessions_before = 0
+        sessions_after = 0
+
+        for identity, agent in (store.get("agents") or {}).items():
+            sessions = dict((agent or {}).get("sessions") or {})
+            sessions_before += len(sessions)
+            kept: dict[str, Any] = {}
+            for session_id, session in sessions.items():
+                last_seen = int((session or {}).get("last_seen", 0))
+                age = max(0, timestamp - last_seen)
+                if age > session_age_limit:
+                    removed_sessions.append({
+                        "agent_id": identity,
+                        "session_id": session_id,
+                        "host": (session or {}).get("host"),
+                        "activity": (session or {}).get("activity"),
+                        "age_seconds": age,
+                    })
+                else:
+                    kept[session_id] = session
+            sessions_after += len(kept)
+            if mutate and len(kept) != len(sessions):
+                agent["sessions"] = kept
+                agent["active_session_count"] = len(kept)
+                store["agents"][identity] = agent
+
+        pending_before = 0
+        pending_after = 0
+        for message in store.get("messages", []):
+            if message.get("project_id") != project or message.get("thread_id") != thread:
+                continue
+            if message.get("status") == "acked":
+                continue
+            pending_before += 1
+            created_at = int(message.get("created_at", 0))
+            age = max(0, timestamp - created_at)
+            claim = message.get("claim") or {}
+            if _claim_alive(claim, timestamp):
+                pending_after += 1
+                continue
+            sender = str(message.get("from_agent") or "")
+            recipient = str(message.get("to_agent") or "")
+            # Rico reads replies directly in the shared room; there is no separate Rico inbox
+            # consumer, so these deliveries must not remain pending forever.
+            if recipient == "rico":
+                effective_limit = -1
+            else:
+                effective_limit = max(message_age_limit, 86400) if sender == "rico" else message_age_limit
+            if age <= effective_limit:
+                pending_after += 1
+                continue
+            item = {
+                "message_id": message.get("message_id"),
+                "seq": message.get("seq"),
+                "from_agent": sender,
+                "to_agent": message.get("to_agent"),
+                "kind": message.get("kind"),
+                "age_seconds": age,
+            }
+            cleaned_messages.append(item)
+            if mutate:
+                message["status"] = "acked"
+                message["acked_at"] = timestamp
+                message["ack_result"] = "operator recycle cleanup: stale room delivery retired"
+                message["ack_agent"] = "rico"
+                message["claim"] = None
+
+        return {
+            "ok": True,
+            "project_id": project,
+            "thread_id": thread,
+            "dry_run": not mutate,
+            "stale_session_seconds": session_age_limit,
+            "pending_message_seconds": message_age_limit,
+            "sessions_before": sessions_before,
+            "sessions_after": sessions_after,
+            "cleaned_session_count": len(removed_sessions),
+            "cleaned_sessions": removed_sessions,
+            "pending_messages_before": pending_before,
+            "pending_messages_after": pending_after,
+            "cleaned_message_count": len(cleaned_messages),
+            "cleaned_messages": cleaned_messages,
+        }
+
+    if dry_run:
+        return apply_cleanup(read_store(), False)
+    with locked_store() as store:
+        return apply_cleanup(store, True)
 
 def history(
     project_id: str = "default",

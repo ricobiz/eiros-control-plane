@@ -119,15 +119,21 @@ def publish_brain_due(tasks: list[dict[str, Any]]) -> None:
             current = json.loads(INBOX.read_text(encoding="utf-8"))
         except Exception:
             pass
-    known = {item.get("id") for item in current.get("items", [])}
+    known = {(item.get("id"), int(item.get("revision", 0))) for item in current.get("items", [])}
     for task in tasks:
         event = event_engine.emit(
             text=(
                 "Scheduled EIROS brain task is due.\n"
                 f"task_id={task['id']}\n"
+                f"task_revision={task['revision']}\n"
                 f"title={task['title']}\n"
                 f"objective={task['objective']}\n"
-                f"next_step={task.get('next_step') or ''}"
+                f"next_step={task.get('next_step') or ''}\n\n"
+                "Required continuation protocol:\n"
+                "1. Call queue_claim with mode='brain' and a unique ChatGPT owner.\n"
+                "2. Execute and verify one concrete next step.\n"
+                "3. Call queue_commit to finish or schedule the next wake.\n"
+                "4. Acknowledge this reverse event after the task state is committed."
             ),
             source="scheduler",
             payload={
@@ -141,7 +147,7 @@ def publish_brain_due(tasks: list[dict[str, Any]]) -> None:
             priority=int(task.get("priority", 0)),
             idempotency_key=f"brain:{task['id']}:rev:{task['revision']}",
         )
-        if task["id"] in known:
+        if (task["id"], int(task["revision"])) in known:
             continue
         current.setdefault("items", []).append({
             "id": task["id"],

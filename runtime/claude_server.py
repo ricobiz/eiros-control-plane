@@ -17,14 +17,16 @@ from runtime.version import __version__ as SERVER_VERSION
 from runtime import protocol as collab_protocol
 
 REMOTE_CONFIG = CONFIG_DIR / "claude-remote.json"
-CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v3.html"
-CLAUDE_PULSE_VERSION = "0.3.0"
+CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v5-wake-telemetry.html"
+CLAUDE_PULSE_LEGACY_URI = "ui://eiros/claude-pulse-v4-sdk-wake.html"
+CLAUDE_PULSE_LEGACY_URI_V3 = "ui://eiros/claude-pulse-v3.html"
+CLAUDE_PULSE_VERSION = "0.5.0-wake-telemetry"
 CLAUDE_PULSE_HTML = Path(__file__).with_name("claude_pulse.html")
 CLAUDE_INBOX_URI = "ui://eiros/claude-inbox-v1.html"
 CLAUDE_INBOX_VERSION = "0.1.0"
 CLAUDE_INBOX_HTML = Path(__file__).with_name("claude_inbox.html")
-ROOM_URI = "ui://eiros/collab-room-v9.html"
-ROOM_VERSION = "0.8.0"
+ROOM_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
+ROOM_VERSION = "0.9.16-autonomy"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1.html"
 ROOM_LAUNCHER_VERSION = "0.1.0"
 ROOM_HTML = Path(__file__).with_name("collab_room.html")
@@ -182,6 +184,37 @@ def room_heartbeat(
 def room_snapshot(project_id: str = "eiros-hub", thread_id: str = "first-contact", limit: int = 200, after_seq: int = 0) -> dict[str, Any]:
     """Read shared room history, participant presence and operator control state."""
     return collab.room_snapshot(project_id, thread_id, limit, after_seq)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+)
+def room_cleanup_stale(
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    channel: str = "",
+    dry_run: bool = False,
+    stale_session_seconds: int = 15,
+    pending_message_seconds: int = 300,
+) -> dict[str, Any]:
+    """Recycle stale shared-room sessions and stale outbound dialogue deliveries."""
+    result = collab.cleanup_room_state(
+        project_id=project_id,
+        thread_id=thread_id,
+        stale_session_seconds=stale_session_seconds,
+        pending_message_seconds=pending_message_seconds,
+        dry_run=dry_run,
+    )
+    result.update({
+        "cleaned_event_count": 0,
+        "pulse_pending_before": 0,
+        "pulse_pending_after": 0,
+        "cleaned_brain_inbox_count": 0,
+        "brain_inbox_before": 0,
+        "brain_inbox_after": 0,
+    })
+    return result
 
 
 @mcp.tool(
@@ -454,7 +487,7 @@ def open_collab_room() -> dict[str, Any]:
     meta={
         "ui": {
             "prefersBorder": True,
-            "csp": {"connectDomains": [], "resourceDomains": []},
+            "csp": {"connectDomains": ["esm.sh"], "resourceDomains": ["esm.sh"]},
         }
     },
 )
@@ -467,6 +500,40 @@ def claude_pulse_resource() -> str:
         "pulseVersion": CLAUDE_PULSE_VERSION,
     }
     return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.resource(
+    CLAUDE_PULSE_LEGACY_URI_V3,
+    name="EIROS Claude Pulse Legacy v3",
+    title="EIROS Claude Addressed Pulse",
+    description="Backward-compatible resource for already-mounted Claude Pulse widgets.",
+    mime_type="text/html;profile=mcp-app",
+    meta={
+        "ui": {
+            "prefersBorder": True,
+            "csp": {"connectDomains": ["esm.sh"], "resourceDomains": ["esm.sh"]},
+        }
+    },
+)
+def claude_pulse_resource_legacy_v3() -> str:
+    return claude_pulse_resource()
+
+
+@mcp.resource(
+    CLAUDE_PULSE_LEGACY_URI,
+    name="EIROS Claude Pulse Legacy v4",
+    title="EIROS Claude Addressed Pulse",
+    description="Backward-compatible resource for already-mounted Claude Pulse widgets.",
+    mime_type="text/html;profile=mcp-app",
+    meta={
+        "ui": {
+            "prefersBorder": True,
+            "csp": {"connectDomains": ["esm.sh"], "resourceDomains": ["esm.sh"]},
+        }
+    },
+)
+def claude_pulse_resource_legacy_v4() -> str:
+    return claude_pulse_resource()
 
 
 @mcp.tool(

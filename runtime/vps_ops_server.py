@@ -218,13 +218,13 @@ def py_compile(path: str = "runtime/vps_ops_server.py") -> dict[str, Any]:
 @mcp.tool()
 def git_status() -> dict[str, Any]:
     """Read git status for the EIROS checkout."""
-    return _run(["git", "status", "--short"], timeout=20, cwd=str(ROOT))
+    return _run(["git", "-c", f"safe.directory={ROOT}", "status", "--short"], timeout=20, cwd=str(ROOT))
 
 
 @mcp.tool()
 def git_diff(max_chars: int = 120000) -> dict[str, Any]:
     """Read bounded git diff for the EIROS checkout."""
-    r = _run(["git", "diff", "--"], timeout=20, cwd=str(ROOT))
+    r = _run(["git", "-c", f"safe.directory={ROOT}", "diff", "--"], timeout=20, cwd=str(ROOT))
     r["stdout"] = (r.get("stdout") or "")[: max(1, min(int(max_chars), 300000))]
     return r
 
@@ -278,4 +278,5 @@ def root_exec(command: str, cwd: str = "/opt/eiros-control-plane", timeout_secon
 # ==== /EIROS FULL ROOT EXECUTOR ====
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    transport = os.environ.get("EIROS_VPS_OPS_TRANSPORT", "stdio").strip() or "stdio"
+    mcp.run(transport=transport)
