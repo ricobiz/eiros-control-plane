@@ -28,8 +28,8 @@ PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
-ROOM_VERSION = "0.9.16-autonomy"
+ROOM_URI = "ui://eiros/collab-room-v9-18-green-touch.html"
+ROOM_VERSION = "0.9.18-green-touch"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
 ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
@@ -1594,6 +1594,7 @@ def room_resource() -> str:
         "pulseEnabled": True,
         "instanceId": INSTANCE_CONFIG.get("instance_id"),
         "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "initialSystem": _room_system_status(),
     }
     return html.replace("__EIROS_ROOM_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
@@ -1809,7 +1810,7 @@ def open_collab_room() -> dict[str, Any]:
         collab_engine.session_heartbeat(agent_id, "server-open-room", "chatgpt-open-collab-room", ROOM_VERSION, "online")
     except Exception:
         pass
-    snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 100, 0)
+    snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 10, 0)
     return {
         "ok": True,
         "resource_uri": ROOM_URI,

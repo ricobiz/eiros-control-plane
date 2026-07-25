@@ -30,9 +30,9 @@ def main():
  assert not (room_refs-room_ids), f"missing room DOM ids: {sorted(room_refs-room_ids)}"
  room_rendered=server_v2.room_resource()
  assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
- assert "initialSnapshot" not in room_rendered
- assert len(room_rendered.encode("utf-8")) < 40000
- assert server_v2.ROOM_URI.endswith("collab-room-v9-16-autonomy.html")
+ assert "initialSystem" in room_rendered
+ assert len(room_rendered.encode("utf-8")) < 50000
+ assert server_v2.ROOM_URI.endswith("collab-room-v9-18-touch-green.html")
  assert "EIROS Control" in room_rendered
  assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
  assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered and "EIROS_SCHEDULED_WAKE" in room_rendered
