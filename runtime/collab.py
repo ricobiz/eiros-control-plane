@@ -988,12 +988,69 @@ def release(agent_id: str, message_id: str, reason: str = "") -> dict[str, Any]:
 
 
 
+def retire_agent_sessions(agent_id: str, dry_run: bool = False) -> dict[str, Any]:
+    """Retire UI sessions for one participant without touching any messages."""
+    identity = normalize_agent(agent_id)
+    timestamp = now()
+
+    def apply(store: dict[str, Any], mutate: bool) -> dict[str, Any]:
+        agent = store.get("agents", {}).get(identity) or {}
+        sessions = dict(agent.get("sessions") or {})
+        retired = [
+            {
+                "session_id": session_id,
+                "host": (session or {}).get("host"),
+                "widget_version": (session or {}).get("widget_version"),
+                "activity": (session or {}).get("activity"),
+                "age_seconds": max(0, timestamp - int((session or {}).get("last_seen", 0))),
+            }
+            for session_id, session in sessions.items()
+        ]
+        if mutate and sessions:
+            agent["sessions"] = {}
+            agent["active_session_count"] = 0
+            store["agents"][identity] = agent
+
+        released_claims: list[dict[str, Any]] = []
+        for message in store.get("messages", []):
+            claim = message.get("claim") or {}
+            if message.get("status") == "acked" or claim.get("agent_id") != identity:
+                continue
+            released_claims.append({
+                "message_id": message.get("message_id"),
+                "seq": message.get("seq"),
+                "from_agent": message.get("from_agent"),
+                "to_agent": message.get("to_agent"),
+                "client_id": claim.get("client_id"),
+            })
+            if mutate:
+                message["status"] = "pending"
+                message["claim"] = None
+                message["last_error"] = "clean start released stale UI claim for redelivery"
+        return {
+            "ok": True,
+            "agent_id": identity,
+            "dry_run": not mutate,
+            "retired_session_count": len(retired),
+            "retired_sessions": retired,
+            "released_claim_count": len(released_claims),
+            "released_claims": released_claims,
+            "messages_acknowledged": 0,
+        }
+
+    if dry_run:
+        return apply(read_store(), False)
+    with locked_store() as store:
+        return apply(store, True)
+
+
 def cleanup_room_state(
     project_id: str = "eiros-hub",
     thread_id: str = "first-contact",
     stale_session_seconds: int = 180,
     pending_message_seconds: int = 300,
     dry_run: bool = False,
+    preserve_pending_messages: bool = True,
 ) -> dict[str, Any]:
     """Retire stale widget sessions and acknowledge stale outbound room messages.
 
@@ -1043,6 +1100,9 @@ def cleanup_room_state(
             if message.get("status") == "acked":
                 continue
             pending_before += 1
+            if preserve_pending_messages:
+                pending_after += 1
+                continue
             created_at = int(message.get("created_at", 0))
             age = max(0, timestamp - created_at)
             claim = message.get("claim") or {}

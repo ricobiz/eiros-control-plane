@@ -36,6 +36,9 @@ def main():
  assert "EIROS Control" in room_rendered
  assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
  assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered and "EIROS_SCHEDULED_WAKE" in room_rendered
+ assert "FROM_ROLE: user" in room_rendered and "FROM_AGENT: rico" in room_rendered and "rico_authorized_durable_scheduler_continuation" in room_rendered
+ assert "pending messages preserved" in room_rendered and "waiting for Room Pulse leadership" in room_rendered
+ assert server_v2.room_resource_legacy_v914() == room_rendered and server_v2.room_resource_legacy_v916() == room_rendered
  assert "noticeUntil" in room_rendered and "Refreshed ·" in room_rendered
  assert "lampShort" in room_rendered and "lastSig=null" in room_rendered and "room_telemetry_update" in room_rendered and "Both agents" in room_rendered
  launcher_rendered=server_v2.room_launcher_resource()
@@ -50,7 +53,7 @@ def main():
   server_v2.collab_engine.hub_status=original_status
  assert receipts[0]["mode"]=="wake queued"
  assert receipts[1]["mode"]=="offline mail"
- checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin","room DOM bindings","lean room bootstrap","room cache-busted URI","dark control room","operator wake path","compact launcher","launcher pulse","delivery receipts","singleton stale guard","service lamp dashboard","english-only control UI","compact mobile layout","empty room render fix","micro service lamps","widget telemetry"]
+ checks=["single placeholder","stable global name","instance binding","bridge methods","static diagnostic","legacy diagnostic compatibility","cache-busted URI","sandbox origin","room DOM bindings","lean room bootstrap","room cache-busted URI","dark control room","operator wake path","scheduled user-origin wake","pending message preservation","legacy v9.14/v9.16 aliases","compact launcher","launcher pulse","delivery receipts","singleton stale guard","service lamp dashboard","english-only control UI","compact mobile layout","empty room render fix","micro service lamps","widget telemetry"]
  print(json.dumps({"ok":True,"checks":checks,"count":len(checks)},indent=2))
 
 if __name__=="__main__": main()

@@ -29,7 +29,9 @@ PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9-18-touch-green.html"
-ROOM_VERSION = "0.9.18-touch-green"
+ROOM_LEGACY_V914_URI = "ui://eiros/collab-room-v9-14-room-claims-pulse.html"
+ROOM_LEGACY_V916_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
+ROOM_VERSION = "0.9.19-clean-start"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
 ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
@@ -186,7 +188,15 @@ def _room_system_status() -> dict[str, Any]:
     try:
         events = event_engine.status(5, str(INSTANCE_CONFIG.get("channel", "default")))
         pending = int(events.get("pending_count", 0))
-        lamps.append(_lamp("Pulse", True, "ready" if pending == 0 else f"pending {pending}", f"seq {events.get('latest_seq', 0)}", "warning"))
+        leader = events.get("leader") or {}
+        leader_live = int(leader.get("lease_until", 0)) > int(time.time())
+        if not leader_live:
+            pulse_state = "pending leader"
+        elif pending:
+            pulse_state = f"pending {pending}"
+        else:
+            pulse_state = "ready"
+        lamps.append(_lamp("Pulse", True, pulse_state, f"seq {events.get('latest_seq', 0)} leader {leader.get('widget_id') or 'none'}", "warning"))
     except Exception as exc:
         lamps.append(_lamp("Pulse", False, "error", str(exc), "warning"))
     try:
@@ -267,6 +277,59 @@ def _ack_linked_pulse_events(message_id: str, actor: str = "chatgpt") -> list[di
     except Exception as exc:
         cleaned.append({"error": str(exc)})
     return cleaned
+
+
+def _ensure_pending_chatgpt_wakes(project_id: str = "eiros-hub", thread_id: str = "first-contact") -> dict[str, Any]:
+    """Ensure every unhandled ChatGPT message has a live wake event without acknowledging it."""
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
+    pending = collab_engine.peek(agent_id, 50, project_id, thread_id)
+    channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    status = event_engine.status(500, channel)
+    live_by_message: dict[str, dict[str, Any]] = {}
+    for event in status.get("events", []):
+        if str(event.get("status") or "") == "acked":
+            continue
+        mid = str((event.get("payload") or {}).get("collab_message_id") or "")
+        if mid:
+            live_by_message[mid] = event
+    ensured = []
+    for message in pending.get("messages", []):
+        mid = str(message.get("message_id") or "")
+        if not mid:
+            continue
+        existing = live_by_message.get(mid)
+        if existing:
+            ensured.append({"message_id": mid, "event_id": existing.get("id"), "created": False})
+            continue
+        event = event_engine.emit(
+            text=(
+                f"EIROS_HUB_WAKE message_id={mid} from={message.get('from_agent')} "
+                f"project_id={message.get('project_id')} thread_id={message.get('thread_id')}. "
+                "This unhandled message survived a clean Room restart. Deliver it to ChatGPT as a user-originated "
+                "wake from Rico, then claim it through dialog_inbox, handle it and call dialog_ack and ack_event."
+            ),
+            source=f"collab:{message.get('from_agent')}",
+            payload={
+                "collab_message_id": mid,
+                "from_agent": message.get("from_agent"),
+                "to_agent": agent_id,
+                "project_id": message.get("project_id"),
+                "thread_id": message.get("thread_id"),
+                "kind": message.get("kind"),
+                "clean_start_replay": True,
+            },
+            priority=1000,
+            channel=channel,
+            idempotency_key=f"clean-start:{mid}:{int(time.time())}",
+        )
+        ensured.append({"message_id": mid, "event_id": event.get("id"), "created": True})
+    return {
+        "ok": True,
+        "pending_count": int(pending.get("pending_count", 0)),
+        "available_count": int(pending.get("available_count", 0)),
+        "ensured_count": len(ensured),
+        "events": ensured,
+    }
 
 
 def _delivery_receipts(messages: list[dict[str, Any]], notifications: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1238,6 +1301,7 @@ def room_cleanup_stale(
         stale_session_seconds=stale_session_seconds,
         pending_message_seconds=pending_message_seconds,
         dry_run=dry_run,
+        preserve_pending_messages=True,
     )
 
     history = collab_engine.history(project_id, thread_id, 500, 0)
@@ -1417,6 +1481,28 @@ def conversation_control_set(
 def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
     """Read current shared project room control state."""
     return collab_engine.get_control(project_id)
+
+
+@mcp.resource(
+    ROOM_LEGACY_V914_URI,
+    name="EIROS Room Legacy v9.14",
+    title="EIROS Shared Collaboration Room",
+    description="Cached v9.14 URI served with the current clean-start Room implementation.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v914() -> str:
+    return room_resource()
+
+
+@mcp.resource(
+    ROOM_LEGACY_V916_URI,
+    name="EIROS Room Legacy v9.16",
+    title="EIROS Shared Collaboration Room",
+    description="Cached v9.16 URI served with the current clean-start Room implementation.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v916() -> str:
+    return room_resource()
 
 
 @mcp.resource(
@@ -1805,21 +1891,44 @@ def open_room_launcher() -> dict[str, Any]:
 )
 def open_collab_room() -> dict[str, Any]:
     agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
+    project_id = "eiros-hub"
+    thread_id = "first-contact"
+    selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
     _ensure_room_agent(agent_id, "chatgpt")
-    try:
-        collab_engine.session_heartbeat(agent_id, "server-open-room", "chatgpt-open-collab-room", ROOM_VERSION, "online")
-    except Exception:
-        pass
-    snapshot = collab_engine.room_snapshot("eiros-hub", "first-contact", 10, 0)
+
+    # Clean start retires UI/runtime state only. Durable messages remain pending until
+    # ChatGPT actually handles them and calls dialog_ack.
+    retired = collab_engine.retire_agent_sessions(agent_id, False)
+    leader_reset = event_engine.reset_leader(selected_channel)
+    cleanup = room_cleanup_stale(
+        project_id=project_id,
+        thread_id=thread_id,
+        channel=selected_channel,
+        dry_run=False,
+        stale_session_seconds=15,
+        pending_message_seconds=300,
+    )
+    pending_wakes = _ensure_pending_chatgpt_wakes(project_id, thread_id)
+    snapshot = collab_engine.room_snapshot(project_id, thread_id, 10, 0)
     return {
         "ok": True,
         "resource_uri": ROOM_URI,
-        "project_id": "eiros-hub",
-        "thread_id": "first-contact",
+        "project_id": project_id,
+        "thread_id": thread_id,
         "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0)),
         "control": snapshot.get("control", {}),
         "room_version": ROOM_VERSION,
         "server_version": SERVER_VERSION,
+        "clean_start": {
+            "retired_sessions": int(retired.get("retired_session_count", 0)),
+            "released_stale_claims": int(retired.get("released_claim_count", 0)),
+            "messages_acknowledged": 0,
+            "leader_reset": bool(leader_reset.get("previous_leader")),
+            "closed_event_count": int(cleanup.get("cleaned_event_count", 0)),
+            "closed_brain_count": int(cleanup.get("cleaned_brain_inbox_count", 0)),
+            "pending_chatgpt_messages": int(pending_wakes.get("pending_count", 0)),
+            "wake_events_ensured": int(pending_wakes.get("ensured_count", 0)),
+        },
     }
 
 

@@ -94,6 +94,19 @@ def emit(text: str, source: str = 'remote', payload: dict[str, Any] | None = Non
 def leader_alive(leader: dict[str, Any] | None, timestamp: int) -> bool:
     return bool(leader and int(leader.get('lease_until', 0)) > timestamp)
 
+
+def reset_leader(channel: str = '') -> dict[str, Any]:
+    """Clear one stale UI leader lease without modifying queued events."""
+    target = channel_name(channel)
+    with locked_store() as store:
+        previous = store.setdefault('leaders', {}).pop(target, None)
+        return {
+            'ok': True,
+            'channel': target,
+            'previous_leader': previous,
+            'events_touched': 0,
+        }
+
 def summarize_events(events: list[dict[str, Any]], timestamp: int) -> dict[str, Any]:
     counts={'total':0,'queued':0,'in_flight':0,'awaiting_ack':0,'retry_ready':0}
     created=[]
