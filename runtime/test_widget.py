@@ -32,7 +32,7 @@ def main():
  assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
  assert "initialSystem" in room_rendered
  assert len(room_rendered.encode("utf-8")) < 50000
- assert server_v2.ROOM_URI == "ui://eiros/collab-room-v9-19-clean-start.html"
+ assert server_v2.ROOM_URI == "ui://eiros/collab-room-v9-20-browser-recovery.html"
  assert "EIROS Control" in room_rendered
  assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
  assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered and "EIROS_SCHEDULED_WAKE" in room_rendered
@@ -40,6 +40,7 @@ def main():
  assert "pending messages preserved" in room_rendered and "waiting for Room Pulse leadership" in room_rendered
  legacy914=server_v2.room_resource_legacy_v914(); legacy916=server_v2.room_resource_legacy_v916()
  assert server_v2.ROOM_VERSION in legacy914 and server_v2.ROOM_VERSION in legacy916
+ assert server_v2.ROOM_LEGACY_V919_URI == "ui://eiros/collab-room-v9-19-clean-start.html"
  source=(ROOT/"runtime"/"server_v2.py").read_text()
  assert 'call open_collab_room as the only UI-opening tool' in source
  assert '"openai/outputTemplate": ROOM_URI' in source
