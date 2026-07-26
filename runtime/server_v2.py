@@ -469,10 +469,24 @@ def _brain_inbox_prune(dry_run: bool = False) -> dict[str, Any]:
     for raw in current.get("items", []):
         item = dict(raw)
         task = tasks.get(str(item.get("id") or ""))
+        item_status = str(item.get("status") or "pending_model_turn")
+        task_status = str((task or {}).get("status") or "")
+        task_revision = int((task or {}).get("revision", 0))
+        item_revision = int(item.get("revision", 0))
         valid = bool(
             task
-            and int(task.get("revision", 0)) == int(item.get("revision", 0))
-            and str(task.get("status") or "") in {"awaiting_brain", "running"}
+            and (
+                (
+                    item_status == "pending_model_turn"
+                    and task_status == "awaiting_brain"
+                    and task_revision == item_revision
+                )
+                or (
+                    item_status == "claimed"
+                    and task_status == "running"
+                    and task_revision == item_revision + 1
+                )
+            )
         )
         if valid:
             kept.append(item)
@@ -698,6 +712,7 @@ def queue_claim(owner: str, lease_seconds: int = 180, mode: str = "brain") -> di
     if result.get("claimed"):
         task = result.get("task") or {}
         _brain_inbox_update(str(task.get("id") or ""), int(task.get("revision", 0)) - 1, "claimed", False)
+    _brain_inbox_prune(False)
     return result
 
 

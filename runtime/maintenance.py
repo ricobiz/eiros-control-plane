@@ -28,8 +28,23 @@ def run_maintenance() -> dict[str, Any]:
                 cancelled.append(task_id)
             lease = task.get("lease") or {}
             if task.get("status") == "running" and int(lease.get("expires_at", 0)) <= timestamp:
-                task["status"] = "queued"
                 task["lease"] = None
+                task["updated_at"] = timestamp
+                task["revision"] = int(task.get("revision", 0)) + 1
+                if int(task.get("attempts", 0)) >= int(task.get("max_attempts", 1)):
+                    task["status"] = "failed"
+                    task["stop_reason"] = "lease_expired_attempt_budget_exhausted"
+                else:
+                    task["status"] = "queued"
+                    task["run_at"] = timestamp
+                released_claims.append(task_id)
+            elif (
+                task.get("status") == "queued"
+                and int(task.get("attempts", 0)) >= int(task.get("max_attempts", 1))
+            ):
+                task["status"] = "failed"
+                task["lease"] = None
+                task["stop_reason"] = task.get("stop_reason") or "attempt_budget_exhausted"
                 task["updated_at"] = timestamp
                 task["revision"] = int(task.get("revision", 0)) + 1
                 released_claims.append(task_id)

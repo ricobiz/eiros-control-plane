@@ -153,17 +153,43 @@ def find_task(store: dict[str, Any], task_id: str) -> dict[str, Any]:
 
 
 def expire_leases(store: dict[str, Any]) -> None:
+    """Release expired leases and terminalize tasks that exhausted their claim budget.
+
+    A task must never remain ``queued`` after ``attempts`` reaches ``max_attempts``:
+    such a task is visible to the scheduler but can never be claimed again, creating a
+    permanent queue zombie and leaving its brain-inbox receipt stuck at ``claimed``.
+    """
     current = now()
     for task in store["tasks"]:
         normalize_task(task)
         lease = task.get("lease") or {}
         if task.get("status") == "running" and lease.get("expires_at", 0) <= current:
             previous_owner = lease.get("owner")
-            task["status"] = "queued"
             task["lease"] = None
-            task["run_at"] = current
             task["updated_at"] = current
-            event(store, task["id"], "lease_expired", {"owner": previous_owner})
+            task["revision"] = int(task.get("revision", 0)) + 1
+            if int(task.get("attempts", 0)) >= int(task.get("max_attempts", 1)):
+                task["status"] = "failed"
+                task["stop_reason"] = "lease_expired_attempt_budget_exhausted"
+                event(store, task["id"], "lease_expired_failed", {"owner": previous_owner})
+            else:
+                task["status"] = "queued"
+                task["run_at"] = current
+                event(store, task["id"], "lease_expired", {"owner": previous_owner})
+
+        if (
+            task.get("status") == "queued"
+            and int(task.get("attempts", 0)) >= int(task.get("max_attempts", 1))
+        ):
+            task["status"] = "failed"
+            task["lease"] = None
+            task["stop_reason"] = task.get("stop_reason") or "attempt_budget_exhausted"
+            task["updated_at"] = current
+            task["revision"] = int(task.get("revision", 0)) + 1
+            event(store, task["id"], "attempt_budget_exhausted", {
+                "attempts": int(task.get("attempts", 0)),
+                "max_attempts": int(task.get("max_attempts", 1)),
+            })
 
 
 def due(task: dict[str, Any], current: int | None = None) -> bool:
