@@ -30,6 +30,7 @@ WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
 ROOM_URI = "ui://eiros/collab-room-v9-20-browser-recovery.html"
 ROOM_LEGACY_V919_URI = "ui://eiros/collab-room-v9-19-clean-start.html"
+ROOM_LEGACY_V94_LOCALWAKE_URI = "ui://eiros/collab-room-v9-4-localwake.html"
 ROOM_LEGACY_V918_URI = "ui://eiros/collab-room-v9-18-touch-green.html"
 ROOM_LEGACY_V914_URI = "ui://eiros/collab-room-v9-14-room-claims-pulse.html"
 ROOM_LEGACY_V916_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
@@ -1484,6 +1485,22 @@ def conversation_control_set(
 def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
     """Read current shared project room control state."""
     return collab_engine.get_control(project_id)
+
+
+@mcp.resource(
+    ROOM_LEGACY_V94_LOCALWAKE_URI,
+    name="EIROS Room Legacy v9.4 Local Wake",
+    title="EIROS Shared Collaboration Room",
+    description="Compatibility resource for installed dev app versions that still reference the v9.4 local-wake template.",
+    mime_type="text/html;profile=mcp-app",
+    meta={
+        "ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": []}},
+        "openai/widgetDescription": "Shared EIROS collaboration room for ChatGPT, Claude and Rico.",
+        "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    },
+)
+def room_resource_legacy_v94_localwake() -> str:
+    return room_resource()
 
 
 @mcp.resource(

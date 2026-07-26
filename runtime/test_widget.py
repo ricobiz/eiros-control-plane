@@ -41,6 +41,8 @@ def main():
  legacy914=server_v2.room_resource_legacy_v914(); legacy916=server_v2.room_resource_legacy_v916()
  assert server_v2.ROOM_VERSION in legacy914 and server_v2.ROOM_VERSION in legacy916
  assert server_v2.ROOM_LEGACY_V919_URI == "ui://eiros/collab-room-v9-19-clean-start.html"
+ assert server_v2.ROOM_LEGACY_V94_LOCALWAKE_URI == "ui://eiros/collab-room-v9-4-localwake.html"
+ assert server_v2.ROOM_VERSION in server_v2.room_resource_legacy_v94_localwake()
  source=(ROOT/"runtime"/"server_v2.py").read_text()
  assert 'call open_collab_room as the only UI-opening tool' in source
  assert '"openai/outputTemplate": ROOM_URI' in source
