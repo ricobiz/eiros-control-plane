@@ -75,3 +75,5 @@ deploy/claude-sslip.secure.nginx.conf
 runtime/.claude_vps_ops_url
 deploy/test_private_route.py
 deploy/test_private_route_https.py
+
+.worktrees/
