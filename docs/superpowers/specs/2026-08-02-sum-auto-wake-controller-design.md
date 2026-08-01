@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-02
 
-**Status:** Approved design, pending user review
+**Status:** Approved for implementation
 
 **Target:** EIROS Wake Listener / fullscreen Control Room
 
@@ -92,6 +92,20 @@ ERROR
 
 ## 5. Wake acknowledgement contract
 
+### Natural Rico-authorized wake message
+
+The SUM continuation wake enters ChatGPT as a normal `role: user` message authorized by Rico. Its visible content is natural conversational language and contains no protocol headers, identifiers, JSON, tool instructions, or technical markers.
+
+The initial fixed wake phrase is exactly:
+
+```text
+Отлично, продолжай.
+```
+
+Retries send the same natural phrase. `controller_id`, `cycle_id`, `wake_id`, `awake_epoch`, and attempt counters remain exclusively in durable server state and logs. The Listener does not expose them in the visible message.
+
+On receiving this phrase while a SUM wake is outstanding, ChatGPT confirms the current pending wake through `sum_wake_ack_current(actor="chatgpt")`. The server resolves immutable identifiers from authoritative state. A lower-level explicit-ID ACK remains available for diagnostics only.
+
 Delivery is not considered successful merely because `ui/message` accepted the request.
 
 Each wake has immutable identifiers:
@@ -105,16 +119,10 @@ attempt
 sent_at
 ```
 
-The first EIROS action after ChatGPT receives a SUM wake is an explicit acknowledgement:
+The first EIROS action after ChatGPT receives a SUM wake is an explicit acknowledgement of the authoritative pending wake:
 
 ```text
-sum_wake_ack(
-  controller_id,
-  cycle_id,
-  wake_id,
-  awake_epoch,
-  assistant_actor
-)
+sum_wake_ack_current(actor="chatgpt")
 ```
 
 On valid ACK:
