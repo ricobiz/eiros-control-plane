@@ -43,6 +43,7 @@ ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 PULSE_ANCHOR_HTML = CODE_ROOT / "runtime" / "pulse_anchor.html"
+PULSE_V57_HTML = CODE_ROOT / "runtime" / "pulse_anchor_v57.html"
 PIP_CONTROLLER_JS = CODE_ROOT / "runtime" / "pip_controller.js"
 WIDGET_LIFECYCLE_JS = CODE_ROOT / "runtime" / "widget_lifecycle.js"
 PULSE_INLINE_HTML = CODE_ROOT / "runtime" / "pulse_listener_inline.html"
@@ -58,6 +59,8 @@ CONTROL_PILL_HTML = CODE_ROOT / "runtime" / "control_pill.html"
 PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v5-6-storage-safe-host-pip.html"
 PULSE_FRESH_URI = "ui://eiros/pulse-anchor-v5-7-self-diagnostic-pip.html"
 PULSE_FRESH_VERSION = "0.5.7-self-diagnostic-pip"
+PULSE_SUM_URI = "ui://eiros/pulse-anchor-v5-8-sum-auto-wake.html"
+PULSE_SUM_VERSION = "0.5.8-sum-auto-wake"
 WIDGET_MOUNT_ATTEMPTS_FILE = ROOT / "runtime" / "widget-mount-attempts.json"
 PULSE_ANCHOR_LEGACY_V44_URI = "ui://eiros/pulse-anchor-v4-4-relay-user-wake.html"
 PULSE_ANCHOR_LEGACY_V45_URI = "ui://eiros/pulse-anchor-v4-5-confirmed-user-turn.html"
@@ -2713,8 +2716,15 @@ def _render_pulse_html() -> str:
     return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
-def _render_pulse_anchor_html(anchor_version: str = PULSE_ANCHOR_VERSION, mount_id: str = "", session_prefix: str = "pulse-v56") -> str:
-    html = PULSE_ANCHOR_HTML.read_text(encoding="utf-8")
+def _render_pulse_anchor_template(
+    template_path: Path,
+    anchor_version: str,
+    mount_id: str,
+    session_prefix: str,
+    *,
+    include_sum_controller: bool,
+) -> str:
+    html = template_path.read_text(encoding="utf-8")
     bootstrap = {
         "instanceId": INSTANCE_CONFIG.get("instance_id"),
         "channel": INSTANCE_CONFIG.get("channel", "default"),
@@ -2727,7 +2737,9 @@ def _render_pulse_anchor_html(anchor_version: str = PULSE_ANCHOR_VERSION, mount_
         "mountId": mount_id,
         "expectedWidgetKind": "listener",
         "sessionPrefix": session_prefix,
-        "sumController": {
+    }
+    if include_sum_controller:
+        bootstrap["sumController"] = {
             "available": True,
             "enabledByDefault": False,
             "naturalWakeText": "Отлично, продолжай.",
@@ -2735,13 +2747,46 @@ def _render_pulse_anchor_html(anchor_version: str = PULSE_ANCHOR_VERSION, mount_
             "ackTimeoutMs": 8000,
             "retryIntervalMs": 5000,
             "maxWakeAttempts": 5,
-        },
-    }
+        }
     return (
         html.replace("__EIROS_ANCHOR_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
-        .replace("__ANCHOR_VERSION__", PULSE_ANCHOR_VERSION)
+        .replace("__ANCHOR_VERSION__", anchor_version)
         .replace("__EIROS_WIDGET_LIFECYCLE_JS__", WIDGET_LIFECYCLE_JS.read_text(encoding="utf-8"))
         .replace("__EIROS_PIP_CONTROLLER_JS__", PIP_CONTROLLER_JS.read_text(encoding="utf-8"))
+    )
+
+
+def _render_pulse_anchor_html(
+    anchor_version: str = PULSE_ANCHOR_VERSION,
+    mount_id: str = "",
+    session_prefix: str = "pulse-v56",
+) -> str:
+    return _render_pulse_anchor_template(
+        PULSE_ANCHOR_HTML,
+        anchor_version,
+        mount_id,
+        session_prefix,
+        include_sum_controller=True,
+    )
+
+
+def _render_pulse_v57_html(mount_id: str = "") -> str:
+    return _render_pulse_anchor_template(
+        PULSE_V57_HTML,
+        PULSE_FRESH_VERSION,
+        mount_id,
+        "pulse-v57",
+        include_sum_controller=False,
+    )
+
+
+def _render_pulse_sum_html(mount_id: str = "") -> str:
+    return _render_pulse_anchor_template(
+        PULSE_ANCHOR_HTML,
+        PULSE_SUM_VERSION,
+        mount_id,
+        "pulse-v58",
+        include_sum_controller=True,
     )
 
 
@@ -2938,15 +2983,28 @@ def pulse_inline_resource() -> str:
 
 @app_resource(
     PULSE_FRESH_URI,
-    name="EIROS Self-Diagnostic Pulse Anchor",
-    title="EIROS Wake Listener",
-    description="Fresh self-diagnostic wake listener with boot-stage telemetry and PiP.",
+    name="EIROS Self-Diagnostic Pulse Anchor v5.7",
+    title="EIROS Wake Listener v5.7",
+    description="Preserved v5.7 rollback listener with boot-stage telemetry and PiP.",
     mime_type="text/html;profile=mcp-app",
     meta=PULSE_RESOURCE_META,
 )
 def pulse_fresh_resource() -> str:
     attempt = _mark_widget_resource_served(PULSE_FRESH_URI)
-    return _render_pulse_anchor_html(PULSE_FRESH_VERSION, str(attempt.get("mount_id") or ""), "pulse-v57")
+    return _render_pulse_v57_html(str(attempt.get("mount_id") or ""))
+
+
+@app_resource(
+    PULSE_SUM_URI,
+    name="EIROS SUM Auto-Wake Listener v5.8",
+    title="EIROS SUM Wake Listener",
+    description="SUM auto-wake listener with visible state machine, host monitoring and natural user continuation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_sum_resource() -> str:
+    attempt = _mark_widget_resource_served(PULSE_SUM_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
 
 
 @app_resource(
@@ -3110,6 +3168,35 @@ def open_pulse_v57() -> dict[str, Any]:
 
 
 @mcp.tool(
+    name="open_pulse_v58",
+    title="Open EIROS SUM Auto-Wake Listener",
+    description="Mount the v5.8 SUM listener with visible states, host monitoring and natural continuation messages.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={
+        "ui": {"resourceUri": PULSE_SUM_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_SUM_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS SUM listener…",
+        "openai/toolInvocation/invoked": "EIROS SUM listener requested.",
+    },
+    structured_output=True,
+)
+def open_pulse_v58() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_pulse_v58", PULSE_SUM_URI, PULSE_SUM_VERSION, "listener")
+    selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    status = event_engine.status(20, selected_channel)
+    return {
+        "ok": True,
+        "mount_id": attempt["mount_id"],
+        "resource_uri": PULSE_SUM_URI,
+        "anchor_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+        "pending_event_count": int(status.get("pending_count", 0)),
+        "latest_seq": int(status.get("latest_seq", 0)),
+    }
+
+
+@mcp.tool(
     name="open_pulse",
     title="Open EIROS Pulse Anchor",
     description="Mount the dedicated reverse-wake listener for this ChatGPT conversation.",
@@ -3225,7 +3312,7 @@ def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: 
     # v0.4.5 compatibility singletons; intermediate experiments stay blocked.
     legacy_v45 = identity.startswith("pulse-chatgpt-")
     supported_generation = identity.startswith(
-        ("pulse-v49-", "pulse-v55-", "pulse-v56-", "pulse-v57-")
+        ("pulse-v49-", "pulse-v55-", "pulse-v56-", "pulse-v57-", "pulse-v58-")
     )
     if identity.startswith("pulse-") and not (legacy_v45 or supported_generation):
         return {

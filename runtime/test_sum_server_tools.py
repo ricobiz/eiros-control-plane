@@ -122,3 +122,32 @@ def test_connector_instructions_hide_ack_behind_natural_continuation() -> None:
     assert "Отлично, продолжай." in source
     assert "call sum_wake_ack_current as the first tool action" in source
     assert "do not expose SUM identifiers in the visible chat" in source
+
+
+def test_v58_sum_resource_is_separate_from_v57_rollback() -> None:
+    from runtime import server_v2
+
+    assert server_v2.PULSE_SUM_URI == "ui://eiros/pulse-anchor-v5-8-sum-auto-wake.html"
+    assert server_v2.PULSE_SUM_VERSION == "0.5.8-sum-auto-wake"
+    assert server_v2.PULSE_FRESH_VERSION == "0.5.7-self-diagnostic-pip"
+
+    tools = server_v2.mcp._tool_manager._tools
+    tool = tools["open_pulse_v58"]
+    assert tool.meta["ui"]["resourceUri"] == server_v2.PULSE_SUM_URI
+    assert tool.meta["openai/outputTemplate"] == server_v2.PULSE_SUM_URI
+
+    registered = {str(uri) for uri in server_v2.mcp._resource_manager._resources}
+    assert server_v2.PULSE_SUM_URI in registered
+    assert server_v2.PULSE_FRESH_URI in registered
+
+    v58 = server_v2._render_pulse_sum_html()
+    v57 = server_v2._render_pulse_v57_html()
+    assert "AUTO WAKE CYCLE" in v58
+    assert "0.5.8-sum-auto-wake" in v58
+    assert "AUTO WAKE CYCLE" not in v57
+    assert "0.5.7-self-diagnostic-pip" in v57
+
+
+def test_pulse_poll_accepts_v58_listener_generation() -> None:
+    source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
+    assert '"pulse-v58-"' in source
