@@ -12,6 +12,7 @@ EXPECTED_TOOLS = {
     "sum_controller_tick",
     "sum_wake_sent",
     "sum_wake_ack_current",
+    "sum_turn_complete_current",
     "sum_wake_ack",
     "sum_controller_log",
 }
@@ -26,6 +27,7 @@ APP_ONLY_TOOLS = {
 MODEL_AND_APP_TOOLS = {
     "sum_controller_status",
     "sum_wake_ack_current",
+    "sum_turn_complete_current",
     "sum_wake_ack",
     "sum_controller_log",
 }
@@ -283,3 +285,71 @@ def test_cached_control_pill_tool_mounts_compat_sum_listener() -> None:
     assert result["resource_uri"] == server_v2.CONTROL_PILL_URI
     assert result["expected_widget_kind"] == "listener"
     assert result["mount_id"].startswith("mount-")
+
+
+def test_cached_widget_test_tool_mounts_compat_sum_listener() -> None:
+    from runtime import server_v2
+
+    html = server_v2.widget_test_resource()
+    assert "AUTO WAKE CYCLE" in html
+    assert server_v2.PULSE_SUM_VERSION in html
+    result = server_v2.open_widget_test()
+    assert result["listener_version"] == server_v2.PULSE_SUM_VERSION
+    assert result["resource_uri"] == server_v2.WIDGET_TEST_URI
+    assert result["expected_widget_kind"] == "listener"
+
+
+def test_sum_turn_complete_current_releases_hard_turn_lock(tmp_path: Path, monkeypatch) -> None:
+    from runtime import server_v2
+
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+    )
+    monkeypatch.setattr(server_v2, "SUM_CONTROLLER", store)
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    store.tick("listener-1", pip_active=True, listener_healthy=True)
+    store.mark_wake_sent("listener-1", "bridge-confirmed")
+    acked = server_v2.sum_wake_ack_current(actor="chatgpt", listener_session_id="listener-1")
+    assert acked["turn_locked"] is True
+
+    completed = server_v2.sum_turn_complete_current(
+        actor="chatgpt",
+        listener_session_id="listener-1",
+    )
+
+    assert completed["turn_locked"] is False
+    assert completed["state"] == "STATIC_DEBOUNCE"
+    assert completed["turn_completed_at"] > 0
+
+
+def test_cached_catalog_set_state_dispatches_turn_complete(tmp_path: Path, monkeypatch) -> None:
+    from runtime import server_v2
+
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+    )
+    monkeypatch.setattr(server_v2, "SUM_CONTROLLER", store)
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    store.tick("listener-1", pip_active=True, listener_healthy=True)
+    store.mark_wake_sent("listener-1", "bridge-confirmed")
+    server_v2.set_state(
+        "sum_wake_ack_current",
+        {"actor": "chatgpt", "listener_session_id": "listener-1"},
+    )
+
+    completed = server_v2.set_state(
+        "sum_turn_complete_current",
+        {"actor": "chatgpt", "listener_session_id": "listener-1"},
+    )
+
+    assert completed["turn_locked"] is False
+    assert completed["state"] == "STATIC_DEBOUNCE"
+
+
+def test_connector_instructions_require_turn_complete_as_last_tool_action() -> None:
+    source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
+    assert "sum_turn_complete_current" in source
+    assert "as the final tool action before ending the turn" in source
+    assert 'sum_turn_complete_current' in source and 'set_state with status=' in source

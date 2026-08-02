@@ -72,6 +72,10 @@ class SumControllerStore:
             "wake_response_started_at": 0,
             "last_acked_wake_id": "",
             "activity_observed": False,
+            "turn_locked": False,
+            "turn_started_at": 0,
+            "turn_completed_at": 0,
+            "host_static_observed_at": 0,
             "stop_reason": None,
             "error_code": "",
             "counters": {
@@ -100,6 +104,10 @@ class SumControllerStore:
             raise RuntimeError("SUM controller state must be a JSON object")
         value.setdefault("wake_wait_until", 0)
         value.setdefault("wake_response_started_at", 0)
+        value.setdefault("turn_locked", False)
+        value.setdefault("turn_started_at", 0)
+        value.setdefault("turn_completed_at", 0)
+        value.setdefault("host_static_observed_at", 0)
         limits = value.setdefault("limits", {})
         limits.update({
             "static_debounce_seconds": self.static_debounce_seconds,
@@ -214,6 +222,10 @@ class SumControllerStore:
         state["wake_response_started_at"] = 0
         state["last_static_candidate_at"] = 0
         state["activity_observed"] = False
+        state["turn_locked"] = False
+        state["turn_started_at"] = 0
+        state["turn_completed_at"] = 0
+        state["host_static_observed_at"] = 0
         state["state_entered_at"] = timestamp
         state["error_code"] = ""
         state["stop_reason"] = None
@@ -250,6 +262,10 @@ class SumControllerStore:
             state["send_required"] = False
             state["wake_wait_until"] = 0
             state["wake_response_started_at"] = 0
+            state["turn_locked"] = False
+            state["turn_started_at"] = 0
+            state["turn_completed_at"] = 0
+            state["host_static_observed_at"] = 0
             if enabled and not int(state.get("started_at", 0)):
                 state["started_at"] = timestamp
             return self._commit(
@@ -273,6 +289,8 @@ class SumControllerStore:
             if not pip_active or not listener_healthy:
                 return dict(state)
             current = str(state.get("state") or "IDLE")
+            if bool(state.get("turn_locked")):
+                return dict(state)
             if current == "ARMED":
                 return self._start_wake(
                     state,
@@ -405,6 +423,10 @@ class SumControllerStore:
             state["error_code"] = ""
             state["stop_reason"] = None
             state["activity_observed"] = False
+            state["turn_locked"] = True
+            state["turn_started_at"] = self._timestamp()
+            state["turn_completed_at"] = 0
+            state["host_static_observed_at"] = 0
             if listener_session_id:
                 state["listener_session_id"] = str(listener_session_id)[:180]
             state["counters"]["wakes_acked"] = int(
@@ -460,7 +482,11 @@ class SumControllerStore:
                     host_signal=str(signal or "")[:120],
                     detail=detail,
                 )
-            if active is True and previous_state in {"AWAKE", "WORKING", "STATIC_DEBOUNCE"}:
+            if (
+                active is True
+                and bool(state.get("turn_locked"))
+                and previous_state in {"AWAKE", "WORKING", "STATIC_DEBOUNCE"}
+            ):
                 state["state"] = "WORKING"
                 state["color"] = "yellow"
                 state["state_entered_at"] = timestamp if previous_state != "WORKING" else state["state_entered_at"]
@@ -475,20 +501,55 @@ class SumControllerStore:
                     host_signal=str(signal or "")[:120],
                     detail=detail,
                 )
-            if active is False and previous_state == "WORKING" and bool(state.get("activity_observed")):
-                state["state"] = "STATIC_DEBOUNCE"
-                state["color"] = "green"
-                state["state_entered_at"] = timestamp
-                state["last_static_candidate_at"] = timestamp
+            if (
+                active is False
+                and previous_state == "WORKING"
+                and bool(state.get("activity_observed"))
+                and bool(state.get("turn_locked"))
+            ):
+                state["host_static_observed_at"] = timestamp
                 return self._commit(
                     state,
                     previous_state=previous_state,
-                    reason="STATIC_CANDIDATE",
+                    reason="HOST_STATIC_OBSERVED_TURN_LOCKED",
                     actor="listener",
                     host_signal=str(signal or "")[:120],
                     detail=detail,
                 )
             return dict(state)
+
+    def complete_current_turn(
+        self,
+        *,
+        actor: str,
+        listener_session_id: str = "",
+    ) -> dict[str, Any]:
+        with self._locked_state() as state:
+            wake_id = str(state.get("wake_id") or "")
+            if not wake_id or str(state.get("last_acked_wake_id") or "") != wake_id:
+                return dict(state)
+            if not bool(state.get("turn_locked")):
+                return dict(state)
+            previous_state = str(state.get("state") or "IDLE")
+            if previous_state not in {"AWAKE", "WORKING", "STATIC_DEBOUNCE"}:
+                return dict(state)
+            timestamp = self._timestamp()
+            state["turn_locked"] = False
+            state["turn_completed_at"] = timestamp
+            state["state"] = "STATIC_DEBOUNCE"
+            state["color"] = "green"
+            state["state_entered_at"] = timestamp
+            state["last_static_candidate_at"] = timestamp
+            state["activity_observed"] = False
+            state["host_static_observed_at"] = timestamp
+            if listener_session_id:
+                state["listener_session_id"] = str(listener_session_id)[:180]
+            return self._commit(
+                state,
+                previous_state=previous_state,
+                reason="TURN_COMPLETE",
+                actor=str(actor or "unknown")[:80],
+            )
 
     def reset_statistics(
         self,
@@ -516,6 +577,10 @@ class SumControllerStore:
             state["last_wake_sent_at"] = 0
             state["last_acked_wake_id"] = ""
             state["activity_observed"] = False
+            state["turn_locked"] = False
+            state["turn_started_at"] = 0
+            state["turn_completed_at"] = 0
+            state["host_static_observed_at"] = 0
             state["stop_reason"] = "statistics_reset"
             state["error_code"] = ""
             state["counters"] = {

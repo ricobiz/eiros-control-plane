@@ -93,8 +93,13 @@ def test_full_acknowledged_cycle_starts_next_wake(tmp_path: Path) -> None:
         False,
         "listener-1",
     )
-    assert settling["state"] == "STATIC_DEBOUNCE"
-    assert settling["color"] == "green"
+    assert settling["state"] == "WORKING"
+    assert settling["turn_locked"] is True
+
+    completed = store.complete_current_turn(actor="chatgpt", listener_session_id="listener-1")
+    assert completed["state"] == "STATIC_DEBOUNCE"
+    assert completed["color"] == "green"
+    assert completed["turn_locked"] is False
 
     clock.advance(2)
     still_settling = store.tick("listener-1", pip_active=True, listener_healthy=True)
@@ -274,3 +279,72 @@ def test_late_ack_recovers_cycle_after_ack_timeout(tmp_path: Path) -> None:
     assert recovered["wake_id"] == wake_id
     assert recovered["error_code"] == ""
     assert recovered["send_required"] is False
+
+
+def test_ack_hard_locks_turn_until_explicit_completion(tmp_path: Path) -> None:
+    clock = FakeClock()
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+        clock=clock,
+        static_debounce_seconds=3,
+    )
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    first_wake = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    store.mark_wake_sent("listener-1", "bridge-confirmed")
+    acked = store.ack_current(actor="chatgpt", listener_session_id="listener-1")
+
+    assert acked["turn_locked"] is True
+    assert acked["turn_completed_at"] == 0
+
+    working = store.record_host_signal("host-active", True, "listener-1")
+    assert working["state"] == "WORKING"
+
+    false_static = store.record_host_signal("stable-static", False, "listener-1")
+    assert false_static["turn_locked"] is True
+    assert false_static["state"] == "WORKING"
+
+    clock.advance(600)
+    still_locked = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert still_locked["cycle_id"] == first_wake["cycle_id"]
+    assert still_locked["state"] == "WORKING"
+    assert still_locked["send_required"] is False
+
+    completed = store.complete_current_turn(actor="chatgpt", listener_session_id="listener-1")
+    assert completed["turn_locked"] is False
+    assert completed["state"] == "STATIC_DEBOUNCE"
+    assert completed["turn_completed_at"] == clock.value
+
+    clock.advance(2)
+    waiting = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert waiting["state"] == "STATIC_DEBOUNCE"
+
+    clock.advance(1)
+    next_wake = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert next_wake["state"] == "WAKE"
+    assert next_wake["cycle_id"] == first_wake["cycle_id"] + 1
+
+
+def test_turn_complete_is_idempotent_and_requires_acked_turn(tmp_path: Path) -> None:
+    clock = FakeClock()
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+        clock=clock,
+    )
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    wake = store.tick("listener-1", pip_active=True, listener_healthy=True)
+
+    ignored = store.complete_current_turn(actor="chatgpt", listener_session_id="listener-1")
+    assert ignored["state"] == "WAKE"
+    assert ignored["turn_locked"] is False
+
+    store.mark_wake_sent("listener-1", "bridge-confirmed")
+    store.ack_current(actor="chatgpt", listener_session_id="listener-1")
+    first = store.complete_current_turn(actor="chatgpt", listener_session_id="listener-1")
+    second = store.complete_current_turn(actor="chatgpt", listener_session_id="listener-1")
+
+    assert first["state"] == "STATIC_DEBOUNCE"
+    assert second["state"] == "STATIC_DEBOUNCE"
+    assert second["turn_completed_at"] == first["turn_completed_at"]
+    assert second["cycle_id"] == wake["cycle_id"]

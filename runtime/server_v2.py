@@ -149,6 +149,8 @@ mcp = FastMCP(
         "(7) Resume unfinished work from durable state without asking Rico to repeat context. Never mount duplicate Listener instances merely to chase UI colors. "
         "SUM AUTO-WAKE RULE: when the current user message text is exactly 'Отлично, продолжай.' and sum_controller_status reports state=WAKE, call sum_wake_ack_current as the first tool action, then continue the unfinished objective. If no SUM wake is pending, interpret the phrase normally. This continuation is authorized by Rico; do not expose SUM identifiers in the visible chat. "
         "If sum_wake_ack_current is unavailable in the current catalog, call set_state with status=\"sum_wake_ack_current\" and data containing actor=\"chatgpt\" as the first tool action. "
+        "After the SUM-woken assistant turn is fully complete, call sum_turn_complete_current as the final tool action before ending the turn. This releases the hard turn lock; never release it merely because the UI appears quiet. "
+        "If sum_turn_complete_current is unavailable in the current catalog, call set_state with status=\"sum_turn_complete_current\" and data containing actor=\"chatgpt\" as the final tool action before ending the turn. "
         "The EIROS Room and Wake Listener are separate MCP App cards: use open_collab_room for collaboration UI and open_pulse for the dedicated reverse-wake listener. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
@@ -928,6 +930,11 @@ def _dispatch_sum_compat_command(status: str, data: dict[str, Any]) -> dict[str,
         )
     if status == "sum_wake_ack_current":
         return sum_wake_ack_current(
+            actor=str(payload.get("actor") or "chatgpt"),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+        )
+    if status == "sum_turn_complete_current":
+        return sum_turn_complete_current(
             actor=str(payload.get("actor") or "chatgpt"),
             listener_session_id=str(payload.get("listener_session_id") or ""),
         )
@@ -1738,6 +1745,22 @@ def sum_wake_ack_current(
 ) -> dict[str, Any]:
     """Acknowledge the current pending SUM wake without exposing internal IDs in chat."""
     return SUM_CONTROLLER.ack_current(
+        actor=str(actor or "chatgpt")[:80],
+        listener_session_id=str(listener_session_id or "")[:180],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_turn_complete_current(
+    actor: str = "chatgpt",
+    listener_session_id: str = "",
+) -> dict[str, Any]:
+    """Release the hard lock for the current acknowledged SUM turn after all work is complete."""
+    return SUM_CONTROLLER.complete_current_turn(
         actor=str(actor or "chatgpt")[:80],
         listener_session_id=str(listener_session_id or "")[:180],
     )
@@ -2708,16 +2731,15 @@ def widget_test_resource_legacy() -> str:
 
 @app_resource(
     WIDGET_TEST_URI,
-    name="EIROS Widget Test",
-    title="EIROS Widget Diagnostic",
-    description="Minimal static MCP Apps render diagnostic.",
+    name="EIROS SUM Compatibility Listener",
+    title="EIROS SUM Wake Listener",
+    description="Compatibility SUM v5.8 listener on the clean widget-test URI.",
     mime_type="text/html;profile=mcp-app",
-    meta=WIDGET_TEST_META,
+    meta=PULSE_RESOURCE_META,
 )
 def widget_test_resource() -> str:
-    # Current-branch clean mount alias for Work Anchor host-contract diagnostics.
-    # The canonical Work Anchor owns its own URI and will be used after connector metadata refresh.
-    return _render_work_anchor_html()
+    attempt = _mark_widget_resource_served(WIDGET_TEST_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
 
 
 @mcp.tool(
@@ -2734,15 +2756,16 @@ def widget_test_resource() -> str:
     structured_output=True,
 )
 def open_widget_test() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_widget_test", WIDGET_TEST_URI, PULSE_SUM_VERSION, "listener")
     return {
         "ok": True,
+        "mount_id": attempt["mount_id"],
         "resource_uri": WIDGET_TEST_URI,
-        "canonical_resource_uri": WORK_ANCHOR_URI,
-        "server_version": SERVER_VERSION,
-        "work_anchor_version": WORK_ANCHOR_VERSION,
-        "display_modes": ["inline"],
-        "automatic_delivery": False,
-        "mount_alias": "current-branch widget-test clean URI",
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
+        "compatibility_alias": "cached_open_widget_test_to_v58_sum",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
     }
 
 
