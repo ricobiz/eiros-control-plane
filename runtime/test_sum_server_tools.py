@@ -151,3 +151,18 @@ def test_v58_sum_resource_is_separate_from_v57_rollback() -> None:
 def test_pulse_poll_accepts_v58_listener_generation() -> None:
     source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
     assert '"pulse-v58-"' in source
+
+
+def test_cached_inline_tool_alias_mounts_v58_sum_listener() -> None:
+    from runtime import server_v2
+
+    html = server_v2.pulse_inline_resource()
+    assert "AUTO WAKE CYCLE" in html
+    assert server_v2.PULSE_SUM_VERSION in html
+
+    result = server_v2.open_inline_listener()
+    assert result["resource_uri"] == server_v2.PULSE_INLINE_URI
+    assert result["listener_version"] == server_v2.PULSE_SUM_VERSION
+    assert result["expected_widget_kind"] == "listener"
+    assert result["mount_id"].startswith("mount-")
+    assert result["diagnostic_next_action"].startswith("call widget_boot_status")

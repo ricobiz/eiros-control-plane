@@ -2978,7 +2978,8 @@ def eiros_console_resource() -> str:
     meta=PULSE_RESOURCE_META,
 )
 def pulse_inline_resource() -> str:
-    return _render_pulse_inline_html()
+    attempt = _mark_widget_resource_served(PULSE_INLINE_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
 
 
 @app_resource(
@@ -3129,12 +3130,17 @@ def open_eiros_console() -> dict[str, Any]:
     structured_output=True,
 )
 def open_inline_listener() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_inline_listener", PULSE_INLINE_URI, PULSE_SUM_VERSION, "listener")
     return {
         "ok": True,
+        "mount_id": attempt["mount_id"],
         "resource_uri": PULSE_INLINE_URI,
-        "listener_version": PULSE_INLINE_VERSION,
-        "display_modes": ["inline"],
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
         "channel": str(INSTANCE_CONFIG.get("channel", "default")),
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+        "compatibility_alias": "cached_schema_open_inline_listener_to_v58_sum",
     }
 
 
