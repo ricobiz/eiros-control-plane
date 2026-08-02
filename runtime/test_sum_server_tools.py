@@ -166,3 +166,22 @@ def test_cached_inline_tool_alias_mounts_v58_sum_listener() -> None:
     assert result["expected_widget_kind"] == "listener"
     assert result["mount_id"].startswith("mount-")
     assert result["diagnostic_next_action"].startswith("call widget_boot_status")
+
+
+def test_cached_v57_tool_mounts_v58_and_preserves_rollback_resource() -> None:
+    from runtime import server_v2
+
+    mounted = server_v2.pulse_fresh_resource()
+    rollback = server_v2.pulse_v57_rollback_resource()
+    result = server_v2.open_pulse_v57()
+
+    assert "AUTO WAKE CYCLE" in mounted
+    assert server_v2.PULSE_SUM_VERSION in mounted
+    assert "AUTO WAKE CYCLE" not in rollback
+    assert server_v2.PULSE_FRESH_VERSION in rollback
+    assert result["anchor_version"] == server_v2.PULSE_SUM_VERSION
+    assert result["compatibility_alias"] == "cached_open_pulse_v57_to_v58_sum"
+    assert result["rollback_resource_uri"] == server_v2.PULSE_V57_ROLLBACK_URI
+    assert server_v2.PULSE_V57_ROLLBACK_URI in {
+        str(uri) for uri in server_v2.mcp._resource_manager._resources
+    }

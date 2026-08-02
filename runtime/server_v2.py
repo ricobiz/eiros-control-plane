@@ -59,6 +59,7 @@ CONTROL_PILL_HTML = CODE_ROOT / "runtime" / "control_pill.html"
 PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v5-6-storage-safe-host-pip.html"
 PULSE_FRESH_URI = "ui://eiros/pulse-anchor-v5-7-self-diagnostic-pip.html"
 PULSE_FRESH_VERSION = "0.5.7-self-diagnostic-pip"
+PULSE_V57_ROLLBACK_URI = "ui://eiros/pulse-anchor-v5-7-rollback.html"
 PULSE_SUM_URI = "ui://eiros/pulse-anchor-v5-8-sum-auto-wake.html"
 PULSE_SUM_VERSION = "0.5.8-sum-auto-wake"
 WIDGET_MOUNT_ATTEMPTS_FILE = ROOT / "runtime" / "widget-mount-attempts.json"
@@ -2984,15 +2985,27 @@ def pulse_inline_resource() -> str:
 
 @app_resource(
     PULSE_FRESH_URI,
-    name="EIROS Self-Diagnostic Pulse Anchor v5.7",
-    title="EIROS Wake Listener v5.7",
-    description="Preserved v5.7 rollback listener with boot-stage telemetry and PiP.",
+    name="EIROS SUM Compatibility Listener",
+    title="EIROS SUM Wake Listener",
+    description="Compatibility mount for cached ChatGPT schemas; serves the current v5.8 SUM listener.",
     mime_type="text/html;profile=mcp-app",
     meta=PULSE_RESOURCE_META,
 )
 def pulse_fresh_resource() -> str:
     attempt = _mark_widget_resource_served(PULSE_FRESH_URI)
-    return _render_pulse_v57_html(str(attempt.get("mount_id") or ""))
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
+
+
+@app_resource(
+    PULSE_V57_ROLLBACK_URI,
+    name="EIROS Wake Listener v5.7 Rollback",
+    title="EIROS Wake Listener v5.7 Rollback",
+    description="Preserved v5.7 listener rollback implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_v57_rollback_resource() -> str:
+    return _render_pulse_v57_html("")
 
 
 @app_resource(
@@ -3158,18 +3171,20 @@ def open_inline_listener() -> dict[str, Any]:
     structured_output=True,
 )
 def open_pulse_v57() -> dict[str, Any]:
-    attempt = _record_widget_mount_attempt("open_pulse_v57", PULSE_FRESH_URI, PULSE_FRESH_VERSION, "listener")
+    attempt = _record_widget_mount_attempt("open_pulse_v57", PULSE_FRESH_URI, PULSE_SUM_VERSION, "listener")
     selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
     status = event_engine.status(20, selected_channel)
     return {
         "ok": True,
         "mount_id": attempt["mount_id"],
         "resource_uri": PULSE_FRESH_URI,
-        "anchor_version": PULSE_FRESH_VERSION,
+        "anchor_version": PULSE_SUM_VERSION,
         "expected_widget_kind": "listener",
         "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
         "pending_event_count": int(status.get("pending_count", 0)),
         "latest_seq": int(status.get("latest_seq", 0)),
+        "compatibility_alias": "cached_open_pulse_v57_to_v58_sum",
+        "rollback_resource_uri": PULSE_V57_ROLLBACK_URI,
     }
 
 
