@@ -185,3 +185,88 @@ def test_cached_v57_tool_mounts_v58_and_preserves_rollback_resource() -> None:
     assert server_v2.PULSE_V57_ROLLBACK_URI in {
         str(uri) for uri in server_v2.mcp._resource_manager._resources
     }
+
+
+def test_cached_console_tool_alias_mounts_v58_sum_listener() -> None:
+    from runtime import server_v2
+
+    html = server_v2.eiros_console_resource()
+    assert "AUTO WAKE CYCLE" in html
+    result = server_v2.open_eiros_console()
+    assert result["listener_version"] == server_v2.PULSE_SUM_VERSION
+    assert result["resource_uri"] == server_v2.EIROS_CONSOLE_URI
+    assert result["expected_widget_kind"] == "listener"
+
+
+def test_cached_catalog_get_state_exposes_sum_controller(tmp_path: Path, monkeypatch) -> None:
+    from runtime import server_v2
+
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+    )
+    monkeypatch.setattr(server_v2, "SUM_CONTROLLER", store)
+
+    state = server_v2.get_state()
+
+    assert state["sum_controller"]["enabled"] is False
+    assert state["sum_controller"]["state"] == "IDLE"
+    assert state["sum_controller_log"]["entries"] == []
+
+
+def test_cached_catalog_set_state_dispatches_full_sum_cycle(tmp_path: Path, monkeypatch) -> None:
+    from runtime import server_v2
+
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+    )
+    monkeypatch.setattr(server_v2, "SUM_CONTROLLER", store)
+
+    armed = server_v2.set_state(
+        "sum_controller_set",
+        {
+            "enabled": True,
+            "action": "set",
+            "actor": "rico",
+            "listener_session_id": "listener-compat",
+        },
+    )
+    assert armed["enabled"] is True
+    assert armed["state"] == "ARMED"
+
+    wake = server_v2.set_state(
+        "sum_controller_tick",
+        {
+            "listener_session_id": "listener-compat",
+            "pip_active": True,
+            "listener_healthy": True,
+        },
+    )
+    assert wake["state"] == "WAKE"
+
+    sent = server_v2.set_state(
+        "sum_wake_sent",
+        {
+            "listener_session_id": "listener-compat",
+            "delivery_mode": "bridge-confirmed",
+        },
+    )
+    assert sent["wake_attempt"] == 1
+
+    acked = server_v2.set_state(
+        "sum_wake_ack_current",
+        {
+            "actor": "chatgpt",
+            "listener_session_id": "listener-compat",
+        },
+    )
+    assert acked["state"] == "AWAKE"
+    assert acked["counters"]["wakes_acked"] == 1
+
+
+def test_connector_instructions_include_cached_catalog_ack_fallback() -> None:
+    source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
+    assert "If sum_wake_ack_current is unavailable in the current catalog" in source
+    assert 'call set_state with status=' in source
+    assert 'sum_wake_ack_current' in source

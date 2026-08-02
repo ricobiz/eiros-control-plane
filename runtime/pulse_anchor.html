@@ -610,6 +610,17 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   }
 
   function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
+  async function callSumTool(name,args={}){
+    try{return await callTool(name,args||{})}
+    catch(primaryError){
+      if(name==='sum_controller_status'||name==='sum_controller_log'){
+        const raw=await callTool('get_state',{});
+        const state=unwrap(raw);
+        return name==='sum_controller_status'?(state.sum_controller||{}):(state.sum_controller_log||{entries:[]});
+      }
+      return callTool('set_state',{status:name,data:args||{}});
+    }
+  }
 
   function text(v){return String(v??'')}
   const SUM_STATE_DOT_CLASS={IDLE:'',ARMED:'',WAKE:'bad',AWAKE:'ok',WORKING:'warn',STATIC_DEBOUNCE:'ok',ERROR:'bad'};
@@ -655,7 +666,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
       scheduleStaticCandidate();
       if(shouldReport){
         lastHostReportAt=at;
-        callTool('sum_host_signal',{signal:item.kind,listener_session_id:sessionId,active:true,detail:{...item.detail,host:classifyHostActivity()}}).then(raw=>renderSumState(unwrap(raw))).catch(()=>{});
+        callSumTool('sum_host_signal',{signal:item.kind,listener_session_id:sessionId,active:true,detail:{...item.detail,host:classifyHostActivity()}}).then(raw=>renderSumState(unwrap(raw))).catch(()=>{});
       }
       return;
     }
@@ -667,7 +678,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
       hostReportedActive=false;
       if(shouldReport){
         lastHostReportAt=at;
-        callTool('sum_host_signal',{signal:item.kind,listener_session_id:sessionId,active:false,detail:{...item.detail,host:classifyHostActivity()}}).then(raw=>renderSumState(unwrap(raw))).catch(()=>{});
+        callSumTool('sum_host_signal',{signal:item.kind,listener_session_id:sessionId,active:false,detail:{...item.detail,host:classifyHostActivity()}}).then(raw=>renderSumState(unwrap(raw))).catch(()=>{});
       }
       return;
     }
@@ -723,7 +734,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     clearTimeout(sumRefreshTimer);
     if(closed||sumConfig.available===false)return;
     try{
-      const raw=await callTool('sum_controller_status',{});
+      const raw=await callSumTool('sum_controller_status',{});
       renderSumState(unwrap(raw));
     }catch(e){
       if(sumStateEl){sumStateEl.className='sumState error';sumStateEl.textContent='ERROR · STATUS'}
@@ -733,7 +744,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     }
   }
   async function setSumEnabled(enabled,action='set'){
-    const raw=await callTool('sum_controller_set',{enabled:!!enabled,action:String(action||'set'),actor:'rico',listener_session_id:sessionId});
+    const raw=await callSumTool('sum_controller_set',{enabled:!!enabled,action:String(action||'set'),actor:'rico',listener_session_id:sessionId});
     const state=unwrap(raw);renderSumState(state);return state;
   }
   function renderSumLog(entries){
@@ -745,7 +756,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     }).join('\n')||'No SUM transitions yet.';
   }
   async function loadSumLog(){
-    const raw=await callTool('sum_controller_log',{limit:100});
+    const raw=await callSumTool('sum_controller_log',{limit:100});
     const data=unwrap(raw);renderSumLog(data.entries||[]);
   }
   function setClass(el,state){if(!el)return;el.classList.remove('good','warnText','badText');if(state)el.classList.add(state)}
@@ -841,7 +852,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   async function pollSumController(){
     if(closed||sumWakeBusy||sumConfig.available===false)return sumControllerState;
     try{
-      const raw=await callTool('sum_controller_tick',{
+      const raw=await callSumTool('sum_controller_tick',{
         listener_session_id:sessionId,
         pip_active:videoPipState==='active'||displayMode()==='pip',
         listener_healthy:BridgeGuard.ready&&!closed
@@ -857,7 +868,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
       const mode=await postWake(naturalText);
       lastWakeMode='sum-'+mode+':cycle-'+String(state.cycle_id||0);
       if(mode==='bridge-confirmed'){
-        const sentRaw=await callTool('sum_wake_sent',{listener_session_id:sessionId,delivery_mode:mode});
+        const sentRaw=await callSumTool('sum_wake_sent',{listener_session_id:sessionId,delivery_mode:mode});
         renderSumState(unwrap(sentRaw));
         sumWakeRetryAfter=Date.now()+Number(sumConfig.retryIntervalMs||5000);
       }else{

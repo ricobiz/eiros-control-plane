@@ -122,3 +122,35 @@ def test_sum_poll_runs_only_after_normal_pulse_events_are_clear() -> None:
     pulse_event = ANCHOR.index("if(data.event){")
     sum_poll = ANCHOR.index("await pollSumController()")
     assert pulse_event < sum_poll
+
+
+def test_sum_listener_has_cached_catalog_compatibility_transport() -> None:
+    assert "async function callSumTool" in ANCHOR
+    assert "callTool('get_state',{})" in ANCHOR
+    assert "callTool('set_state',{status:name,data:args||{}})" in ANCHOR
+    assert "sum_controller_status" in ANCHOR
+    assert "sum_controller_set" in ANCHOR
+    assert "sum_controller_tick" in ANCHOR
+    assert "sum_host_signal" in ANCHOR
+    assert "sum_wake_sent" in ANCHOR
+
+
+def test_all_sum_widget_calls_use_compatibility_transport() -> None:
+    for direct in (
+        "callTool('sum_controller_status'",
+        "callTool('sum_controller_set'",
+        "callTool('sum_controller_log'",
+        "callTool('sum_controller_tick'",
+        "callTool('sum_host_signal'",
+        "callTool('sum_wake_sent'",
+    ):
+        assert direct not in ANCHOR
+    for routed in (
+        "callSumTool('sum_controller_status'",
+        "callSumTool('sum_controller_set'",
+        "callSumTool('sum_controller_log'",
+        "callSumTool('sum_controller_tick'",
+        "callSumTool('sum_host_signal'",
+        "callSumTool('sum_wake_sent'",
+    ):
+        assert routed in ANCHOR

@@ -148,6 +148,7 @@ mcp = FastMCP(
         "(6) Open Room only after Rico explicitly asks for Room or a UI message explicitly requests it. "
         "(7) Resume unfinished work from durable state without asking Rico to repeat context. Never mount duplicate Listener instances merely to chase UI colors. "
         "SUM AUTO-WAKE RULE: when the current user message text is exactly 'Отлично, продолжай.' and sum_controller_status reports state=WAKE, call sum_wake_ack_current as the first tool action, then continue the unfinished objective. If no SUM wake is pending, interpret the phrase normally. This continuation is authorized by Rico; do not expose SUM identifiers in the visible chat. "
+        "If sum_wake_ack_current is unavailable in the current catalog, call set_state with status=\"sum_wake_ack_current\" and data containing actor=\"chatgpt\" as the first tool action. "
         "The EIROS Room and Wake Listener are separate MCP App cards: use open_collab_room for collaboration UI and open_pulse for the dedicated reverse-wake listener. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
@@ -879,9 +880,7 @@ def core_snapshot(journal_chars: int = 6000) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
-def get_state() -> dict[str, Any]:
-    """Read persistent Eiros control-plane state."""
+def _read_persistent_state() -> dict[str, Any]:
     if not STATE_FILE.exists():
         return {"revision": 0, "status": "ready", "data": {}}
     try:
@@ -892,13 +891,60 @@ def get_state() -> dict[str, Any]:
 
 
 @mcp.tool()
+def get_state() -> dict[str, Any]:
+    """Read persistent Eiros state plus the cached-catalog SUM compatibility envelope."""
+    state = _read_persistent_state()
+    state["sum_controller"] = SUM_CONTROLLER.status()
+    state["sum_controller_log"] = SUM_CONTROLLER.read_log(100)
+    return state
+
+
+def _dispatch_sum_compat_command(status: str, data: dict[str, Any]) -> dict[str, Any]:
+    payload = data if isinstance(data, dict) else {}
+    if status == "sum_controller_set":
+        return sum_controller_set(
+            bool(payload.get("enabled", False)),
+            action=str(payload.get("action") or "set"),
+            actor=str(payload.get("actor") or "rico"),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+        )
+    if status == "sum_controller_tick":
+        return sum_controller_tick(
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+            pip_active=bool(payload.get("pip_active", False)),
+            listener_healthy=bool(payload.get("listener_healthy", False)),
+        )
+    if status == "sum_host_signal":
+        return sum_host_signal(
+            signal=str(payload.get("signal") or "unknown"),
+            active=bool(payload.get("active", False)),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+            detail=payload.get("detail") if isinstance(payload.get("detail"), dict) else None,
+        )
+    if status == "sum_wake_sent":
+        return sum_wake_sent(
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+            delivery_mode=str(payload.get("delivery_mode") or "unknown"),
+        )
+    if status == "sum_wake_ack_current":
+        return sum_wake_ack_current(
+            actor=str(payload.get("actor") or "chatgpt"),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+        )
+    raise ValueError("unsupported SUM compatibility command")
+
+
+@mcp.tool()
 def set_state(status: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Replace persistent state and increment its revision atomically."""
-    current = get_state()
+    """Replace persistent state, or dispatch a SUM command for cached MCP catalogs."""
+    normalized = str(status or "").strip()[:80]
+    if normalized.startswith("sum_"):
+        return _dispatch_sum_compat_command(normalized, data)
+    current = _read_persistent_state()
     revision = int(current.get("revision", 0)) + 1
     state = {
         "revision": revision,
-        "status": status,
+        "status": normalized,
         "data": data,
         "updated_at": int(time.time()),
     }
@@ -2967,7 +3013,8 @@ def work_anchor_resource() -> str:
     meta=PULSE_RESOURCE_META,
 )
 def eiros_console_resource() -> str:
-    return _render_eiros_console_html()
+    attempt = _mark_widget_resource_served(EIROS_CONSOLE_URI)
+    return _render_pulse_anchor_html(PULSE_SUM_VERSION, str(attempt.get("mount_id") or ""), "pulse-v58-console")
 
 
 @app_resource(
@@ -3120,12 +3167,16 @@ def open_work_anchor() -> dict[str, Any]:
     structured_output=True,
 )
 def open_eiros_console() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_eiros_console", EIROS_CONSOLE_URI, PULSE_SUM_VERSION, "listener")
     return {
         "ok": True,
+        "mount_id": attempt["mount_id"],
         "resource_uri": EIROS_CONSOLE_URI,
-        "console_version": EIROS_CONSOLE_VERSION,
-        "display_modes": ["inline", "fullscreen"],
-        "automatic_fullscreen": False,
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
+        "compatibility_alias": "cached_open_eiros_console_to_v58_sum",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
     }
 
 
