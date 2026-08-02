@@ -91,6 +91,8 @@ body.mode-fullscreen .console{display:block;margin-top:14px;padding:14px;border:
         <div class="sumMetric"><div class="mk">Current duration</div><div id="sumCurrentDuration" class="mv">00:00</div></div>
         <div class="sumMetric"><div class="mk">Last transition</div><div id="sumLastTransition" class="mv">IDLE</div></div>
         <div class="sumMetric"><div class="mk">Wake ID</div><div id="sumWakeId" class="mv">—</div></div>
+        <div class="sumMetric"><div class="mk">Host confidence</div><div id="sumHostConfidence" class="mv">0%</div></div>
+        <div class="sumMetric"><div class="mk">Last host signal</div><div id="sumLastHostSignal" class="mv">—</div></div>
       </div>
       <div class="sumActions">
         <button id="sumPause" class="sumAction" type="button">Pause</button>
@@ -151,6 +153,8 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   const sumCurrentDuration=document.getElementById('sumCurrentDuration');
   const sumLastTransition=document.getElementById('sumLastTransition');
   const sumWakeId=document.getElementById('sumWakeId');
+  const sumHostConfidence=document.getElementById('sumHostConfidence');
+  const sumLastHostSignal=document.getElementById('sumLastHostSignal');
   const sumPause=document.getElementById('sumPause');
   const sumStop=document.getElementById('sumStop');
   const sumReset=document.getElementById('sumReset');
@@ -196,6 +200,14 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   let sumControllerState=null;
   let sumRefreshTimer=null;
   let sumLogVisible=false;
+  const sumStaticDebounceMs=Math.max(1000,Number(sumConfig.staticDebounceMs||3000));
+  let recentHostSignals=[];
+  let hostActivityTimer=null;
+  let hostReportedActive=null;
+  let hostConfidence=0;
+  let lastHostSignalAt=0;
+  let lastHostReportAt=0;
+  let lastObservedAwakeEpoch=0;
   const lifecycle=window.EirosWidgetLifecycle.createPulseLifecycle({
     target:window,
     projectId,
@@ -399,13 +411,15 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     const m=e.data||{};
     if(e.source!==window.parent||m.jsonrpc!=='2.0'||m.id===undefined||!bridgePending.has(m.id))return;
     const pending=bridgePending.get(m.id);bridgePending.delete(m.id);clearTimeout(pending.timer);
+    if(pending.method==='ui/message')recordHostSignal('bridge-activity-end',true,{method:pending.method,error:!!m.error});
     m.error?pending.reject(new Error(m.error.message||'bridge request failed')):pending.resolve(m.result||{});
   });
   function bridgeRequest(method,params,timeoutMs=8000){
     return new Promise((resolve,reject)=>{
       const id='eiros-bridge-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-      const timer=setTimeout(()=>{bridgePending.delete(id);reject(new Error(method+' timeout'))},timeoutMs);
-      bridgePending.set(id,{resolve,reject,timer});
+      if(method==='ui/message')recordHostSignal('bridge-activity-start',true,{method});
+      const timer=setTimeout(()=>{bridgePending.delete(id);if(method==='ui/message')recordHostSignal('bridge-activity-end',true,{method,timeout:true});reject(new Error(method+' timeout'))},timeoutMs);
+      bridgePending.set(id,{resolve,reject,timer,method});
       try{window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*')}catch(e){clearTimeout(timer);bridgePending.delete(id);reject(e)}
     })
   }
@@ -561,15 +575,19 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   if(sumStop)sumStop.addEventListener('click',()=>setSumEnabled(false,'stop').catch(()=>{}));
   if(sumReset)sumReset.addEventListener('click',()=>setSumEnabled(false,'reset').catch(()=>{}));
   if(sumOpenLog)sumOpenLog.addEventListener('click',async()=>{sumLogVisible=!sumLogVisible;if(sumLog)sumLog.hidden=!sumLogVisible;if(sumOpenLog)sumOpenLog.textContent=sumLogVisible?'Hide log':'Open log';if(sumLogVisible)await loadSumLog().catch(()=>{})});
-  if(sumCopyDiagnostic)sumCopyDiagnostic.addEventListener('click',async()=>{const value=JSON.stringify({controller:sumControllerState,listener:{sessionId,anchorVersion,videoPipState,displayMode:displayMode()}},null,2);try{await navigator.clipboard.writeText(value);sumCopyDiagnostic.textContent='Copied'}catch(e){sumCopyDiagnostic.textContent='Copy failed'}setTimeout(()=>{sumCopyDiagnostic.textContent='Copy diagnostic'},1600)});
+  if(sumCopyDiagnostic)sumCopyDiagnostic.addEventListener('click',async()=>{const value=JSON.stringify({controller:sumControllerState,host:classifyHostActivity(),listener:{sessionId,anchorVersion,videoPipState,displayMode:displayMode()}},null,2);try{await navigator.clipboard.writeText(value);sumCopyDiagnostic.textContent='Copied'}catch(e){sumCopyDiagnostic.textContent='Copy failed'}setTimeout(()=>{sumCopyDiagnostic.textContent='Copy diagnostic'},1600)});
   root.addEventListener('click',e=>{if(document.body.classList.contains('mode-pip')&&e.target===root){lastHb=0;clearTimeout(pollTimer);poll()}});
-  window.addEventListener('openai:set_globals',()=>paintPin(displayMode()));
-  window.addEventListener('message',e=>{if(e.source!==window.parent)return;const m=e.data||{};if(m.method==='ui/notifications/host-context-changed'){const next=String(m.params?.displayMode||m.params?.hostContext?.displayMode||'inline');if(next!=='fullscreen')fullscreenArmed=false;paintPin(next)}});
+  window.addEventListener('openai:set_globals',()=>{recordHostSignal('openai:set_globals',true,{display_mode:displayMode()});paintPin(displayMode())});
+  window.addEventListener('message',e=>{if(e.source!==window.parent)return;const m=e.data||{};if(m.method==='ui/notifications/host-context-changed'){const next=String(m.params?.displayMode||m.params?.hostContext?.displayMode||'inline');recordHostSignal('ui/notifications/host-context-changed',true,{display_mode:next});if(next!=='fullscreen')fullscreenArmed=false;paintPin(next)}});
   paintPin(displayMode());
   const rejectZombieFullscreen=()=>{if(!fullscreenArmed&&displayMode()==='fullscreen')applyDisplayMode('fullscreen')};
-  window.addEventListener('pageshow',rejectZombieFullscreen);
-  window.addEventListener('focus',rejectZombieFullscreen);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)rejectZombieFullscreen()});
+  window.addEventListener('pageshow',()=>{rejectZombieFullscreen();recordHostSignal('pageshow',null,{visibility:document.visibilityState})});
+  window.addEventListener('pagehide',()=>recordHostSignal('pagehide',null,{visibility:document.visibilityState}));
+  window.addEventListener('focus',()=>{rejectZombieFullscreen();recordHostSignal('focus',null,{focused:true})});
+  window.addEventListener('blur',()=>recordHostSignal('blur',null,{focused:false}));
+  window.addEventListener('freeze',()=>recordHostSignal('freeze',null,{}));
+  window.addEventListener('resume',()=>recordHostSignal('resume',null,{}));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)rejectZombieFullscreen();recordHostSignal('visibilitychange',null,{hidden:document.hidden,visibility:document.visibilityState})});
 
   function setDot(cls){if(dot)dot.className='dot '+(cls||'');}
   function setLabel(txt){if(label)label.textContent=String(txt||'');}
@@ -598,6 +616,61 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     const hours=Math.floor(total/3600),minutes=Math.floor((total%3600)/60),secs=total%60;
     return hours>0?[hours,minutes,secs].map((v,i)=>i?String(v).padStart(2,'0'):String(v)).join(':'):[minutes,secs].map(v=>String(v).padStart(2,'0')).join(':');
   }
+  function classifyHostActivity(){
+    return {
+      active:hostReportedActive===true,
+      confidence:hostConfidence,
+      lastHostSignalAt,
+      debounceDeadline:lastHostSignalAt?lastHostSignalAt+sumStaticDebounceMs:0,
+      visibility:document.visibilityState,
+      focused:document.hasFocus(),
+      displayMode:displayMode(),
+      videoPipState,
+      recentHostSignals:recentHostSignals.slice(-30)
+    };
+  }
+  function scheduleStaticCandidate(){
+    clearTimeout(hostActivityTimer);
+    if(hostReportedActive!==true)return;
+    hostActivityTimer=setTimeout(()=>{
+      const age=Date.now()-lastHostSignalAt;
+      if(age<sumStaticDebounceMs-50){scheduleStaticCandidate();return}
+      recordHostSignal('stable-static',false,{age_ms:age,confidence:hostConfidence});
+    },sumStaticDebounceMs);
+  }
+  function recordHostSignal(kind,active=null,detail={}){
+    const at=Date.now();
+    const item={kind:String(kind||'unknown'),active,at,detail:detail&&typeof detail==='object'?detail:{}};
+    recentHostSignals.push(item);
+    recentHostSignals=recentHostSignals.slice(-30);
+    lastHostSignalAt=at;
+    if(sumLastHostSignal)sumLastHostSignal.textContent=item.kind;
+    if(active===true){
+      hostConfidence=Math.min(100,Math.max(60,hostConfidence+15));
+      if(sumHostConfidence)sumHostConfidence.textContent=String(hostConfidence)+'%';
+      const shouldReport=hostReportedActive!==true||at-lastHostReportAt>10000;
+      hostReportedActive=true;
+      scheduleStaticCandidate();
+      if(shouldReport){
+        lastHostReportAt=at;
+        callTool('sum_host_signal',{signal:item.kind,listener_session_id:sessionId,active:true,detail:{...item.detail,host:classifyHostActivity()}}).then(raw=>renderSumState(unwrap(raw))).catch(()=>{});
+      }
+      return;
+    }
+    if(active===false){
+      clearTimeout(hostActivityTimer);
+      hostConfidence=Math.max(35,hostConfidence-20);
+      if(sumHostConfidence)sumHostConfidence.textContent=String(hostConfidence)+'%';
+      const shouldReport=hostReportedActive!==false||at-lastHostReportAt>10000;
+      hostReportedActive=false;
+      if(shouldReport){
+        lastHostReportAt=at;
+        callTool('sum_host_signal',{signal:item.kind,listener_session_id:sessionId,active:false,detail:{...item.detail,host:classifyHostActivity()}}).then(raw=>renderSumState(unwrap(raw))).catch(()=>{});
+      }
+      return;
+    }
+    if(sumHostConfidence)sumHostConfidence.textContent=String(hostConfidence)+'%';
+  }
   function sumVisualState(raw){
     const value=String(raw||'IDLE');
     if(value==='WAKE')return 'wake';
@@ -620,6 +693,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   }
   function renderSumState(state){
     const value=state&&typeof state==='object'?state:{};
+    const previousRaw=String(sumControllerState?.state||'IDLE');
     sumControllerState=value;
     const raw=String(value.state||'IDLE');
     const visual=sumVisualState(raw);
@@ -633,8 +707,15 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     if(sumCurrentDuration)sumCurrentDuration.textContent=formatSumDuration(started?Math.floor(Date.now()/1000)-started:0);
     if(sumLastTransition)sumLastTransition.textContent=raw+' · r'+String(value.revision||0);
     if(sumWakeId)sumWakeId.textContent=String(value.wake_id||'—');
+    if(sumHostConfidence)sumHostConfidence.textContent=String(hostConfidence)+'%';
+    if(sumLastHostSignal)sumLastHostSignal.textContent=recentHostSignals.length?recentHostSignals[recentHostSignals.length-1].kind:'—';
     setDot(SUM_STATE_DOT_CLASS[raw]||'');
     setLabel(compact);
+    const epoch=Number(value.awake_epoch||0);
+    if(raw==='AWAKE'&&epoch>0&&epoch!==lastObservedAwakeEpoch){
+      lastObservedAwakeEpoch=epoch;
+      setTimeout(()=>recordHostSignal('ack-confirmed-turn',true,{epoch,previous_state:previousRaw}),220);
+    }
   }
   async function refreshSumState(){
     clearTimeout(sumRefreshTimer);

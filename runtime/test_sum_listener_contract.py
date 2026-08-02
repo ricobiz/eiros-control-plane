@@ -62,3 +62,36 @@ def test_sum_log_is_bounded_and_loaded_on_demand() -> None:
     assert "sum_controller_log',{limit:100}" in ANCHOR
     assert "sumLog.hidden" in ANCHOR
     assert "entries.slice().reverse()" in ANCHOR
+
+
+def test_sum_host_activity_detector_listens_to_all_required_signals() -> None:
+    for marker in (
+        "function recordHostSignal",
+        "function classifyHostActivity",
+        "function scheduleStaticCandidate",
+        "sum_host_signal",
+        "openai:set_globals",
+        "ui/notifications/host-context-changed",
+        "visibilitychange",
+        "pageshow",
+        "pagehide",
+        "freeze",
+        "resume",
+        "bridge-activity-start",
+        "bridge-activity-end",
+    ):
+        assert marker in ANCHOR
+
+
+def test_sum_host_detector_keeps_bounded_diagnostics() -> None:
+    assert "recentHostSignals" in ANCHOR
+    assert "slice(-30)" in ANCHOR
+    assert "hostConfidence" in ANCHOR
+    assert "sumStaticDebounceMs" in ANCHOR
+    assert "lastHostSignalAt" in ANCHOR
+
+
+def test_sum_ack_epoch_is_correlated_with_working_state() -> None:
+    assert "lastObservedAwakeEpoch" in ANCHOR
+    assert "ack-confirmed-turn" in ANCHOR
+    assert "STATIC_DEBOUNCE" in ANCHOR
