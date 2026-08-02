@@ -159,6 +159,7 @@ def test_retry_reuses_wake_id_and_stops_at_ack_timeout(tmp_path: Path) -> None:
         tmp_path / "sum-controller.json",
         tmp_path / "sum-controller.jsonl",
         clock=clock,
+        ack_timeout_seconds=5,
         retry_interval_seconds=5,
         max_wake_attempts=2,
     )
@@ -183,3 +184,93 @@ def test_retry_reuses_wake_id_and_stops_at_ack_timeout(tmp_path: Path) -> None:
     assert failed["error_code"] == "ACK_TIMEOUT"
     assert failed["enabled"] is False
     assert failed["wake_id"] == first_id
+
+
+def test_first_wake_waits_full_ack_grace_before_retry(tmp_path: Path) -> None:
+    clock = FakeClock()
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+        clock=clock,
+        ack_timeout_seconds=120,
+        retry_interval_seconds=30,
+        max_wake_attempts=3,
+    )
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    store.tick("listener-1", pip_active=True, listener_healthy=True)
+    sent = store.mark_wake_sent("listener-1", "bridge-confirmed")
+    assert sent["wake_attempt"] == 1
+
+    clock.advance(119)
+    waiting = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert waiting["state"] == "WAKE"
+    assert waiting["send_required"] is False
+
+    clock.advance(1)
+    retry_ready = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert retry_ready["state"] == "WAKE"
+    assert retry_ready["send_required"] is True
+
+
+def test_host_activity_while_wake_pending_extends_ack_deadline(tmp_path: Path) -> None:
+    clock = FakeClock()
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+        clock=clock,
+        ack_timeout_seconds=120,
+        retry_interval_seconds=30,
+        response_grace_seconds=300,
+        max_wake_attempts=3,
+    )
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    store.tick("listener-1", pip_active=True, listener_healthy=True)
+    store.mark_wake_sent("listener-1", "bridge-confirmed")
+
+    clock.advance(100)
+    active = store.record_host_signal(
+        "host-context",
+        True,
+        "listener-1",
+        {"source": "test"},
+    )
+    assert active["state"] == "WAKE"
+    assert active["activity_observed"] is True
+
+    clock.advance(299)
+    waiting = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert waiting["state"] == "WAKE"
+    assert waiting["send_required"] is False
+
+    clock.advance(1)
+    retry_ready = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert retry_ready["send_required"] is True
+
+
+def test_late_ack_recovers_cycle_after_ack_timeout(tmp_path: Path) -> None:
+    clock = FakeClock()
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+        clock=clock,
+        ack_timeout_seconds=5,
+        retry_interval_seconds=5,
+        max_wake_attempts=1,
+    )
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    store.tick("listener-1", pip_active=True, listener_healthy=True)
+    sent = store.mark_wake_sent("listener-1", "bridge-confirmed")
+    wake_id = sent["wake_id"]
+
+    clock.advance(5)
+    failed = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert failed["state"] == "ERROR"
+    assert failed["error_code"] == "ACK_TIMEOUT"
+
+    recovered = store.ack_current(actor="chatgpt", listener_session_id="listener-1")
+    assert recovered["state"] == "AWAKE"
+    assert recovered["enabled"] is True
+    assert recovered["color"] == "green"
+    assert recovered["wake_id"] == wake_id
+    assert recovered["error_code"] == ""
+    assert recovered["send_required"] is False

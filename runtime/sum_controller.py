@@ -25,9 +25,10 @@ class SumControllerStore:
         *,
         clock: Callable[[], int] = now,
         static_debounce_seconds: int = 3,
-        ack_timeout_seconds: int = 8,
-        retry_interval_seconds: int = 5,
-        max_wake_attempts: int = 5,
+        ack_timeout_seconds: int = 120,
+        retry_interval_seconds: int = 60,
+        response_grace_seconds: int = 300,
+        max_wake_attempts: int = 3,
         max_cycles: int = 100,
         max_runtime_seconds: int = 4 * 60 * 60,
     ) -> None:
@@ -38,6 +39,7 @@ class SumControllerStore:
         self.static_debounce_seconds = max(1, int(static_debounce_seconds))
         self.ack_timeout_seconds = max(1, int(ack_timeout_seconds))
         self.retry_interval_seconds = max(1, int(retry_interval_seconds))
+        self.response_grace_seconds = max(1, int(response_grace_seconds))
         self.max_wake_attempts = max(1, int(max_wake_attempts))
         self.max_cycles = max(1, int(max_cycles))
         self.max_runtime_seconds = max(1, int(max_runtime_seconds))
@@ -66,6 +68,8 @@ class SumControllerStore:
             "last_activity_at": 0,
             "last_static_candidate_at": 0,
             "last_wake_sent_at": 0,
+            "wake_wait_until": 0,
+            "wake_response_started_at": 0,
             "last_acked_wake_id": "",
             "activity_observed": False,
             "stop_reason": None,
@@ -81,6 +85,7 @@ class SumControllerStore:
                 "static_debounce_seconds": self.static_debounce_seconds,
                 "ack_timeout_seconds": self.ack_timeout_seconds,
                 "retry_interval_seconds": self.retry_interval_seconds,
+                "response_grace_seconds": self.response_grace_seconds,
                 "max_wake_attempts": self.max_wake_attempts,
                 "max_cycles": self.max_cycles,
                 "max_runtime_seconds": self.max_runtime_seconds,
@@ -93,6 +98,18 @@ class SumControllerStore:
         value = json.loads(self.path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise RuntimeError("SUM controller state must be a JSON object")
+        value.setdefault("wake_wait_until", 0)
+        value.setdefault("wake_response_started_at", 0)
+        limits = value.setdefault("limits", {})
+        limits.update({
+            "static_debounce_seconds": self.static_debounce_seconds,
+            "ack_timeout_seconds": self.ack_timeout_seconds,
+            "retry_interval_seconds": self.retry_interval_seconds,
+            "response_grace_seconds": self.response_grace_seconds,
+            "max_wake_attempts": self.max_wake_attempts,
+            "max_cycles": self.max_cycles,
+            "max_runtime_seconds": self.max_runtime_seconds,
+        })
         return value
 
     def _write_unlocked(self, state: dict[str, Any]) -> None:
@@ -193,6 +210,8 @@ class SumControllerStore:
         state["wake_attempt"] = 0
         state["send_required"] = True
         state["last_wake_sent_at"] = 0
+        state["wake_wait_until"] = 0
+        state["wake_response_started_at"] = 0
         state["last_static_candidate_at"] = 0
         state["activity_observed"] = False
         state["state_entered_at"] = timestamp
@@ -229,6 +248,8 @@ class SumControllerStore:
             state["stop_reason"] = None if enabled else "disabled"
             state["error_code"] = ""
             state["send_required"] = False
+            state["wake_wait_until"] = 0
+            state["wake_response_started_at"] = 0
             if enabled and not int(state.get("started_at", 0)):
                 state["started_at"] = timestamp
             return self._commit(
@@ -269,10 +290,20 @@ class SumControllerStore:
             if current == "WAKE":
                 sent_at = int(state.get("last_wake_sent_at", 0))
                 attempt = int(state.get("wake_attempt", 0))
+                timestamp = self._timestamp()
+                wait_until = int(state.get("wake_wait_until", 0))
+                if sent_at and not wait_until:
+                    wait_seconds = self.ack_timeout_seconds if attempt <= 1 else self.retry_interval_seconds
+                    wait_until = sent_at + wait_seconds
+                    state["wake_wait_until"] = wait_until
+                response_started_at = int(state.get("wake_response_started_at", 0))
+                if response_started_at:
+                    wait_until = max(wait_until, response_started_at + self.response_grace_seconds)
+                    state["wake_wait_until"] = wait_until
                 retry_due = (
                     sent_at
                     and not bool(state.get("send_required"))
-                    and self._timestamp() - sent_at >= self.retry_interval_seconds
+                    and timestamp >= wait_until
                 )
                 if retry_due and attempt < self.max_wake_attempts:
                     previous_state = current
@@ -318,7 +349,12 @@ class SumControllerStore:
             previous_attempt = int(state.get("wake_attempt", 0))
             state["wake_attempt"] = previous_attempt + 1
             state["send_required"] = False
-            state["last_wake_sent_at"] = self._timestamp()
+            timestamp = self._timestamp()
+            state["last_wake_sent_at"] = timestamp
+            wait_seconds = self.ack_timeout_seconds if previous_attempt == 0 else self.retry_interval_seconds
+            state["wake_wait_until"] = timestamp + wait_seconds
+            if previous_attempt == 0:
+                state["wake_response_started_at"] = 0
             state["counters"]["wakes_sent"] = int(
                 state["counters"].get("wakes_sent", 0)
             ) + 1
@@ -348,15 +384,26 @@ class SumControllerStore:
                 and str(state.get("state")) in {"AWAKE", "WORKING", "STATIC_DEBOUNCE"}
             ):
                 return dict(state)
-            if str(state.get("state")) != "WAKE" or not wake_id:
+            current_state = str(state.get("state"))
+            late_timeout_recovery = (
+                current_state == "ERROR"
+                and str(state.get("error_code") or "") == "ACK_TIMEOUT"
+                and bool(wake_id)
+            )
+            if current_state != "WAKE" and not late_timeout_recovery:
                 return dict(state)
-            previous_state = str(state.get("state"))
+            previous_state = current_state
+            state["enabled"] = True
             state["state"] = "AWAKE"
             state["color"] = "green"
             state["state_entered_at"] = self._timestamp()
             state["last_ack_at"] = self._timestamp()
             state["last_acked_wake_id"] = wake_id
             state["send_required"] = False
+            state["wake_wait_until"] = 0
+            state["wake_response_started_at"] = 0
+            state["error_code"] = ""
+            state["stop_reason"] = None
             state["activity_observed"] = False
             if listener_session_id:
                 state["listener_session_id"] = str(listener_session_id)[:180]
@@ -366,7 +413,7 @@ class SumControllerStore:
             return self._commit(
                 state,
                 previous_state=previous_state,
-                reason="WAKE_ACK",
+                reason="LATE_WAKE_ACK_RECOVERY" if late_timeout_recovery else "WAKE_ACK",
                 actor=str(actor or "unknown")[:80],
             )
 
@@ -397,6 +444,22 @@ class SumControllerStore:
             previous_state = str(state.get("state") or "IDLE")
             timestamp = self._timestamp()
             state["listener_session_id"] = str(listener_session_id or "")[:180]
+            if active is True and previous_state == "WAKE":
+                state["activity_observed"] = True
+                state["last_activity_at"] = timestamp
+                state["wake_response_started_at"] = timestamp
+                state["wake_wait_until"] = max(
+                    int(state.get("wake_wait_until", 0)),
+                    timestamp + self.response_grace_seconds,
+                )
+                return self._commit(
+                    state,
+                    previous_state=previous_state,
+                    reason="WAKE_RESPONSE_STARTED",
+                    actor="listener",
+                    host_signal=str(signal or "")[:120],
+                    detail=detail,
+                )
             if active is True and previous_state in {"AWAKE", "WORKING", "STATIC_DEBOUNCE"}:
                 state["state"] = "WORKING"
                 state["color"] = "yellow"
