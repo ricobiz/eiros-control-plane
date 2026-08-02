@@ -18,6 +18,7 @@ from mcp.types import ToolAnnotations
 from runtime.config import CODE_ROOT, DATA_ROOT as ROOT, load_config
 from runtime.version import __version__
 from runtime import protocol as collab_protocol
+from runtime.sum_controller import SumControllerStore
 
 STATE_FILE = ROOT / ".eiros-state.json"
 ROOM_TELEMETRY_FILE = ROOT / "runtime" / "room_telemetry.json"
@@ -88,6 +89,10 @@ ROOM_MOUNT_URI = ROOM_URI
 PULSE_ANCHOR_MOUNT_URI = PULSE_ANCHOR_URI
 
 INSTANCE_CONFIG = load_config()
+SUM_CONTROLLER = SumControllerStore(
+    ROOT / "runtime" / "sum-controller.json",
+    ROOT / "runtime" / "sum-controller.jsonl",
+)
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
 # Custom widget origins are opt-in. During development ChatGPT's managed sandbox
@@ -1576,6 +1581,143 @@ def _compact_json(value: Any, max_chars: int = 6000) -> Any:
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_controller_status() -> dict[str, Any]:
+    """Read the durable SUM auto-wake controller state."""
+    return SUM_CONTROLLER.status()
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_controller_set(
+    enabled: bool,
+    action: str = "set",
+    actor: str = "rico",
+    listener_session_id: str = "",
+) -> dict[str, Any]:
+    """Enable or disable the bounded SUM auto-wake controller."""
+    normalized = str(action or "set").strip().lower()[:32]
+    if normalized in {"start", "resume", "enable"}:
+        enabled = True
+    elif normalized in {"pause", "stop", "disable"}:
+        enabled = False
+    elif normalized != "set":
+        raise ValueError("unsupported SUM controller action")
+    return SUM_CONTROLLER.set_enabled(
+        bool(enabled),
+        actor=str(actor or "rico")[:80],
+        listener_session_id=str(listener_session_id or "")[:180],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_host_signal(
+    signal: str,
+    listener_session_id: str,
+    active: bool | None = None,
+    detail: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Record one bounded ChatGPT host-activity signal from the Listener."""
+    safe_detail = detail if isinstance(detail, dict) else {}
+    return SUM_CONTROLLER.record_host_signal(
+        str(signal or "unknown")[:120],
+        active,
+        str(listener_session_id or "")[:180],
+        _compact_json(safe_detail, 3000),
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_controller_tick(
+    listener_session_id: str,
+    pip_active: bool = False,
+    listener_healthy: bool = True,
+) -> dict[str, Any]:
+    """Advance the SUM controller only when its guarded transition is due."""
+    return SUM_CONTROLLER.tick(
+        str(listener_session_id or "")[:180],
+        pip_active=bool(pip_active),
+        listener_healthy=bool(listener_healthy),
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_wake_sent(
+    listener_session_id: str,
+    delivery_mode: str = "bridge-confirmed",
+) -> dict[str, Any]:
+    """Record a bridge-confirmed natural user wake delivery attempt."""
+    return SUM_CONTROLLER.mark_wake_sent(
+        str(listener_session_id or "")[:180],
+        str(delivery_mode or "bridge-confirmed")[:80],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_wake_ack_current(
+    actor: str = "chatgpt",
+    listener_session_id: str = "",
+) -> dict[str, Any]:
+    """Acknowledge the current pending SUM wake without exposing internal IDs in chat."""
+    return SUM_CONTROLLER.ack_current(
+        actor=str(actor or "chatgpt")[:80],
+        listener_session_id=str(listener_session_id or "")[:180],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_wake_ack(
+    wake_id: str,
+    cycle_id: int,
+    awake_epoch: int,
+    actor: str = "chatgpt",
+) -> dict[str, Any]:
+    """Diagnostic exact-ID acknowledgement for a pending SUM wake."""
+    return SUM_CONTROLLER.ack_wake(
+        str(wake_id or "")[:180],
+        int(cycle_id),
+        int(awake_epoch),
+        str(actor or "chatgpt")[:80],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_controller_log(limit: int = 100) -> dict[str, Any]:
+    """Read a bounded tail of durable SUM state transitions."""
+    return SUM_CONTROLLER.read_log(max(1, min(int(limit or 100), 500)))
+
+
+@mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={"ui": {"visibility": ["app"]}},
 )
@@ -2579,6 +2721,15 @@ def _render_pulse_anchor_html(anchor_version: str = PULSE_ANCHOR_VERSION, mount_
         "mountId": mount_id,
         "expectedWidgetKind": "listener",
         "sessionPrefix": session_prefix,
+        "sumController": {
+            "available": True,
+            "enabledByDefault": False,
+            "naturalWakeText": "Отлично, продолжай.",
+            "staticDebounceMs": 3000,
+            "ackTimeoutMs": 8000,
+            "retryIntervalMs": 5000,
+            "maxWakeAttempts": 5,
+        },
     }
     return (
         html.replace("__EIROS_ANCHOR_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
