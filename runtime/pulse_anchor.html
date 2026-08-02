@@ -13,18 +13,74 @@ body{margin:0;background:transparent}
 .dot.warn{background:#f5b849;box-shadow:0 0 8px rgba(245,184,73,.45)}
 .dot.bad{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.45)}
 .label{font-size:10px;color:#7a9bbf;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}.rld{width:24px;height:24px;border:1px solid #1a3a5c;border-radius:8px;background:#071321;color:#7a9bbf;font-size:12px;display:grid;place-items:center;flex-shrink:0}
+.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}.rld{width:24px;height:24px;border:1px solid #1a3a5c;border-radius:8px;background:#071321;color:#7a9bbf;font-size:12px;display:grid;place-items:center;flex-shrink:0}.pin.active{color:#19c37d;border-color:#176747;box-shadow:0 0 8px rgba(25,195,125,.25)}
 .closed{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #333;border-radius:12px;background:#111;min-height:32px;color:#777;font-size:10px}
+.companionPanel{position:relative;margin-top:8px;overflow:hidden;border:1px solid #1a3a5c;border-radius:14px;background:#03070c;box-shadow:0 14px 36px rgba(0,0,0,.28)}
+.companionVideo{display:block;width:100%;aspect-ratio:16/9;min-height:180px;background:#000;object-fit:cover}
+.companionBar{display:flex;align-items:center;gap:10px;padding:8px 10px;border-top:1px solid #142d45;background:#071321}
+.streamStatus{min-width:0;flex:1;font-size:11px;color:#7a9bbf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.launchPip{min-height:36px;padding:0 14px;border:1px solid #24704f;border-radius:10px;background:#0b3b2a;color:#d7ffeb;font-size:12px;font-weight:750;touch-action:manipulation}
+.launchPip:disabled{opacity:.65}.launchPip.active{border-color:#19c37d;background:#125338;box-shadow:0 0 14px rgba(25,195,125,.24)}
+
+.bubbleMark{display:none;width:100%;height:100%;place-items:center;font-weight:850;font-size:22px;color:#d8edff;letter-spacing:-1px}
+body.mode-pip{width:64px!important;height:64px!important;overflow:hidden!important}
+body.mode-pip .anchor{position:relative;width:58px;height:58px;min-height:58px;padding:0;margin:3px;border-radius:50%;justify-content:center;gap:0;border-color:#245b86;background:radial-gradient(circle at 35% 30%,#163b5b 0,#0a2035 58%,#06131f 100%);box-shadow:0 8px 24px rgba(0,0,0,.42),0 0 0 1px rgba(122,162,255,.12) inset}
+body.mode-pip .bubbleMark{display:grid}
+body.mode-pip .label,body.mode-pip .badge,body.mode-pip .rld{display:none!important}
+body.mode-pip .companionPanel{display:none!important}
+body.mode-pip .dot{display:block!important;position:absolute;right:5px;bottom:5px;width:11px;height:11px;border:2px solid #071321;z-index:3}
+body.mode-pip .closed{width:58px;height:58px;min-height:58px;margin:3px;padding:0;border-radius:50%;font-size:0}
+body.mode-pip .closed::after{content:'E';display:grid;place-items:center;width:100%;height:100%;font-size:22px;font-weight:850;color:#777}
+
+.console{display:none}
+body.mode-fullscreen{min-height:100vh;background:#03060b;padding:78px 12px 28px;overflow:auto}
+body.mode-fullscreen .anchor{position:sticky;top:8px;z-index:10;min-height:46px;padding:8px 10px;border-color:#245b86;border-radius:14px;background:rgba(8,25,42,.94);box-shadow:0 12px 40px rgba(0,0,0,.38);backdrop-filter:blur(18px)}
+body.mode-fullscreen .label{font-size:12px;color:#a7c8e8}
+body.mode-fullscreen .companionPanel{margin-top:14px;border-color:#245b86;box-shadow:0 24px 80px rgba(0,0,0,.35)}
+body.mode-fullscreen .console{display:block;margin-top:14px;padding:14px;border:1px solid #17334f;border-radius:18px;background:linear-gradient(180deg,#081421 0%,#050b13 100%);box-shadow:0 24px 80px rgba(0,0,0,.35)}
+.consoleHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.consoleTitle{font-size:18px;font-weight:760;color:#e8f4ff}.consoleSub{font-size:11px;color:#6f91b3;margin-top:3px}
+.consoleActions{display:flex;gap:8px}.consoleBtn{min-height:34px;padding:0 12px;border:1px solid #24506f;border-radius:10px;background:#0a1b2c;color:#a9cce9;font-weight:650}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{min-height:104px;padding:12px;border:1px solid #17334f;border-radius:14px;background:#07111c}.card.wide{grid-column:1/-1;min-height:92px}
+.k{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#557a9d}.v{margin-top:8px;font-size:22px;font-weight:780;color:#e8f4ff}.s{margin-top:5px;font-size:11px;line-height:1.35;color:#7899b8;word-break:break-word}
+.good{color:#39d98a}.warnText{color:#f5b849}.badText{color:#ff6b79}.eventText{white-space:pre-wrap;max-height:142px;overflow:auto}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.card.wide{grid-column:auto}.consoleTitle{font-size:16px}}
 </style>
 </head>
 <body>
 <div id="root" class="anchor">
-  <span id="dot" class="dot"></span>
+  <span id="bubbleMark" class="bubbleMark">E</span><span id="dot" class="dot"></span>
   <span id="label" class="label">Pulse Anchor · connecting</span>
+  <button id="full" class="rld" title="Open EIROS fullscreen console">▣</button>
+  <button id="pin" class="rld pin" title="Launch global Video PiP">◫</button>
   <button id="reload" class="rld" title="Reload listener">↻</button>
   <span id="badge" class="badge">v__ANCHOR_VERSION__</span>
 </div>
+<div id="companionPanel" class="companionPanel">
+  <video id="companionVideo" class="companionVideo" autoplay muted playsinline webkit-playsinline controls preload="auto"></video>
+  <div class="companionBar">
+    <span id="streamStatus" class="streamStatus">EIROS Companion · loading live stream…</span>
+    <button id="launchPip" class="launchPip" type="button" title="Open the live EIROS stream in global Picture in Picture">Открыть PiP</button>
+  </div>
+</div>
+<div id="console" class="console">
+  <div class="consoleHead">
+    <div><div class="consoleTitle">EIROS Live Console</div><div id="consoleSub" class="consoleSub">Connecting to EBRIDGE…</div></div>
+    <div class="consoleActions"><button id="consoleRefresh" class="consoleBtn">Refresh</button><button id="collapse" class="consoleBtn">Compact</button></div>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="k">Pulse</div><div id="pulseValue" class="v">—</div><div id="pulseSub" class="s">Waiting…</div></div>
+    <div class="card"><div class="k">Room</div><div id="roomValue" class="v">—</div><div id="roomSub" class="s">Waiting…</div></div>
+    <div class="card"><div class="k">Queue</div><div id="queueValue" class="v">—</div><div id="queueSub" class="s">Waiting…</div></div>
+    <div class="card"><div class="k">Hub</div><div id="hubValue" class="v">—</div><div id="hubSub" class="s">Waiting…</div></div>
+    <div class="card wide"><div class="k">Latest event</div><div id="eventValue" class="v">No event</div><div id="eventSub" class="s eventText">Pulse is quiet.</div></div>
+  </div>
+</div>
 
+<script>
+__EIROS_WIDGET_LIFECYCLE_JS__
+__EIROS_PIP_CONTROLLER_JS__
+</script>
 <script>
 window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
 
@@ -34,21 +90,151 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   const dot=document.getElementById('dot');
   const label=document.getElementById('label');
   const reload=document.getElementById('reload');
+  const pin=document.getElementById('pin');
+  const full=document.getElementById('full');
+  const consoleEl=document.getElementById('console');
+  const consoleRefresh=document.getElementById('consoleRefresh');
+  const collapse=document.getElementById('collapse');
+  const consoleSub=document.getElementById('consoleSub');
+  const pulseValue=document.getElementById('pulseValue');
+  const pulseSub=document.getElementById('pulseSub');
+  const roomValue=document.getElementById('roomValue');
+  const roomSub=document.getElementById('roomSub');
+  const queueValue=document.getElementById('queueValue');
+  const queueSub=document.getElementById('queueSub');
+  const hubValue=document.getElementById('hubValue');
+  const hubSub=document.getElementById('hubSub');
+  const eventValue=document.getElementById('eventValue');
+  const eventSub=document.getElementById('eventSub');
+  const bubbleMark=document.getElementById('bubbleMark');
+  const companionPanel=document.getElementById('companionPanel');
+  const companionVideo=document.getElementById('companionVideo');
+  const streamStatus=document.getElementById('streamStatus');
+  const launchPip=document.getElementById('launchPip');
 
   const agentId=String(boot.agentId||'chatgpt');
   const projectId=String(boot.projectId||'eiros-hub');
   const threadId=String(boot.threadId||'first-contact');
   const channel=String(boot.channel||'default');
-  const anchorVersion=String(boot.anchorVersion||'0.4.1-manual-refresh');
-  const sessionId='pulse-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-  const activeKey=['eiros-wake-listener-active',projectId,threadId,agentId,channel].join(':');
-  const killKey=['eiros-wake-listener-kill',projectId,threadId].join(':');
+  const anchorVersion=String(boot.anchorVersion||'0.5.6-storage-safe-host-pip');
+  const companionHlsUrl=String(boot.companionHlsUrl||'');
+  const mountId=String(boot.mountId||'');
+  const expectedWidgetKind=String(boot.expectedWidgetKind||'listener');
+  const expectedVersion=String(boot.expectedVersion||anchorVersion);
+  const actualWidgetKind='listener';
+  const sessionPrefix=String(boot.sessionPrefix||'pulse-v56');
+  const sessionId=sessionPrefix+'-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const bootStages=[];
+  const legacyActiveKeys=[
+    ['eiros-wake-listener-active',projectId,threadId,agentId,channel].join(':'),
+    ['eiros-wake-listener-active-v46',projectId,threadId,agentId,channel].join(':'),
+    ['eiros-wake-listener-active-v47',projectId,threadId,agentId,channel].join(':'),
+    ['eiros-wake-listener-active-v48',projectId,threadId,agentId,channel].join(':'),
+    ['eiros-wake-listener-active-v49',projectId,threadId,agentId,channel].join(':')
+  ];
+  const pipKey=['eiros-wake-listener-pip',projectId,threadId,agentId,channel].join(':');
 
   let pollTimer=null;
   const attempts={};
   let lastWakeMode='';
   let lastHb=0;
   let closed=false;
+  let consoleTimer=null;
+  let consoleBusy=false;
+  let fullscreenArmed=false;
+  let fullscreenEnteredAt=0;
+  let forcingInline=false;
+  let videoPipState='inactive';
+  let videoPipDetail='';
+  const lifecycle=window.EirosWidgetLifecycle.createPulseLifecycle({
+    target:window,
+    projectId,
+    threadId,
+    sessionId,
+    onRetire:reason=>closeSelf(reason)
+  });
+  lifecycle.retireLegacy(legacyActiveKeys);
+
+  function armCompanionVideo(){
+    if(!companionVideo||!companionHlsUrl)return null;
+    companionVideo.muted=true;
+    try{
+      const pending=companionVideo.play();
+      if(pending&&typeof pending.catch==='function')pending.catch(()=>{});
+      return pending;
+    }catch(e){return null}
+  }
+  if(companionVideo&&companionHlsUrl){
+    companionVideo.src=companionHlsUrl;
+    companionVideo.muted=true;
+    companionVideo.load();
+    armCompanionVideo();
+  }
+
+  async function bootCallTool(name,args){
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.callTool==='function')return h.callTool(name,args||{});
+    }
+    throw new Error('bridge unavailable');
+  }
+  function bootSnapshot(detail=''){
+    return {
+      version:anchorVersion,
+      mount_id:mountId,
+      expected_widget_kind:expectedWidgetKind,
+      expected_version:expectedVersion,
+      actual_widget_kind:actualWidgetKind,
+      boot_stages:bootStages.slice(),
+      detail:String(detail||'').slice(0,500),
+      display_mode:(()=>{try{return String(window.openai?.displayMode||window.mcp?.displayMode||'inline')}catch{return 'inline'}})(),
+      visibility:document.visibilityState
+    };
+  }
+  async function reportBootStage(stage,detail=''){
+    const value=String(stage||'');
+    if(value&&!bootStages.includes(value))bootStages.push(value);
+    try{
+      await bootCallTool('room_telemetry_update',{
+        widget_id:sessionId,
+        widget_kind:actualWidgetKind,
+        project_id:projectId,
+        thread_id:threadId,
+        status:'boot:'+value,
+        snapshot:bootSnapshot(detail),
+        error:value==='SELF_REPAIR_REQUESTED'?String(detail||'widget mismatch'):''
+      });
+    }catch(e){}
+  }
+  async function requestSelfRepair(reason){
+    const prompt=[
+      '[EIROS_WIDGET_SELF_REPAIR]',
+      'mount_id='+mountId,
+      'diagnosis=STALE_TOOL_RESOURCE_BINDING',
+      'expected='+expectedWidgetKind+'/'+expectedVersion,
+      'actual='+actualWidgetKind+'/'+anchorVersion,
+      'reason='+String(reason||'widget contract mismatch'),
+      '',
+      'Call widget_boot_status and follow its do_now actions. Do not repeat the stale widget tool.'
+    ].join('\n');
+    await reportBootStage('SELF_REPAIR_REQUESTED',reason);
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.sendFollowUpMessage==='function'){
+        try{await h.sendFollowUpMessage({prompt,scrollToBottom:true});return true}catch(e){}
+      }
+      if(h&&typeof h.sendFollowupMessage==='function'){
+        try{await h.sendFollowupMessage({prompt,scrollToBottom:true});return true}catch(e){}
+      }
+    }
+    return false;
+  }
+  setTimeout(async()=>{
+    await reportBootStage('JS_STARTED','listener JavaScript entered');
+    if(expectedWidgetKind!==actualWidgetKind||expectedVersion!==anchorVersion){
+      closed=true;
+      await requestSelfRepair('expected '+expectedWidgetKind+'/'+expectedVersion+' but loaded '+actualWidgetKind+'/'+anchorVersion);
+      if(root){root.className='closed';root.innerHTML='EIROS widget mismatch · repair requested';}
+    }
+  },0);
 
   // ==================== BRIDGEGUARD v4.0 (pure lifecycle guard) ====================
   const BridgeGuard = {
@@ -75,7 +261,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
           jsonrpc: '2.0',
           id: 'bg4-' + Date.now(),
           method: 'ui/initialize',
-          params: { version: '1.0', capabilities: ['ui/message', 'tools/call'] }
+          params: { version: '1.0', capabilities: ['ui/message', 'tools/call'], appCapabilities: { availableDisplayModes: ['inline','fullscreen','pip'] } }
         }, '*');
       } catch (e) {}
 
@@ -97,6 +283,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
       if (this.ready) return;
       this.ready = true;
       console.log('[Pulse v4] ' + reason);
+      reportBootStage('BRIDGE_READY',reason);
       this.flush();
     },
 
@@ -123,24 +310,221 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   BridgeGuard.init();
   // =============================================================================
 
-  try{localStorage.setItem(activeKey,sessionId)}catch{}
   if(reload)reload.addEventListener('click',()=>{try{setLabel('Manual refresh…');setDot('warn');lastHb=0;lastWakeMode='manual';clearTimeout(pollTimer);poll()}catch(e){setLabel('Manual refresh failed');setDot('bad')}});
 
-  function isActive(){try{return localStorage.getItem(activeKey)===sessionId}catch{return true}}
+  function displayMode(){
+    try{return String(window.openai?.displayMode||window.mcp?.displayMode||'inline')}catch{return 'inline'}
+  }
+  function applyDisplayMode(mode){
+    let m=String(mode||displayMode()||'inline');
+    // Fullscreen is valid only after a direct click on this widget. Host context
+    // can replay stale fullscreen during chat focus / generation; reject it.
+    if(m==='fullscreen'&&!fullscreenArmed){
+      m='inline';
+      document.body.dataset.rejectedHostMode='fullscreen';
+      if(!forcingInline){
+        forcingInline=true;
+        setTimeout(async()=>{try{await requestModeRaw('inline')}catch(e){}finally{forcingInline=false}},0);
+      }
+    }
+    document.body.classList.toggle('mode-pip',m==='pip');
+    document.body.classList.toggle('mode-fullscreen',m==='fullscreen');
+    document.body.dataset.displayMode=m;
+    if(m==='fullscreen'){fullscreenEnteredAt=Date.now();scheduleConsole(50)}else{clearTimeout(consoleTimer)}
+    const nativeActive=videoPipState==='active'||videoPipState==='starting';
+    const floating=nativeActive||m==='pip';
+    if(pin){
+      pin.classList.toggle('active',floating);
+      pin.textContent=videoPipState==='active'?'●':(floating?'◉':'◫');
+      pin.title=videoPipState==='active'?'Global Video PiP active':(floating?'Starting Video PiP':'Launch global Video PiP');
+    }
+    if(launchPip){
+      launchPip.classList.toggle('active',floating);
+      launchPip.textContent=videoPipState==='active'?'PiP включён':(floating?'Запускаю PiP…':'Открыть PiP');
+    }
+  }
+  function paintPin(mode){applyDisplayMode(mode)}
+  const bridgePending=new Map();
+  window.addEventListener('message',e=>{
+    const m=e.data||{};
+    if(e.source!==window.parent||m.jsonrpc!=='2.0'||m.id===undefined||!bridgePending.has(m.id))return;
+    const pending=bridgePending.get(m.id);bridgePending.delete(m.id);clearTimeout(pending.timer);
+    m.error?pending.reject(new Error(m.error.message||'bridge request failed')):pending.resolve(m.result||{});
+  });
+  function bridgeRequest(method,params,timeoutMs=8000){
+    return new Promise((resolve,reject)=>{
+      const id='eiros-bridge-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+      const timer=setTimeout(()=>{bridgePending.delete(id);reject(new Error(method+' timeout'))},timeoutMs);
+      bridgePending.set(id,{resolve,reject,timer});
+      try{window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*')}catch(e){clearTimeout(timer);bridgePending.delete(id);reject(e)}
+    })
+  }
+  async function requestModeRaw(mode){
+    return new Promise((resolve,reject)=>{
+      const id='eiros-display-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+      let done=false;
+      const finish=(ok,value)=>{if(done)return;done=true;clearTimeout(t);window.removeEventListener('message',onMessage);ok?resolve(value):reject(value)};
+      const onMessage=e=>{const m=e.data||{};if(e.source!==window.parent||m.jsonrpc!=='2.0'||m.id!==id)return;m.error?finish(false,new Error(m.error.message||'display mode rejected')):finish(true,m.result||{})};
+      const t=setTimeout(()=>finish(false,new Error('display mode timeout')),2500);
+      window.addEventListener('message',onMessage);
+      try{window.parent.postMessage({jsonrpc:'2.0',id,method:'ui/request-display-mode',params:{mode}},'*')}catch(e){finish(false,e)}
+    })
+  }
+  async function requestHostMode(mode){
+    let result=null;
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.requestDisplayMode==='function'){
+        try{result=await h.requestDisplayMode({mode});break}catch(e){}
+      }
+    }
+    if(!result)result=await requestModeRaw(mode);
+    const actual=String(result?.mode||displayMode()||'inline');
+    if(actual!==mode)throw new Error('Host returned '+actual);
+    applyDisplayMode(actual);
+    return actual;
+  }
+  async function requestFullscreen(){
+    if(full)full.disabled=true;
+    fullscreenArmed=true;
+    try{await requestHostMode('fullscreen');setDot('ok');setLabel('Wake Listener · fullscreen console · '+anchorVersion)}
+    catch(e){fullscreenArmed=false;setDot('warn');setLabel('Fullscreen unavailable · '+String(e&&e.message||e))}
+    finally{if(full)full.disabled=false}
+  }
+  async function requestInline(){
+    fullscreenArmed=false;
+    try{await requestHostMode('inline')}catch(e){applyDisplayMode('inline')}
+  }
+  async function requestHostFloating(){
+    try{
+      const mode=await requestHostMode('pip');
+      try{localStorage.setItem(pipKey,'host')}catch{}
+      paintPin('pip');setDot('ok');setLabel('Wake Listener · host floating · '+anchorVersion);
+      return true;
+    }catch(e){
+      paintPin(displayMode());
+      setDot('warn');setLabel('Floating mode unavailable · '+String(e&&e.message||e));lastWakeMode='pip-rejected';
+      return false;
+    }
+  }
+  async function traceVideoPip(state,detail=''){
+    try{
+      await callTool('room_telemetry_update',{
+        widget_id:sessionId,
+        widget_kind:'listener',
+        project_id:projectId,
+        thread_id:threadId,
+        status:'video-pip:'+state,
+        snapshot:{
+          video_pip_state:state,
+          video_pip_detail:String(detail||'').slice(0,300),
+          video_ready_state:Number(companionVideo?.readyState||0),
+          video_paused:!!companionVideo?.paused,
+          visibility:document.visibilityState,
+          display_mode:displayMode(),
+          version:anchorVersion,
+          mount_id:mountId,
+          expected_widget_kind:expectedWidgetKind,
+          expected_version:expectedVersion,
+          actual_widget_kind:actualWidgetKind,
+          boot_stages:bootStages.slice()
+        },
+        error:state==='error'?String(detail||'video pip error'):''
+      });
+    }catch(e){}
+  }
+  function setVideoPipState(state,detail=''){
+    videoPipState=String(state||'inactive');
+    videoPipDetail=String(detail||'');
+    try{localStorage.setItem(pipKey,videoPipState)}catch{}
+    paintPin(displayMode());
+    if(videoPipState==='active'){setDot('ok');setLabel('SAM Companion · GLOBAL PiP · '+anchorVersion);reportBootStage('PIP_ACTIVE',videoPipDetail)}
+    else if(videoPipState==='starting'){setDot('warn');setLabel('SAM Companion · starting Video PiP…')}
+    else if(videoPipState==='error'){setDot('bad');setLabel('Video PiP error · '+videoPipDetail)}
+    if(BridgeGuard.started){lastHb=0;heartbeat().catch(()=>{});traceVideoPip(videoPipState,videoPipDetail)}
+  }
+  async function requestNativeVideoPip(){
+    if(!companionVideo||!companionHlsUrl||Number(companionVideo.readyState||0)<2)return false;
+    const playResult=armCompanionVideo();
+    if(typeof companionVideo.webkitSetPresentationMode==='function'){
+      companionVideo.webkitSetPresentationMode('picture-in-picture');
+      if(playResult&&typeof playResult.catch==='function')playResult.catch(e=>setVideoPipState('error',e&&e.message||e));
+      return true;
+    }
+    if(typeof companionVideo.requestPictureInPicture==='function'){
+      await companionVideo.requestPictureInPicture();
+      setVideoPipState('active','native-video');
+      return true;
+    }
+    return false;
+  }
+  async function requestSystemPiP(){
+    if(pin)pin.disabled=true;
+    if(launchPip)launchPip.disabled=true;
+    try{
+      setVideoPipState('starting','host-pip');
+      const result=await window.EirosPip.activateKeepalivePip({
+        requestHostPip:requestHostFloating,
+        isVideoReady:()=>Number(companionVideo?.readyState||0)>=2,
+        requestNativeVideoPip
+      });
+      if(result.mode==='host-pip'){
+        setVideoPipState('active','host-pip');
+        return true;
+      }
+      if(result.mode==='video-pip')return true;
+      throw new Error(result.error||'PiP unavailable');
+    }catch(e){
+      setVideoPipState('error',String(e&&e.message||e));
+      return false;
+    }finally{
+      if(pin)pin.disabled=false;
+      if(launchPip)launchPip.disabled=false;
+    }
+  }
+  if(companionVideo){
+    companionVideo.addEventListener('webkitpresentationmodechanged',()=>{
+      const mode=String(companionVideo.webkitPresentationMode||'inline');
+      setVideoPipState(mode==='picture-in-picture'?'active':'inactive',mode);
+    });
+    companionVideo.addEventListener('enterpictureinpicture',()=>setVideoPipState('active','standard'));
+    companionVideo.addEventListener('leavepictureinpicture',()=>setVideoPipState('inactive','standard'));
+    companionVideo.addEventListener('loadeddata',()=>{if(streamStatus)streamStatus.textContent='EIROS Companion · LIVE';reportBootStage('VIDEO_READY','loadeddata readyState='+String(companionVideo.readyState||0))});
+    companionVideo.addEventListener('playing',()=>{if(streamStatus)streamStatus.textContent='EIROS Companion · LIVE';reportBootStage('VIDEO_READY','playing readyState='+String(companionVideo.readyState||0))});
+    companionVideo.addEventListener('waiting',()=>{if(streamStatus)streamStatus.textContent='EIROS Companion · buffering…'});
+    companionVideo.addEventListener('error',()=>{
+      const detail='media '+String(companionVideo.error?.code||'unknown');
+      if(streamStatus)streamStatus.textContent='Stream error · '+detail;
+      setVideoPipState('error',detail);
+    });
+  }
+  for(const kind of ['pointerdown','touchstart']){
+    if(pin)pin.addEventListener(kind,armCompanionVideo,{passive:true});
+    if(launchPip)launchPip.addEventListener(kind,armCompanionVideo,{passive:true});
+  }
+  if(full)full.addEventListener('click',requestFullscreen);
+  if(pin)pin.addEventListener('click',requestSystemPiP);
+  if(launchPip)launchPip.addEventListener('click',requestSystemPiP);
+  if(collapse)collapse.addEventListener('click',requestInline);
+  if(consoleRefresh)consoleRefresh.addEventListener('click',()=>scheduleConsole(0));
+  root.addEventListener('click',e=>{if(document.body.classList.contains('mode-pip')&&e.target===root){lastHb=0;clearTimeout(pollTimer);poll()}});
+  window.addEventListener('openai:set_globals',()=>paintPin(displayMode()));
+  window.addEventListener('message',e=>{if(e.source!==window.parent)return;const m=e.data||{};if(m.method==='ui/notifications/host-context-changed'){const next=String(m.params?.displayMode||m.params?.hostContext?.displayMode||'inline');if(next!=='fullscreen')fullscreenArmed=false;paintPin(next)}});
+  paintPin(displayMode());
+  const rejectZombieFullscreen=()=>{if(!fullscreenArmed&&displayMode()==='fullscreen')applyDisplayMode('fullscreen')};
+  window.addEventListener('pageshow',rejectZombieFullscreen);
+  window.addEventListener('focus',rejectZombieFullscreen);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)rejectZombieFullscreen()});
+
   function setDot(cls){if(dot)dot.className='dot '+(cls||'');}
   function setLabel(txt){if(label)label.textContent=String(txt||'');}
   function closeSelf(reason){
     if(closed)return;
     closed=true;
     clearTimeout(pollTimer);
-    try{window.removeEventListener('storage',onStorage)}catch{}
+    try{lifecycle.destroy()}catch{}
+    if(companionPanel)companionPanel.hidden=true;
     if(root){root.className='closed';root.innerHTML='EIROS Wake Listener closed · '+String(reason||'retired');}
   }
-  function onStorage(e){
-    if(e.key===activeKey&&e.newValue!==sessionId)closeSelf('superseded');
-    if(e.key===killKey)closeSelf('listener kill');
-  }
-  window.addEventListener('storage',onStorage);
 
   async function callTool(name,args){
     for(const h of [window.openai,window.mcp]){
@@ -150,6 +534,48 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   }
 
   function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
+
+  function text(v){return String(v??'')}
+  function setClass(el,state){if(!el)return;el.classList.remove('good','warnText','badText');if(state)el.classList.add(state)}
+  function scheduleConsole(delay=3500){clearTimeout(consoleTimer);consoleTimer=setTimeout(refreshConsole,delay)}
+  async function refreshConsole(){
+    if(String(document.body.dataset.displayMode||displayMode())!=='fullscreen'||closed||consoleBusy)return;
+    consoleBusy=true;
+    if(consoleSub)consoleSub.textContent='Refreshing live state…';
+    try{
+      const [pRaw,rRaw,qRaw,hRaw]=await Promise.all([
+        callTool('pulse_status',{limit:20,channel}),
+        callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:30,after_seq:0}),
+        callTool('queue_status',{events:10}),
+        callTool('hub_status',{})
+      ]);
+      const p=unwrap(pRaw),r=unwrap(rRaw),q=unwrap(qRaw),h=unwrap(hRaw);
+      const events=Array.isArray(p.events)?p.events:[];
+      const pending=events.filter(e=>!['acked','cancelled'].includes(text(e.status))).length;
+      const leader=p.leader||p.leaders?.[channel]||null;
+      if(pulseValue)pulseValue.textContent=leader?'LIVE':'IDLE'; setClass(pulseValue,leader?'good':'warnText');
+      if(pulseSub)pulseSub.textContent='pending '+pending+' · seq '+text(p.next_seq||p.latest_seq||'—');
+      const participants=Array.isArray(r.participants)?r.participants:(Array.isArray(r.agents)?r.agents:[]);
+      const messages=Array.isArray(r.messages)?r.messages:[];
+      if(roomValue)roomValue.textContent=participants.length?text(participants.length)+' online':'READY'; setClass(roomValue,'good');
+      if(roomSub)roomSub.textContent='messages '+messages.length+' · '+text(r.project_id||projectId);
+      const tasks=Array.isArray(q.tasks)?q.tasks:[];
+      const active=tasks.filter(t=>!['completed','failed','cancelled'].includes(text(t.status))).length;
+      if(queueValue)queueValue.textContent=text(active); setClass(queueValue,active?'warnText':'good');
+      if(queueSub)queueSub.textContent=active?'active tasks':'queue clear';
+      const agents=h.agents&&typeof h.agents==='object'?Object.values(h.agents):(Array.isArray(h.participants)?h.participants:[]);
+      const online=agents.filter(a=>text(a.status).startsWith('online')||Number(a.active_session_count||0)>0).length;
+      if(hubValue)hubValue.textContent=text(online); setClass(hubValue,online?'good':'warnText');
+      if(hubSub)hubSub.textContent='agents online · total '+agents.length;
+      const latest=events.slice().sort((a,b)=>Number(b.seq||0)-Number(a.seq||0))[0];
+      if(latest){if(eventValue)eventValue.textContent='#'+text(latest.seq||'?')+' · '+text(latest.status||'pending');if(eventSub)eventSub.textContent=text(latest.text||latest.source||'Event received')}
+      else{if(eventValue)eventValue.textContent='No event';if(eventSub)eventSub.textContent='Pulse is quiet.'}
+      if(consoleSub)consoleSub.textContent='EBRIDGE connected · updated '+new Date().toLocaleTimeString();
+    }catch(e){
+      if(consoleSub)consoleSub.textContent='Console degraded · '+text(e&&e.message||e);
+      if(pulseValue)pulseValue.textContent='OFFLINE';setClass(pulseValue,'badText');
+    }finally{consoleBusy=false;if(String(document.body.dataset.displayMode||displayMode())==='fullscreen')scheduleConsole(3500)}
+  }
 
   function buildWakePrompt(event){
     const evtId=String(event.id||'');
@@ -183,42 +609,50 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   }
 
   async function postWake(prompt){
+    const payload={role:'user',content:[{type:'text',text:prompt}]};
+    // The MCP Apps bridge is the canonical wake path. A correlated response
+    // proves that the ChatGPT host accepted this exact message request.
+    try{await bridgeRequest('ui/message',payload);return 'bridge-confirmed'}catch(e){}
+    // Compatibility helpers are useful, but iOS has previously resolved these
+    // without creating a visible turn. Keep the event retryable in that case.
     for(const h of [window.openai,window.mcp]){
       if(h&&typeof h.sendFollowUpMessage==='function'){
-        try{await h.sendFollowUpMessage({prompt,scrollToBottom:true});return 'followup';}catch(e){}
+        try{await h.sendFollowUpMessage({prompt,scrollToBottom:true});return 'followup-unconfirmed'}catch(e){}
       }
       if(h&&typeof h.sendFollowupMessage==='function'){
-        try{await h.sendFollowupMessage({prompt,scrollToBottom:true});return 'followup-lower';}catch(e){}
+        try{await h.sendFollowupMessage({prompt,scrollToBottom:true});return 'followup-unconfirmed'}catch(e){}
       }
     }
-    const payload={role:'user',content:[{type:'text',text:prompt}]};
-    for(const h of [window.openai,window.mcp]){
-      if(h&&typeof h.sendMessage==='function'){
-        try{await h.sendMessage(payload);return 'host';}catch(e){}
-      }
-    }
-    try{window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:payload},'*');return 'fallback';}catch(e){}
     return 'failed';
   }
 
   async function heartbeat(activity='online'){
-    if(closed||!isActive()){closeSelf('superseded');return;}
+    if(closed)return;
     const now=Date.now();
     if(now-lastHb<4500)return;
     lastHb=now;
-    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt-pulse-anchor',widget_version:anchorVersion,activity:lastWakeMode?(activity+'·wake:'+lastWakeMode):activity});}catch(e){}
+    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt-pulse-anchor',widget_version:anchorVersion,activity:activity+'·video-pip:'+videoPipState+(lastWakeMode?'·wake:'+lastWakeMode:'')+'·mode:'+displayMode()});reportBootStage('HEARTBEAT_OK','room heartbeat accepted')}catch(e){}
   }
 
   async function poll(){
     clearTimeout(pollTimer);
     if(closed)return;
-    if(!isActive()){closeSelf('superseded');return;}
     try{
       await heartbeat();
       const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel,instance_id:String(boot.instanceId||''),claim_seconds:45});
+      reportBootStage('PULSE_POLL_OK','pulse_poll returned');
       const data=unwrap(raw);
       if(data.event){
-        const evt=data.event,seq=String(evt.seq||'?'),id=String(evt.id||'');
+        const evt=data.event,seq=String(evt.seq||'?'),id=String(evt.id||''),payload=evt.payload||{};
+        const ageSeconds=Math.max(0,Math.floor(Date.now()/1000)-Number(evt.created_at||0));
+        if(payload.sam===true&&payload.room_visual_receipt===true&&ageSeconds<15){
+          setDot('warn');setLabel('SAM #'+seq+' · waiting for Room relay ('+(15-ageSeconds)+'s)');
+          pollTimer=setTimeout(poll,2000);return;
+        }
+        if(payload.sam===true&&payload.sam_kind==='scheduled_task'&&videoPipState!=='active'){
+          setDot('warn');setLabel('SAM #'+seq+' · tap Открыть PiP to arm Video PiP');
+          pollTimer=setTimeout(poll,1500);return;
+        }
         const tries=(attempts[id]||0)+1;attempts[id]=tries;
         if(tries>3){
           setDot('bad');setLabel('Event #'+seq+' stuck after '+(tries-1)+' tries · waiting ack');
@@ -227,11 +661,11 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
         setDot('warn');setLabel('Event #'+seq+' · wake try '+tries);
         const mode=await postWake(buildWakePrompt(evt));
         lastWakeMode=mode+':#'+seq;
-        if(mode==='followup'||mode==='followup-lower'||mode==='host'){
-          setDot('ok');setLabel('Wake sent #'+seq+' · '+mode);
+        if(mode==='bridge-confirmed'){
+          setDot('ok');setLabel('Wake sent #'+seq+' · bridge confirmed');
           try{await callTool('pulse_mark_delivered',{event_id:id,widget_id:sessionId,channel});}catch(e){}
         }
-        else if(mode==='fallback'){setDot('warn');setLabel('Wake fallback #'+seq+' · will retry');}
+        else if(mode==='followup-unconfirmed'){setDot('warn');setLabel('Wake #'+seq+' unconfirmed · will retry');}
         else{setDot('bad');setLabel('Wake failed #'+seq+' · will retry');}
         pollTimer=setTimeout(poll,2500);return;
       }

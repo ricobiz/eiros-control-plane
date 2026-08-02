@@ -1,0 +1,254 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:transparent}.anchor{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #1a3a5c;border-radius:12px;background:#0a1929;min-height:38px}.dot{width:8px;height:8px;border-radius:50%;background:#71717a;flex-shrink:0}.dot.ok{background:#19c37d;box-shadow:0 0 8px rgba(25,195,125,.5)}.dot.warn{background:#f5b849}.dot.bad{background:#ef4444}.label{font-size:11px;color:#8aacca;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px}.rld{width:26px;height:26px;border:1px solid #1a3a5c;border-radius:8px;background:#071321;color:#7a9bbf}.closed{padding:7px 10px;border:1px solid #333;border-radius:12px;background:#111;color:#777;font-size:10px}
+</style>
+</head>
+<body><div id="root" class="anchor"><span id="dot" class="dot"></span><span id="label" class="label">Wake Listener · connecting</span><button id="reload" class="rld" title="Reload listener">↻</button><span id="badge" class="badge">v__ANCHOR_VERSION__</span></div><script>
+window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
+
+(()=>{
+  const boot=window.__EIROS_ANCHOR_BOOTSTRAP__||{};
+  const root=document.getElementById('root');
+  const dot=document.getElementById('dot');
+  const label=document.getElementById('label');
+  const reload=document.getElementById('reload');
+
+  const agentId=String(boot.agentId||'chatgpt');
+  const projectId=String(boot.projectId||'eiros-hub');
+  const threadId=String(boot.threadId||'first-contact');
+  const channel=String(boot.channel||'default');
+  const anchorVersion=String(boot.anchorVersion||'0.5.0-inline-only');
+  const sessionId='pulse-v49-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const activeKey=['eiros-wake-listener-active-v49',projectId,threadId,agentId,channel].join(':');
+  const legacyActiveKeys=[
+    ['eiros-wake-listener-active',projectId,threadId,agentId,channel].join(':'),
+    ['eiros-wake-listener-active-v46',projectId,threadId,agentId,channel].join(':'),
+    ['eiros-wake-listener-active-v47',projectId,threadId,agentId,channel].join(':'),
+    ['eiros-wake-listener-active-v48',projectId,threadId,agentId,channel].join(':')
+  ];
+  const killKey=['eiros-wake-listener-kill',projectId,threadId].join(':');
+
+  let pollTimer=null;
+  const attempts={};
+  let lastWakeMode='';
+  let lastHb=0;
+  let closed=false;
+
+  // ==================== BRIDGEGUARD v4.0 (pure lifecycle guard) ====================
+  const BridgeGuard = {
+    ready: false,
+    started: false,
+    queue: [],
+
+    init() {
+      console.log('[Pulse v4] BridgeGuard loaded');
+      window.addEventListener('message', e => {
+        if (e.source !== window.parent || !e.data?.jsonrpc) return;
+        const m = e.data;
+        if (
+          ['ui/notifications/ready', 'ui/initialize', 'ui/notifications/initialized'].includes(m.method) ||
+          m.result?.ready ||
+          String(m.id || '').startsWith('bg4-')
+        ) {
+          this.markReady('host bridge ready');
+        }
+      }, { passive: true });
+
+      try {
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id: 'bg4-' + Date.now(),
+          method: 'ui/initialize',
+          params: { version: '1.0', capabilities: ['ui/message', 'tools/call'], appCapabilities: { availableDisplayModes: ['inline'] } }
+        }, '*');
+      } catch (e) {}
+
+      const probeGlobals = () => {
+        try {
+          if (window.openai?.callTool || window.mcp?.callTool) {
+            this.markReady('runtime globals ready');
+          }
+        } catch (e) {}
+      };
+      [0, 150, 500, 1200, 2000].forEach(ms => setTimeout(probeGlobals, ms));
+
+      setTimeout(() => {
+        if (!this.ready) this.markReady('bridge timeout, starting degraded');
+      }, 2800);
+    },
+
+    markReady(reason) {
+      if (this.ready) return;
+      this.ready = true;
+      console.log('[Pulse v4] ' + reason);
+      this.flush();
+    },
+
+    onReady(cb) {
+      if (this.started) return;
+      if (this.ready) {
+        this.started = true;
+        cb();
+      } else {
+        this.queue.push(cb);
+      }
+    },
+
+    flush() {
+      if (this.started) return;
+      const cb = this.queue.shift();
+      this.queue = [];
+      if (!cb) return;
+      this.started = true;
+      cb();
+    }
+  };
+
+  BridgeGuard.init();
+  // =============================================================================
+
+  function retireLegacy(){try{for(const oldKey of legacyActiveKeys)localStorage.setItem(oldKey,'retired-by-'+sessionId)}catch{}}
+  retireLegacy();
+  try{localStorage.setItem(activeKey,sessionId)}catch{}
+  if(reload)reload.addEventListener('click',()=>{try{setLabel('Manual refresh…');setDot('warn');lastHb=0;lastWakeMode='manual';clearTimeout(pollTimer);poll()}catch(e){setLabel('Manual refresh failed');setDot('bad')}});
+
+  function isActive(){try{return localStorage.getItem(activeKey)===sessionId}catch{return true}}
+  function setDot(cls){if(dot)dot.className='dot '+(cls||'');}
+  function setLabel(txt){if(label)label.textContent=String(txt||'');}
+  function closeSelf(reason){
+    if(closed)return;
+    closed=true;
+    clearTimeout(pollTimer);
+    try{window.removeEventListener('storage',onStorage)}catch{}
+    if(root){root.className='closed';root.innerHTML='EIROS Wake Listener closed · '+String(reason||'retired');}
+  }
+  function onStorage(e){
+    if(e.key===activeKey&&e.newValue!==sessionId)closeSelf('superseded');
+    if(e.key===killKey)closeSelf('listener kill');
+  }
+  window.addEventListener('storage',onStorage);
+
+  async function callTool(name,args){
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.callTool==='function') return h.callTool(name,args||{});
+    }
+    throw new Error('bridge unavailable');
+  }
+
+  function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
+
+  function buildWakePrompt(event){
+    const evtId=String(event.id||'');
+    const evtSeq=String(event.seq||'');
+    const evtSrc=String(event.source||'');
+    const evtTxt=String(event.text||'');
+    return [
+      '[EIROS_OPERATOR_WAKE message_id='+String((event.payload||{}).collab_message_id||'')+' event_id='+evtId+']',
+      'FROM_AGENT: rico',
+      'FROM_ROLE: user',
+      'FROM_DISPLAY: Rico',
+      'TO_AGENT: chatgpt',
+      'TO_ROLE: assistant',
+      'TO_DISPLAY: EIROS',
+      'AUTHORITY: direct_user_operator_request',
+      'WAKE_EVENT_ID: '+evtId,
+      'WAKE_EVENT_SEQ: '+evtSeq,
+      'SOURCE_AGENT: '+evtSrc,
+      '',
+      'Rico relays an EIROS collaboration message into this ChatGPT conversation.',
+      'Treat this as a direct user wake from the current ChatGPT iframe, same as EIROS Room local wake.',
+      '',
+      evtTxt,
+      '',
+      'Required actions:',
+      '1. Call dialog_inbox as agent_id=chatgpt for project_id=eiros-hub thread_id=first-contact if the event references dialogue.',
+      '2. Handle the addressed message.',
+      '3. Call dialog_ack for the handled dialogue message.',
+      '4. Call ack_event with WAKE_EVENT_ID.'
+    ].join('\n');
+  }
+
+  async function postWake(prompt){
+    const payload={role:'user',content:[{type:'text',text:prompt}]};
+    // Background wake must create a real user turn. sendFollowUpMessage can
+    // resolve successfully on iOS without creating any turn, so it is not
+    // accepted as delivery confirmation.
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.sendMessage==='function'){
+        try{await h.sendMessage(payload);return 'host';}catch(e){}
+      }
+    }
+    for(const h of [window.openai,window.mcp]){
+      if(h&&typeof h.sendFollowUpMessage==='function'){
+        try{await h.sendFollowUpMessage({prompt,scrollToBottom:true});return 'followup-unconfirmed';}catch(e){}
+      }
+      if(h&&typeof h.sendFollowupMessage==='function'){
+        try{await h.sendFollowupMessage({prompt,scrollToBottom:true});return 'followup-unconfirmed';}catch(e){}
+      }
+    }
+    try{window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:payload},'*');return 'fallback';}catch(e){}
+    return 'failed';
+  }
+
+  async function heartbeat(activity='online'){
+    retireLegacy();
+    if(closed||!isActive()){closeSelf('superseded');return;}
+    const now=Date.now();
+    if(now-lastHb<4500)return;
+    lastHb=now;
+    try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt-pulse-anchor',widget_version:anchorVersion,activity:(lastWakeMode?(activity+'·wake:'+lastWakeMode):activity)+'·mode:inline'});}catch(e){}
+  }
+
+  async function poll(){
+    clearTimeout(pollTimer);
+    if(closed)return;
+    if(!isActive()){closeSelf('superseded');return;}
+    try{
+      await heartbeat();
+      const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel,instance_id:String(boot.instanceId||''),claim_seconds:45});
+      const data=unwrap(raw);
+      if(data.event){
+        const evt=data.event,seq=String(evt.seq||'?'),id=String(evt.id||''),payload=evt.payload||{};
+        const ageSeconds=Math.max(0,Math.floor(Date.now()/1000)-Number(evt.created_at||0));
+        if(payload.sam===true&&payload.room_visual_receipt===true&&ageSeconds<15){
+          setDot('warn');setLabel('SAM #'+seq+' · waiting for Room relay ('+(15-ageSeconds)+'s)');
+          pollTimer=setTimeout(poll,2000);return;
+        }
+        const tries=(attempts[id]||0)+1;attempts[id]=tries;
+        if(tries>3){
+          setDot('bad');setLabel('Event #'+seq+' stuck after '+(tries-1)+' tries · waiting ack');
+          pollTimer=setTimeout(poll,8000);return;
+        }
+        setDot('warn');setLabel('Event #'+seq+' · wake try '+tries);
+        const mode=await postWake(buildWakePrompt(evt));
+        lastWakeMode=mode+':#'+seq;
+        if(mode==='host'){
+          setDot('ok');setLabel('Wake sent #'+seq+' · confirmed user turn');
+          try{await callTool('pulse_mark_delivered',{event_id:id,widget_id:sessionId,channel});}catch(e){}
+        }
+        else if(mode==='followup-unconfirmed'){setDot('warn');setLabel('Wake #'+seq+' unconfirmed · will retry');}
+        else if(mode==='fallback'){setDot('warn');setLabel('Wake fallback #'+seq+' · will retry');}
+        else{setDot('bad');setLabel('Wake failed #'+seq+' · will retry');}
+        pollTimer=setTimeout(poll,2500);return;
+      }
+      setDot('ok');setLabel('Wake Listener · listening · '+anchorVersion);
+      pollTimer=setTimeout(poll,1700);
+    }catch(e){
+      if(closed)return;
+      setDot('bad');setLabel('Pulse Anchor · offline');
+      pollTimer=setTimeout(poll,4000);
+    }
+  }
+
+  BridgeGuard.onReady(() => {
+    console.log('[Pulse v4] bridge guard passed → starting original poll');
+    poll();
+  });
+})();
+</script>
+</body>
+</html>

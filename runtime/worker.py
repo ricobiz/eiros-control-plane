@@ -20,6 +20,7 @@ PID_FILE = RUNTIME / "worker.pid"
 sys.path.insert(0, str(CODE_ROOT))
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
+from runtime import sam as sam_engine  # noqa: E402
 from runtime.boot_report import emit_startup_report  # noqa: E402
 from runtime import security as security_policy  # noqa: E402
 from runtime.maintenance import run_maintenance  # noqa: E402
@@ -121,32 +122,7 @@ def publish_brain_due(tasks: list[dict[str, Any]]) -> None:
             pass
     known = {(item.get("id"), int(item.get("revision", 0))) for item in current.get("items", [])}
     for task in tasks:
-        event = event_engine.emit(
-            text=(
-                "Scheduled EIROS brain task is due.\n"
-                f"task_id={task['id']}\n"
-                f"task_revision={task['revision']}\n"
-                f"title={task['title']}\n"
-                f"objective={task['objective']}\n"
-                f"next_step={task.get('next_step') or ''}\n\n"
-                "Required continuation protocol:\n"
-                "1. Call queue_claim with mode='brain' and a unique ChatGPT owner.\n"
-                "2. Execute and verify one concrete next step.\n"
-                "3. Call queue_commit to finish or schedule the next wake.\n"
-                "4. Acknowledge this reverse event after the task state is committed."
-            ),
-            source="scheduler",
-            payload={
-                "task_id": task["id"],
-                "task_revision": task["revision"],
-                "title": task["title"],
-                "objective": task["objective"],
-                "payload": task.get("payload") or {},
-                "next_step": task.get("next_step") or "",
-            },
-            priority=int(task.get("priority", 0)),
-            idempotency_key=f"brain:{task['id']}:rev:{task['revision']}",
-        )
+        event = sam_engine.emit_scheduled_wake(task)
         if (task["id"], int(task["revision"])) in known:
             continue
         current.setdefault("items", []).append({
@@ -229,10 +205,11 @@ def drain_due() -> dict[str, Any]:
 
 
 def next_timeout() -> float:
+    """Wake frequently enough for the out-of-band widget watchdog, even with an empty task queue."""
     wake = queue_engine.next_wakeup()
     if not wake.get("has_task"):
-        return 3600.0
-    return float(max(0, min(int(wake.get("sleep_seconds") or 0), 3600)))
+        return 5.0
+    return float(max(0, min(int(wake.get("sleep_seconds") or 0), 5)))
 
 
 def stop_handler(_signum: int, _frame: Any) -> None:
@@ -263,11 +240,20 @@ def main() -> None:
 
         maintenance_report = run_maintenance()
         startup_report = emit_startup_report()
-        heartbeat("running", startup=True, startup_report=startup_report, maintenance=maintenance_report)
+        heartbeat(
+            "running",
+            startup=True,
+            startup_report=startup_report,
+            maintenance=maintenance_report,
+        )
         while RUNNING:
             summary = drain_due()
             timeout = next_timeout()
-            heartbeat("waiting", next_timeout_seconds=timeout, **summary)
+            heartbeat(
+                "waiting",
+                next_timeout_seconds=timeout,
+                **summary,
+            )
             events = selector.select(timeout=timeout)
             for key, _ in events:
                 try:

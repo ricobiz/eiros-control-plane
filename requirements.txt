@@ -12,3 +12,6 @@ python-dotenv
 asyncio
 structlog
 prometheus-client
+
+# Remote mastering engine
+numpy

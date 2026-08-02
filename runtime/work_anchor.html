@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:transparent;color:#d9ecff}
+.anchor{min-height:62px;display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #24506f;border-radius:15px;background:linear-gradient(180deg,#0b2033,#071522);box-shadow:0 8px 30px rgba(0,0,0,.24)}
+.logo{position:relative;width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:radial-gradient(circle at 35% 28%,#1d547e,#0b2740 62%,#07131f);font-weight:850;font-size:17px;flex:none}.dot{position:absolute;right:0;bottom:0;width:11px;height:11px;border:2px solid #071522;border-radius:50%;background:#777}.dot.ok{background:#22c985}.dot.warn{background:#f5b849}.dot.bad{background:#ef5967}
+.info{min-width:0;flex:1}.title{font-size:12px;font-weight:760;letter-spacing:.03em}.status{margin-top:3px;font-size:10px;color:#7fa3c3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.trace{margin-top:3px;font-size:9px;color:#4e7698;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.actions{display:flex;gap:6px;flex:none}button{height:34px;padding:0 9px;border:1px solid #285778;border-radius:10px;background:#0a1b2b;color:#a8cee9;font-size:10px;font-weight:720}button:active{transform:scale(.96)}button.primary{border-color:#23714e;color:#77e7ae;background:#09251b}button[disabled]{opacity:.45}
+</style>
+</head>
+<body>
+<div class="anchor">
+  <div class="logo">E<span id="dot" class="dot warn"></span></div>
+  <div class="info"><div class="title">EIROS WORK ANCHOR <span id="ver">v__WORK_ANCHOR_VERSION__</span></div><div id="status" class="status">Starting host contract probe…</div><div id="trace" class="trace">BOOT</div></div>
+  <div class="actions"><button id="room">ROOM</button><button id="deliver" class="primary" disabled>DELIVER</button></div>
+</div>
+<script>
+window.__EIROS_WORK_ANCHOR_BOOTSTRAP__=__EIROS_WORK_ANCHOR_BOOTSTRAP_JSON__;
+(()=>{
+  const boot=window.__EIROS_WORK_ANCHOR_BOOTSTRAP__||{};
+  const $=id=>document.getElementById(id),dot=$('dot'),statusEl=$('status'),traceEl=$('trace'),deliverBtn=$('deliver'),roomBtn=$('room');
+  const agentId=String(boot.agentId||'chatgpt'),projectId=String(boot.projectId||'eiros-hub'),threadId=String(boot.threadId||'first-contact'),channel=String(boot.channel||'default');
+  const version=String(boot.anchorVersion||'0.1.0-host-contract'),instanceId=String(boot.instanceId||'');
+  const sessionId='pulse-v49-'+agentId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const newKey=['eiros-work-anchor-active-v1',projectId,threadId,agentId,channel].join(':');
+  const oldKey=['eiros-wake-listener-active-v49',projectId,threadId,agentId,channel].join(':');
+  const pending=new Map();let rpc=1,pollTimer=null,hbTimer=null,pendingEvent=null,awaitingAck=null,lastTrace='BOOT',lastError='',closed=false;
+  function setState(kind,text,trace){dot.className='dot '+kind;statusEl.textContent=text;if(trace){lastTrace=trace;traceEl.textContent=trace}}
+  function capabilities(){
+    const rows={};for(const [name,h] of [['openai',window.openai],['mcp',window.mcp]]){rows[name]={present:!!h,callTool:typeof h?.callTool,sendMessage:typeof h?.sendMessage,sendFollowUpMessage:typeof h?.sendFollowUpMessage,sendFollowupMessage:typeof h?.sendFollowupMessage,requestDisplayMode:typeof h?.requestDisplayMode,displayMode:String(h?.displayMode||'')}}return rows
+  }
+  window.addEventListener('message',e=>{if(e.source!==window.parent)return;const m=e.data||{};if(!m.id||!pending.has(m.id))return;const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(new Error(m.error.message||JSON.stringify(m.error))):p.resolve(m.result||{})});
+  function rpcReq(method,params,timeout=8000){return new Promise((resolve,reject)=>{const id='eiros-wa-'+Date.now()+'-'+rpc++;pending.set(id,{resolve,reject});window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(new Error(method+' timeout'))}},timeout)})}
+  async function callTool(name,args){for(const h of [window.openai,window.mcp])if(h&&typeof h.callTool==='function')return h.callTool(name,args||{});return rpcReq('tools/call',{name,arguments:args||{}},15000)}
+  function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{}}
+  async function tele(stage,extra={},error=''){lastTrace=stage;lastError=String(error||'');traceEl.textContent=stage+(lastError?' · '+lastError:'');try{await callTool('room_telemetry_update',{widget_id:sessionId,widget_kind:'work-anchor',project_id:projectId,thread_id:threadId,status:'trace:'+stage,snapshot:{stage,session_id:sessionId,version,visibility:document.visibilityState,focused:document.hasFocus(),width:innerWidth,height:innerHeight,display_mode:String(window.openai?.displayMode||window.mcp?.displayMode||'inline'),capabilities:capabilities(),pending_event:pendingEvent?{id:pendingEvent.id,seq:pendingEvent.seq,source:pendingEvent.source}:null,...extra},error:lastError})}catch(e){}}
+  function buildWakePrompt(evt){const p=evt?.payload||{};return ['[EIROS_WORK_ANCHOR_WAKE message_id='+String(p.collab_message_id||'')+' event_id='+String(evt?.id||'')+']','FROM_AGENT: '+String(p.from_agent||evt?.source||'rico'),'TO_AGENT: chatgpt','AUTHORITY: durable_hub_event_via_work_anchor','WAKE_EVENT_ID: '+String(evt?.id||''),'WAKE_EVENT_SEQ: '+String(evt?.seq||''),'',String(evt?.text||''),'','Required actions:','1. Read the durable EIROS state and claim the referenced work/message.','2. Handle it in this conversation.','3. Commit/ack the durable item.','4. Call ack_event with WAKE_EVENT_ID.'].join('\n')}
+  async function hostDeliver(prompt){
+    const payloadArray={role:'user',content:[{type:'text',text:prompt}]};
+    const attempts=[];
+    // Historical iOS contract: sendFollowUpMessage({prompt}) is the first choice.
+    // A resolved Promise only means the host accepted the call; it does NOT prove a turn exists.
+    for(const [hostName,h] of [['openai',window.openai],['mcp',window.mcp]]){
+      for(const method of ['sendFollowUpMessage','sendFollowupMessage'])if(typeof h?.[method]==='function'){
+        try{
+          const shape='prompt-only';
+          await tele('FOLLOWUP_CALL_START',{method:hostName+'.'+method,shape,user_activation:!!navigator.userActivation?.isActive});
+          const r=await h[method]({prompt});
+          attempts.push({method:hostName+'.'+method,shape,result:'resolved',value:String(r??'')});
+          await tele('FOLLOWUP_CALL_RESOLVED',{method:hostName+'.'+method,shape,result:String(r??'')});
+          return {ok:true,method:hostName+'.'+method,shape,attempts};
+        }catch(e){
+          attempts.push({method:hostName+'.'+method,shape:'prompt-only',result:'error',error:String(e?.message||e)});
+          await tele('FOLLOWUP_CALL_ERROR',{method:hostName+'.'+method,shape:'prompt-only'},e?.message||e);
+        }
+      }
+    }
+    for(const [hostName,h] of [['openai',window.openai],['mcp',window.mcp]]){
+      if(typeof h?.sendMessage==='function'){
+        for(const [shape,value] of [['content-array',payloadArray],['content-text',{role:'user',content:prompt}]]){
+          try{
+            await tele('SENDMESSAGE_CALL_START',{method:hostName+'.sendMessage',shape,user_activation:!!navigator.userActivation?.isActive});
+            const r=await h.sendMessage(value);
+            attempts.push({method:hostName+'.sendMessage',shape,result:'resolved',value:String(r??'')});
+            await tele('SENDMESSAGE_CALL_RESOLVED',{method:hostName+'.sendMessage',shape,result:String(r??'')});
+            return {ok:true,method:hostName+'.sendMessage',shape,attempts};
+          }catch(e){
+            attempts.push({method:hostName+'.sendMessage',shape,result:'error',error:String(e?.message||e)});
+            await tele('SENDMESSAGE_CALL_ERROR',{method:hostName+'.sendMessage',shape},e?.message||e);
+          }
+        }
+      }
+    }
+    try{
+      await tele('UI_MESSAGE_CALL_START',{method:'rpc ui/message',user_activation:!!navigator.userActivation?.isActive});
+      const r=await rpcReq('ui/message',payloadArray,5000);
+      attempts.push({method:'rpc ui/message',result:'resolved',value:JSON.stringify(r)});
+      await tele('UI_MESSAGE_CALL_RESOLVED',{result:r});
+      return {ok:true,method:'rpc ui/message',shape:'content-array',attempts};
+    }catch(e){
+      attempts.push({method:'rpc ui/message',result:'error',error:String(e?.message||e)});
+      await tele('UI_MESSAGE_CALL_ERROR',{},e?.message||e);
+    }
+    return {ok:false,method:'none',shape:'none',attempts};
+  }
+  async function readEventState(eventId){
+    try{
+      const d=unwrap(await callTool('work_anchor_event_status',{event_id:String(eventId||''),channel}));
+      return d?.event||null;
+    }catch(e){
+      await tele('EVENT_STATE_ERROR',{event_id:eventId},e?.message||e);
+      return null;
+    }
+  }
+  async function heartbeat(){if(closed)return;try{await callTool('room_heartbeat',{agent_id:agentId,session_id:sessionId,host:'chatgpt-work-anchor',widget_version:version,activity:'online·'+lastTrace});}catch(e){}hbTimer=setTimeout(heartbeat,5000)}
+  async function poll(){
+    if(closed)return;
+    try{
+      if(awaitingAck){
+        const state=await readEventState(awaitingAck.id);
+        const st=String(state?.status||'');
+        if(st==='acked'){
+          await tele('ACK_CONFIRMED',{event_id:awaitingAck.id,event_seq:awaitingAck.seq,method:awaitingAck.method,acked_at:state?.acked_at||0});
+          setState('ok','Wake confirmed · event #'+String(awaitingAck.seq||'?')+' acked','ACK_CONFIRMED');
+          awaitingAck=null;pendingEvent=null;deliverBtn.disabled=true;
+          pollTimer=setTimeout(poll,2200);return;
+        }
+        const age=Math.floor((Date.now()-awaitingAck.startedAt)/1000);
+        if(age<18){
+          setState('warn','Host call sent · waiting real turn/ack '+age+'s','WAITING_ACK');
+          deliverBtn.disabled=true;
+          pollTimer=setTimeout(poll,1800);return;
+        }
+        await tele('ACK_TIMEOUT',{event_id:awaitingAck.id,event_seq:awaitingAck.seq,method:awaitingAck.method,state:st||'unknown',age_seconds:age});
+        setState('bad','No model ack · event will retry after lease','ACK_TIMEOUT');
+        awaitingAck=null;pendingEvent=null;deliverBtn.disabled=true;
+      }
+      const d=unwrap(await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel,instance_id:instanceId,claim_seconds:20}));
+      if(d.event){
+        pendingEvent=d.event;
+        setState('warn','Event #'+String(d.event.seq||'?')+' ready · tap DELIVER','EVENT_CLAIMED');
+        deliverBtn.disabled=false;
+        await tele('EVENT_CLAIMED',{event_id:d.event.id,event_seq:d.event.seq,delivery_attempts:d.event.delivery_attempts||0,status:d.event.status||''});
+      }else if(!awaitingAck){
+        pendingEvent=null;deliverBtn.disabled=true;setState('ok','Listening · no pending events','LISTENING');
+      }
+    }catch(e){
+      setState('bad','Pulse error: '+String(e?.message||e),'POLL_ERROR');
+      await tele('POLL_ERROR',{},e?.message||e);
+    }
+    pollTimer=setTimeout(poll,1800);
+  }
+  deliverBtn.onclick=async()=>{
+    if(!pendingEvent||awaitingAck)return;
+    const evt=pendingEvent;
+    deliverBtn.disabled=true;
+    setState('warn','Calling ChatGPT host…','DELIVER_TAP');
+    await tele('DELIVER_TAP',{event_id:evt.id,event_seq:evt.seq,user_activation:!!navigator.userActivation?.isActive});
+    const r=await hostDeliver(buildWakePrompt(evt));
+    if(r.ok){
+      awaitingAck={id:String(evt.id),seq:evt.seq,method:r.method,shape:r.shape,startedAt:Date.now()};
+      setState('warn','Host '+r.method+' resolved · waiting real ack','WAITING_ACK');
+      await tele('HOST_CALL_ACCEPTED_WAITING_ACK',{event_id:evt.id,event_seq:evt.seq,delivery:r});
+    }else{
+      setState('bad','All host wake methods failed','DELIVER_FAILED');
+      await tele('DELIVER_FAILED',{event_id:evt.id,event_seq:evt.seq,delivery:r},'all methods failed');
+      pendingEvent=null;
+    }
+  };
+  roomBtn.onclick=async()=>{
+    await tele('ROOM_TAP',{user_activation:!!navigator.userActivation?.isActive});
+    try{
+      const r=unwrap(await callTool('open_collab_room',{}));
+      setState('ok','Room open requested','ROOM_TOOL_RETURNED');
+      await tele('ROOM_TOOL_RETURNED',{result:r});
+    }catch(e){
+      await tele('ROOM_TOOL_ERROR',{},e?.message||e);
+      const prompt='[EIROS_OPEN_ROOM] Rico tapped ROOM in the persistent Work Anchor. Call open_collab_room as the final tool action.';
+      const r=await hostDeliver(prompt);
+      await tele('ROOM_WAKE_FALLBACK_RETURNED',{delivery:r});
+    }
+  };
+  for(const [ev,stage] of [['visibilitychange','VISIBILITY'],['pageshow','PAGESHOW'],['pagehide','PAGEHIDE'],['focus','FOCUS'],['blur','BLUR'],['freeze','FREEZE'],['resume','RESUME']])window.addEventListener(ev,()=>tele(stage,{event:ev,visibility:document.visibilityState,focused:document.hasFocus()}));
+  try{localStorage.setItem(['eiros-wake-listener-kill',projectId,threadId].join(':'),sessionId+':'+Date.now());localStorage.setItem(newKey,sessionId);localStorage.setItem(oldKey,sessionId)}catch(e){}
+  window.addEventListener('storage',e=>{if((e.key===newKey||e.key===oldKey)&&e.newValue&&e.newValue!==sessionId){closed=true;clearTimeout(pollTimer);clearTimeout(hbTimer);setState('bad','Superseded by a newer Work Anchor','SUPERSEDED');tele('SUPERSEDED',{by:e.newValue})}});
+  tele('BOOT_READY',{capabilities:capabilities()});heartbeat();poll();
+})();
+</script>
+</body>
+</html>

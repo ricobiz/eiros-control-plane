@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import socket
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,7 @@ TASK_DIR = DATA_ROOT / "tasks"
 MEMORY_DIR = DATA_ROOT / "memory"
 CONFIG_DIR = DATA_ROOT / "config"
 CONFIG_FILE = CONFIG_DIR / "instance.json"
+CONFIG_LOCK_FILE = CONFIG_DIR / "instance.lock"
 
 DEFAULTS: dict[str, Any] = {
     "schema_version": 1,
@@ -64,27 +67,51 @@ def ensure_directories() -> None:
 
 
 def ensure_instance_config() -> dict[str, Any]:
+    """Read or create one stable instance config under an inter-process lock."""
     ensure_directories()
-    current: dict[str, Any] = {}
-    if CONFIG_FILE.exists():
+    with CONFIG_LOCK_FILE.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
-            loaded = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                current = loaded
-        except Exception:
-            current = {}
-    config = _deep_merge(DEFAULTS, current)
-    if not str(config.get("instance_id") or "").strip():
-        config["instance_id"] = str(uuid.uuid4())
-    config["hostname"] = socket.gethostname()
-    widget_domain = os.environ.get("EIROS_WIDGET_DOMAIN", "").strip()
-    if widget_domain:
-        config["widget_domain"] = widget_domain.rstrip("/")
-    temp = CONFIG_FILE.with_suffix(".tmp")
-    temp.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.chmod(temp, 0o600)
-    os.replace(temp, CONFIG_FILE)
-    return config
+            current: dict[str, Any] = {}
+            if CONFIG_FILE.exists():
+                try:
+                    loaded = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                    if isinstance(loaded, dict):
+                        current = loaded
+                except Exception:
+                    current = {}
+
+            config = _deep_merge(DEFAULTS, current)
+            if not str(config.get("instance_id") or "").strip():
+                config["instance_id"] = str(uuid.uuid4())
+            config["hostname"] = socket.gethostname()
+
+            widget_domain = os.environ.get("EIROS_WIDGET_DOMAIN", "").strip()
+            if widget_domain:
+                config["widget_domain"] = widget_domain.rstrip("/")
+
+            encoded = json.dumps(config, ensure_ascii=False, indent=2) + "\n"
+            existing = ""
+            try:
+                existing = CONFIG_FILE.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                pass
+
+            if existing != encoded:
+                fd, temp_name = tempfile.mkstemp(prefix="instance-", suffix=".tmp", dir=CONFIG_DIR)
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                        handle.write(encoded)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    os.chmod(temp_name, 0o600)
+                    os.replace(temp_name, CONFIG_FILE)
+                finally:
+                    if os.path.exists(temp_name):
+                        os.unlink(temp_name)
+            return config
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def load_config() -> dict[str, Any]:
