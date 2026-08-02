@@ -202,6 +202,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   let sumLogVisible=false;
   let sumWakeBusy=false;
   let sumWakeRetryAfter=0;
+  const sumTransportGeneration=String(sumConfig.transportGeneration||'sum-set-state-v1');
   const sumStaticDebounceMs=Math.max(1000,Number(sumConfig.staticDebounceMs||3000));
   let recentHostSignals=[];
   let hostActivityTimer=null;
@@ -611,19 +612,17 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
 
   function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
   async function callSumTool(name,args={}){
-    try{return await callTool(name,args||{})}
-    catch(primaryError){
-      if(name==='sum_controller_status'||name==='sum_controller_log'){
-        const raw=await callTool('get_state',{});
-        const state=unwrap(raw);
-        return name==='sum_controller_status'?(state.sum_controller||{}):(state.sum_controller_log||{entries:[]});
-      }
-      return callTool('set_state',{status:name,data:args||{}});
+    if(name==='sum_controller_status'||name==='sum_controller_log'){
+      const raw=await callTool('get_state',{});
+      const state=unwrap(raw);
+      return name==='sum_controller_status'?(state.sum_controller||{}):(state.sum_controller_log||{entries:[]});
     }
+    const payload={...(args||{}),transport_generation:sumTransportGeneration};
+    return callTool('set_state',{status:name,data:payload});
   }
 
   function text(v){return String(v??'')}
-  const SUM_STATE_DOT_CLASS={IDLE:'',ARMED:'',WAKE:'bad',AWAKE:'ok',WORKING:'warn',STATIC_DEBOUNCE:'ok',ERROR:'bad'};
+  const SUM_STATE_DOT_CLASS={IDLE:'',ARMED:'',PAUSED:'',WAKE:'bad',AWAKE:'ok',WORKING:'warn',STATIC_DEBOUNCE:'ok',ERROR:'bad'};
   function formatSumDuration(seconds){
     const total=Math.max(0,Math.floor(Number(seconds||0)));
     const hours=Math.floor(total/3600),minutes=Math.floor((total%3600)/60),secs=total%60;
@@ -688,6 +687,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     const value=String(raw||'IDLE');
     if(value==='WAKE')return 'wake';
     if(value==='AWAKE'||value==='STATIC_DEBOUNCE')return 'awake';
+    if(value==='PAUSED')return 'idle';
     if(value==='WORKING')return 'working';
     if(value==='ERROR')return 'error';
     return 'idle';
@@ -701,6 +701,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     if(raw==='WAKE')return 'WAKE · attempt '+Math.max(1,attempt||1);
     if(raw==='AWAKE'||raw==='STATIC_DEBOUNCE')return 'AWAKE · cycle '+cycle;
     if(raw==='WORKING')return 'WORKING · '+formatSumDuration(elapsed);
+    if(raw==='PAUSED')return 'PAUSED · connector changed';
     if(raw==='ERROR')return 'ERROR · '+String(state?.error_code||'UNKNOWN');
     return 'IDLE · monitoring';
   }

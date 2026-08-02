@@ -127,7 +127,7 @@ def test_sum_poll_runs_only_after_normal_pulse_events_are_clear() -> None:
 def test_sum_listener_has_cached_catalog_compatibility_transport() -> None:
     assert "async function callSumTool" in ANCHOR
     assert "callTool('get_state',{})" in ANCHOR
-    assert "callTool('set_state',{status:name,data:args||{}})" in ANCHOR
+    assert "callTool('set_state',{status:name,data:payload})" in ANCHOR
     assert "sum_controller_status" in ANCHOR
     assert "sum_controller_set" in ANCHOR
     assert "sum_controller_tick" in ANCHOR
@@ -154,3 +154,13 @@ def test_all_sum_widget_calls_use_compatibility_transport() -> None:
         "callSumTool('sum_wake_sent'",
     ):
         assert routed in ANCHOR
+
+
+def test_sum_uses_only_stable_get_state_set_state_transport() -> None:
+    start = ANCHOR.index("async function callSumTool")
+    end = ANCHOR.index("function text", start)
+    block = ANCHOR[start:end]
+    assert "callTool('get_state',{})" in block
+    assert "callTool('set_state'" in block
+    assert "transport_generation:sumTransportGeneration" in block
+    assert "callTool(name" not in block

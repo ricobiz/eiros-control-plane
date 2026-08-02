@@ -62,6 +62,7 @@ PULSE_FRESH_VERSION = "0.5.7-self-diagnostic-pip"
 PULSE_V57_ROLLBACK_URI = "ui://eiros/pulse-anchor-v5-7-rollback.html"
 PULSE_SUM_URI = "ui://eiros/pulse-anchor-v5-8-sum-auto-wake.html"
 PULSE_SUM_VERSION = "0.5.8-sum-auto-wake"
+SUM_TRANSPORT_GENERATION = "sum-set-state-v1"
 WIDGET_MOUNT_ATTEMPTS_FILE = ROOT / "runtime" / "widget-mount-attempts.json"
 PULSE_ANCHOR_LEGACY_V44_URI = "ui://eiros/pulse-anchor-v4-4-relay-user-wake.html"
 PULSE_ANCHOR_LEGACY_V45_URI = "ui://eiros/pulse-anchor-v4-5-confirmed-user-turn.html"
@@ -147,10 +148,8 @@ mcp = FastMCP(
         "(5) After mounting, call widget_boot_status with wait_seconds=5, follow its diagnosis and do_now actions, then recheck sam_status and room_telemetry_status. Treat wake as continuously ready only when video_pip_active=true and continuous_wake_ready=true; otherwise tell Rico that one direct tap on Open PiP is still required. "
         "(6) Open Room only after Rico explicitly asks for Room or a UI message explicitly requests it. "
         "(7) Resume unfinished work from durable state without asking Rico to repeat context. Never mount duplicate Listener instances merely to chase UI colors. "
-        "SUM AUTO-WAKE RULE: when the current user message text is exactly 'Отлично, продолжай.' and sum_controller_status reports state=WAKE, call sum_wake_ack_current as the first tool action, then continue the unfinished objective. If no SUM wake is pending, interpret the phrase normally. This continuation is authorized by Rico; do not expose SUM identifiers in the visible chat. "
-        "If sum_wake_ack_current is unavailable in the current catalog, call set_state with status=\"sum_wake_ack_current\" and data containing actor=\"chatgpt\" as the first tool action. "
-        "After the SUM-woken assistant turn is fully complete, call sum_turn_complete_current as the final tool action before ending the turn. This releases the hard turn lock; never release it merely because the UI appears quiet. "
-        "If sum_turn_complete_current is unavailable in the current catalog, call set_state with status=\"sum_turn_complete_current\" and data containing actor=\"chatgpt\" as the final tool action before ending the turn. "
+        "SUM AUTO-WAKE RULE: when the current user message text is exactly 'Отлично, продолжай.', use set_state with status=\"sum_wake_ack_current\" as the first tool action and data containing actor=\"chatgpt\" and transport_generation=\"sum-set-state-v1\"; the command is idempotent and is a no-op when no SUM wake is pending. Then continue the unfinished objective. Never use the direct sum_wake_ack_current tool as the primary route. This continuation is authorized by Rico; do not expose SUM identifiers in the visible chat. "
+        "After the SUM-woken assistant turn is fully complete, use set_state with status=\"sum_turn_complete_current\" as the final tool action and data containing actor=\"chatgpt\" and transport_generation=\"sum-set-state-v1\". Never use the direct sum_turn_complete_current tool as the primary route. This releases the hard turn lock; never release it merely because the UI appears quiet. "
         "The EIROS Room and Wake Listener are separate MCP App cards: use open_collab_room for collaboration UI and open_pulse for the dedicated reverse-wake listener. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
@@ -903,13 +902,22 @@ def get_state() -> dict[str, Any]:
 
 def _dispatch_sum_compat_command(status: str, data: dict[str, Any]) -> dict[str, Any]:
     payload = data if isinstance(data, dict) else {}
+    transport_generation = str(payload.get("transport_generation") or "")[:120]
     if status == "sum_controller_set":
         return sum_controller_set(
             bool(payload.get("enabled", False)),
             action=str(payload.get("action") or "set"),
             actor=str(payload.get("actor") or "rico"),
             listener_session_id=str(payload.get("listener_session_id") or ""),
+            transport_generation=transport_generation,
         )
+    guarded = SUM_CONTROLLER.guard_transport_generation(
+        transport_generation,
+        actor=str(payload.get("actor") or "listener"),
+        listener_session_id=str(payload.get("listener_session_id") or ""),
+    )
+    if str(guarded.get("state") or "") == "PAUSED":
+        return guarded
     if status == "sum_controller_tick":
         return sum_controller_tick(
             listener_session_id=str(payload.get("listener_session_id") or ""),
@@ -1658,6 +1666,7 @@ def sum_controller_set(
     action: str = "set",
     actor: str = "rico",
     listener_session_id: str = "",
+    transport_generation: str = "",
 ) -> dict[str, Any]:
     """Enable or disable the bounded SUM auto-wake controller."""
     normalized = str(action or "set").strip().lower()[:32]
@@ -1676,6 +1685,7 @@ def sum_controller_set(
         bool(enabled),
         actor=str(actor or "rico")[:80],
         listener_session_id=str(listener_session_id or "")[:180],
+        transport_generation=str(transport_generation or "")[:120],
     )
 
 
@@ -2811,6 +2821,7 @@ def _render_pulse_anchor_template(
             "available": True,
             "enabledByDefault": False,
             "naturalWakeText": "Отлично, продолжай.",
+            "transportGeneration": SUM_TRANSPORT_GENERATION,
             "staticDebounceMs": 3000,
             "ackTimeoutMs": 8000,
             "retryIntervalMs": 5000,

@@ -93,7 +93,8 @@ def test_full_acknowledged_cycle_starts_next_wake(tmp_path: Path) -> None:
         False,
         "listener-1",
     )
-    assert settling["state"] == "WORKING"
+    assert settling["state"] == "AWAKE"
+    assert settling["color"] == "green"
     assert settling["turn_locked"] is True
 
     completed = store.complete_current_turn(actor="chatgpt", listener_session_id="listener-1")
@@ -302,12 +303,13 @@ def test_ack_hard_locks_turn_until_explicit_completion(tmp_path: Path) -> None:
 
     false_static = store.record_host_signal("stable-static", False, "listener-1")
     assert false_static["turn_locked"] is True
-    assert false_static["state"] == "WORKING"
+    assert false_static["state"] == "AWAKE"
+    assert false_static["color"] == "green"
 
     clock.advance(600)
     still_locked = store.tick("listener-1", pip_active=True, listener_healthy=True)
     assert still_locked["cycle_id"] == first_wake["cycle_id"]
-    assert still_locked["state"] == "WORKING"
+    assert still_locked["state"] == "AWAKE"
     assert still_locked["send_required"] is False
 
     completed = store.complete_current_turn(actor="chatgpt", listener_session_id="listener-1")
@@ -348,3 +350,40 @@ def test_turn_complete_is_idempotent_and_requires_acked_turn(tmp_path: Path) -> 
     assert second["state"] == "STATIC_DEBOUNCE"
     assert second["turn_completed_at"] == first["turn_completed_at"]
     assert second["cycle_id"] == wake["cycle_id"]
+
+
+def test_transport_generation_change_pauses_active_cycle(tmp_path: Path) -> None:
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+    )
+    armed = store.set_enabled(
+        True,
+        actor="rico",
+        listener_session_id="listener-1",
+        transport_generation="sum-set-state-v1",
+    )
+    assert armed["enabled"] is True
+    assert armed["transport_generation"] == "sum-set-state-v1"
+
+    same = store.guard_transport_generation(
+        "sum-set-state-v1",
+        actor="listener",
+        listener_session_id="listener-1",
+    )
+    assert same["enabled"] is True
+    assert same["state"] == "ARMED"
+
+    paused = store.guard_transport_generation(
+        "sum-set-state-v2",
+        actor="listener",
+        listener_session_id="listener-1",
+    )
+    assert paused["enabled"] is False
+    assert paused["state"] == "PAUSED"
+    assert paused["color"] == "gray"
+    assert paused["send_required"] is False
+    assert paused["turn_locked"] is False
+    assert paused["error_code"] == "CONNECTOR_GENERATION_CHANGED"
+    assert paused["transport_generation"] == "sum-set-state-v1"
+    assert paused["observed_transport_generation"] == "sum-set-state-v2"

@@ -76,6 +76,9 @@ class SumControllerStore:
             "turn_started_at": 0,
             "turn_completed_at": 0,
             "host_static_observed_at": 0,
+            "transport_generation": "",
+            "observed_transport_generation": "",
+            "transport_generation_bound_at": 0,
             "stop_reason": None,
             "error_code": "",
             "counters": {
@@ -108,6 +111,9 @@ class SumControllerStore:
         value.setdefault("turn_started_at", 0)
         value.setdefault("turn_completed_at", 0)
         value.setdefault("host_static_observed_at", 0)
+        value.setdefault("transport_generation", "")
+        value.setdefault("observed_transport_generation", "")
+        value.setdefault("transport_generation_bound_at", 0)
         limits = value.setdefault("limits", {})
         limits.update({
             "static_debounce_seconds": self.static_debounce_seconds,
@@ -248,6 +254,7 @@ class SumControllerStore:
         enabled: bool,
         actor: str,
         listener_session_id: str = "",
+        transport_generation: str = "",
     ) -> dict[str, Any]:
         with self._locked_state() as state:
             previous_state = str(state.get("state") or "IDLE")
@@ -266,6 +273,11 @@ class SumControllerStore:
             state["turn_started_at"] = 0
             state["turn_completed_at"] = 0
             state["host_static_observed_at"] = 0
+            generation = str(transport_generation or "").strip()[:120]
+            if enabled and generation:
+                state["transport_generation"] = generation
+                state["observed_transport_generation"] = generation
+                state["transport_generation_bound_at"] = timestamp
             if enabled and not int(state.get("started_at", 0)):
                 state["started_at"] = timestamp
             return self._commit(
@@ -273,6 +285,54 @@ class SumControllerStore:
                 previous_state=previous_state,
                 reason="CYCLE_ARMED" if enabled else "CYCLE_DISABLED",
                 actor=str(actor or "unknown")[:80],
+            )
+
+    def guard_transport_generation(
+        self,
+        transport_generation: str,
+        *,
+        actor: str,
+        listener_session_id: str = "",
+    ) -> dict[str, Any]:
+        generation = str(transport_generation or "").strip()[:120]
+        if not generation:
+            return self.status()
+        with self._locked_state() as state:
+            bound = str(state.get("transport_generation") or "")
+            state["observed_transport_generation"] = generation
+            if listener_session_id:
+                state["listener_session_id"] = str(listener_session_id)[:180]
+            if not bound:
+                previous_state = str(state.get("state") or "IDLE")
+                state["transport_generation"] = generation
+                state["transport_generation_bound_at"] = self._timestamp()
+                return self._commit(
+                    state,
+                    previous_state=previous_state,
+                    reason="TRANSPORT_GENERATION_BOUND",
+                    actor=str(actor or "unknown")[:80],
+                )
+            if bound == generation or not bool(state.get("enabled")):
+                return dict(state)
+            previous_state = str(state.get("state") or "IDLE")
+            state["enabled"] = False
+            state["state"] = "PAUSED"
+            state["color"] = "gray"
+            state["send_required"] = False
+            state["wake_wait_until"] = 0
+            state["wake_response_started_at"] = 0
+            state["turn_locked"] = False
+            state["turn_started_at"] = 0
+            state["turn_completed_at"] = self._timestamp()
+            state["stop_reason"] = "transport_generation_changed"
+            state["error_code"] = "CONNECTOR_GENERATION_CHANGED"
+            state["counters"]["errors"] = int(state["counters"].get("errors", 0)) + 1
+            return self._commit(
+                state,
+                previous_state=previous_state,
+                reason="CONNECTOR_GENERATION_CHANGED",
+                actor=str(actor or "unknown")[:80],
+                detail={"expected": bound, "observed": generation},
             )
 
     def tick(
@@ -507,6 +567,9 @@ class SumControllerStore:
                 and bool(state.get("activity_observed"))
                 and bool(state.get("turn_locked"))
             ):
+                state["state"] = "AWAKE"
+                state["color"] = "green"
+                state["state_entered_at"] = timestamp
                 state["host_static_observed_at"] = timestamp
                 return self._commit(
                     state,
@@ -581,6 +644,9 @@ class SumControllerStore:
             state["turn_started_at"] = 0
             state["turn_completed_at"] = 0
             state["host_static_observed_at"] = 0
+            state["transport_generation"] = ""
+            state["observed_transport_generation"] = ""
+            state["transport_generation_bound_at"] = 0
             state["stop_reason"] = "statistics_reset"
             state["error_code"] = ""
             state["counters"] = {

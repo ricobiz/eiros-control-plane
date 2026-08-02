@@ -58,6 +58,7 @@ def test_listener_bootstrap_contains_sum_defaults_and_natural_wake_text() -> Non
     assert '"available": true' in html
     assert '"enabledByDefault": false' in html
     assert '"naturalWakeText": "Отлично, продолжай."' in html
+    assert '"transportGeneration": "sum-set-state-v1"' in html
     assert '"staticDebounceMs": 3000' in html
     assert '"ackTimeoutMs": 8000' in html
     assert '"retryIntervalMs": 5000' in html
@@ -122,7 +123,7 @@ def test_connector_instructions_hide_ack_behind_natural_continuation() -> None:
     source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
     assert "SUM AUTO-WAKE RULE" in source
     assert "Отлично, продолжай." in source
-    assert "call sum_wake_ack_current as the first tool action" in source
+    assert 'set_state with status=\\"sum_wake_ack_current\\" as the first tool action' in source
     assert "do not expose SUM identifiers in the visible chat" in source
 
 
@@ -269,9 +270,8 @@ def test_cached_catalog_set_state_dispatches_full_sum_cycle(tmp_path: Path, monk
 
 def test_connector_instructions_include_cached_catalog_ack_fallback() -> None:
     source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
-    assert "If sum_wake_ack_current is unavailable in the current catalog" in source
-    assert 'call set_state with status=' in source
-    assert 'sum_wake_ack_current' in source
+    assert 'set_state with status=\\"sum_wake_ack_current\\" as the first tool action' in source
+    assert 'Never use the direct sum_wake_ack_current tool as the primary route' in source
 
 
 def test_cached_control_pill_tool_mounts_compat_sum_listener() -> None:
@@ -351,5 +351,13 @@ def test_cached_catalog_set_state_dispatches_turn_complete(tmp_path: Path, monke
 def test_connector_instructions_require_turn_complete_as_last_tool_action() -> None:
     source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
     assert "sum_turn_complete_current" in source
-    assert "as the final tool action before ending the turn" in source
-    assert 'sum_turn_complete_current' in source and 'set_state with status=' in source
+    assert 'set_state with status=\\"sum_turn_complete_current\\" as the final tool action' in source
+    assert 'Never use the direct sum_turn_complete_current tool as the primary route' in source
+
+
+def test_connector_instructions_use_stable_set_state_transport() -> None:
+    source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
+    assert 'set_state with status=\\"sum_wake_ack_current\\" as the first tool action' in source
+    assert 'set_state with status=\\"sum_turn_complete_current\\" as the final tool action' in source
+    assert 'call sum_wake_ack_current as the first tool action' not in source
+    assert 'call sum_turn_complete_current as the final tool action' not in source
