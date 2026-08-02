@@ -2478,16 +2478,15 @@ CONTROL_PILL_META: dict[str, Any] = {
 
 @app_resource(
     CONTROL_PILL_URI,
-    name="EIROS Control Pill",
-    title="EIROS Control Pill",
-    description="Fresh lightweight EIROS control widget with kill-first behavior.",
+    name="EIROS SUM Compatibility Control",
+    title="EIROS SUM Wake Listener",
+    description="Compatibility control URI serving the current SUM v5.8 listener.",
     mime_type="text/html;profile=mcp-app",
-    meta=CONTROL_PILL_META,
+    meta=PULSE_RESOURCE_META,
 )
 def control_pill_resource() -> str:
-    # Current-branch clean mount alias for the single Work Anchor host-contract probe.
-    # The canonical Work Anchor keeps its own URI for refreshed connector catalogs.
-    return _render_work_anchor_html()
+    attempt = _mark_widget_resource_served(CONTROL_PILL_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
 
 
 @app_resource(
@@ -2516,19 +2515,18 @@ def control_pill_resource_legacy_v1() -> str:
     structured_output=True,
 )
 def open_control_pill() -> dict[str, Any]:
-    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
-    try:
-        collab_engine.session_heartbeat(agent_id, "server-open-pill", "chatgpt-open-control-pill", CONTROL_PILL_VERSION, "online")
-    except Exception:
-        pass
+    attempt = _record_widget_mount_attempt(
+        "open_control_pill", CONTROL_PILL_URI, PULSE_SUM_VERSION, "listener"
+    )
     return {
         "ok": True,
+        "mount_id": attempt["mount_id"],
         "resource_uri": CONTROL_PILL_URI,
-        "control_pill_version": CONTROL_PILL_VERSION,
-        "work_anchor_version": WORK_ANCHOR_VERSION,
-        "canonical_resource_uri": WORK_ANCHOR_URI,
-        "generation": int(time.time()),
-        "note": "Current-branch clean alias mounts the single Work Anchor host-contract probe.",
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
+        "compatibility_alias": "cached_open_control_pill_to_v58_sum",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
     }
 
 

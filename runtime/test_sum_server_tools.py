@@ -270,3 +270,16 @@ def test_connector_instructions_include_cached_catalog_ack_fallback() -> None:
     assert "If sum_wake_ack_current is unavailable in the current catalog" in source
     assert 'call set_state with status=' in source
     assert 'sum_wake_ack_current' in source
+
+
+def test_cached_control_pill_tool_mounts_compat_sum_listener() -> None:
+    from runtime import server_v2
+
+    html = server_v2.control_pill_resource()
+    assert "AUTO WAKE CYCLE" in html
+    assert "async function callSumTool" in html
+    result = server_v2.open_control_pill()
+    assert result["listener_version"] == server_v2.PULSE_SUM_VERSION
+    assert result["resource_uri"] == server_v2.CONTROL_PILL_URI
+    assert result["expected_widget_kind"] == "listener"
+    assert result["mount_id"].startswith("mount-")
