@@ -269,18 +269,36 @@ class SumControllerStore:
             if current == "WAKE":
                 sent_at = int(state.get("last_wake_sent_at", 0))
                 attempt = int(state.get("wake_attempt", 0))
-                if (
+                retry_due = (
                     sent_at
                     and not bool(state.get("send_required"))
                     and self._timestamp() - sent_at >= self.retry_interval_seconds
-                    and attempt < self.max_wake_attempts
-                ):
+                )
+                if retry_due and attempt < self.max_wake_attempts:
                     previous_state = current
                     state["send_required"] = True
                     return self._commit(
                         state,
                         previous_state=previous_state,
                         reason="WAKE_RETRY_READY",
+                        actor="sum",
+                    )
+                if retry_due and attempt >= self.max_wake_attempts:
+                    previous_state = current
+                    state["enabled"] = False
+                    state["state"] = "ERROR"
+                    state["color"] = "red"
+                    state["send_required"] = False
+                    state["state_entered_at"] = self._timestamp()
+                    state["error_code"] = "ACK_TIMEOUT"
+                    state["stop_reason"] = "ack_timeout"
+                    state["counters"]["errors"] = int(
+                        state["counters"].get("errors", 0)
+                    ) + 1
+                    return self._commit(
+                        state,
+                        previous_state=previous_state,
+                        reason="ACK_TIMEOUT",
                         actor="sum",
                     )
             return dict(state)

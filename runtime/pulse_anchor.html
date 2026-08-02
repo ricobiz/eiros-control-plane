@@ -200,6 +200,8 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   let sumControllerState=null;
   let sumRefreshTimer=null;
   let sumLogVisible=false;
+  let sumWakeBusy=false;
+  let sumWakeRetryAfter=0;
   const sumStaticDebounceMs=Math.max(1000,Number(sumConfig.staticDebounceMs||3000));
   let recentHostSignals=[];
   let hostActivityTimer=null;
@@ -836,6 +838,43 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     return 'failed';
   }
 
+  async function pollSumController(){
+    if(closed||sumWakeBusy||sumConfig.available===false)return sumControllerState;
+    try{
+      const raw=await callTool('sum_controller_tick',{
+        listener_session_id:sessionId,
+        pip_active:videoPipState==='active'||displayMode()==='pip',
+        listener_healthy:BridgeGuard.ready&&!closed
+      });
+      const state=unwrap(raw);
+      renderSumState(state);
+      if(String(state.state||'')!=='WAKE'||!state.send_required)return state;
+      if(Date.now()<sumWakeRetryAfter)return state;
+      const assistantTurnActive=Number(state.wake_attempt||0)>0&&hostReportedActive===true&&Date.now()-lastHostSignalAt<12000;
+      if(assistantTurnActive)return state;
+      sumWakeBusy=true;
+      const naturalText=String(sumConfig.naturalWakeText||'Отлично, продолжай.').trim()||'Отлично, продолжай.';
+      const mode=await postWake(naturalText);
+      lastWakeMode='sum-'+mode+':cycle-'+String(state.cycle_id||0);
+      if(mode==='bridge-confirmed'){
+        const sentRaw=await callTool('sum_wake_sent',{listener_session_id:sessionId,delivery_mode:mode});
+        renderSumState(unwrap(sentRaw));
+        sumWakeRetryAfter=Date.now()+Number(sumConfig.retryIntervalMs||5000);
+      }else{
+        sumWakeRetryAfter=Date.now()+2500;
+        setDot(mode==='failed'?'bad':'warn');
+        setLabel(mode==='failed'?'WAKE · delivery failed':'WAKE · delivery unconfirmed');
+      }
+      return state;
+    }catch(e){
+      sumWakeRetryAfter=Date.now()+3000;
+      if(sumControllerState?.enabled){setDot('bad');setLabel('WAKE · controller error')}
+      return sumControllerState;
+    }finally{
+      sumWakeBusy=false;
+    }
+  }
+
   async function heartbeat(activity='online'){
     if(closed)return;
     const now=Date.now();
@@ -879,6 +918,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
         else{setDot('bad');setLabel('Wake failed #'+seq+' · will retry');}
         pollTimer=setTimeout(poll,2500);return;
       }
+      await pollSumController();
       if(sumControllerState)renderSumState(sumControllerState);
       else{setDot('');setLabel('IDLE · monitoring')}
       pollTimer=setTimeout(poll,1700);

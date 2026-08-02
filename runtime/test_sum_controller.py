@@ -151,3 +151,35 @@ def test_reset_statistics_stops_controller_and_clears_cycle(tmp_path: Path) -> N
         "retries": 0,
         "errors": 0,
     }
+
+
+def test_retry_reuses_wake_id_and_stops_at_ack_timeout(tmp_path: Path) -> None:
+    clock = FakeClock()
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+        clock=clock,
+        retry_interval_seconds=5,
+        max_wake_attempts=2,
+    )
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    wake = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    first_id = wake["wake_id"]
+    first = store.mark_wake_sent("listener-1", "bridge-confirmed")
+    assert first["wake_attempt"] == 1
+
+    clock.advance(5)
+    retry_ready = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert retry_ready["wake_id"] == first_id
+    assert retry_ready["send_required"] is True
+    second = store.mark_wake_sent("listener-1", "bridge-confirmed")
+    assert second["wake_attempt"] == 2
+    assert second["wake_id"] == first_id
+
+    clock.advance(5)
+    failed = store.tick("listener-1", pip_active=True, listener_healthy=True)
+    assert failed["state"] == "ERROR"
+    assert failed["color"] == "red"
+    assert failed["error_code"] == "ACK_TIMEOUT"
+    assert failed["enabled"] is False
+    assert failed["wake_id"] == first_id

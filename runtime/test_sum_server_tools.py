@@ -114,3 +114,11 @@ def test_sum_controller_reset_action_uses_durable_reset(
     assert state["state"] == "IDLE"
     assert state["cycle_id"] == 0
     assert state["counters"]["cycles_started"] == 0
+
+
+def test_connector_instructions_hide_ack_behind_natural_continuation() -> None:
+    source = (Path(__file__).parent / "server_v2.py").read_text(encoding="utf-8")
+    assert "SUM AUTO-WAKE RULE" in source
+    assert "Отлично, продолжай." in source
+    assert "call sum_wake_ack_current as the first tool action" in source
+    assert "do not expose SUM identifiers in the visible chat" in source

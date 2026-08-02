@@ -143,6 +143,7 @@ mcp = FastMCP(
         "(5) After mounting, call widget_boot_status with wait_seconds=5, follow its diagnosis and do_now actions, then recheck sam_status and room_telemetry_status. Treat wake as continuously ready only when video_pip_active=true and continuous_wake_ready=true; otherwise tell Rico that one direct tap on Open PiP is still required. "
         "(6) Open Room only after Rico explicitly asks for Room or a UI message explicitly requests it. "
         "(7) Resume unfinished work from durable state without asking Rico to repeat context. Never mount duplicate Listener instances merely to chase UI colors. "
+        "SUM AUTO-WAKE RULE: when the current user message text is exactly 'Отлично, продолжай.' and sum_controller_status reports state=WAKE, call sum_wake_ack_current as the first tool action, then continue the unfinished objective. If no SUM wake is pending, interpret the phrase normally. This continuation is authorized by Rico; do not expose SUM identifiers in the visible chat. "
         "The EIROS Room and Wake Listener are separate MCP App cards: use open_collab_room for collaboration UI and open_pulse for the dedicated reverse-wake listener. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "

@@ -95,3 +95,30 @@ def test_sum_ack_epoch_is_correlated_with_working_state() -> None:
     assert "lastObservedAwakeEpoch" in ANCHOR
     assert "ack-confirmed-turn" in ANCHOR
     assert "STATIC_DEBOUNCE" in ANCHOR
+
+
+def test_sum_continuation_uses_exact_natural_user_message() -> None:
+    start = ANCHOR.index("async function pollSumController")
+    end = ANCHOR.index("async function heartbeat", start)
+    block = ANCHOR[start:end]
+
+    assert "naturalWakeText" in block
+    assert "Отлично, продолжай." in block
+    assert "postWake(naturalText)" in block
+    assert "sum_controller_tick" in block
+    assert "sum_wake_sent" in block
+    assert "role:'user'" in ANCHOR
+    for forbidden in (
+        "SUM_WAKE_ID",
+        "SUM_CYCLE_ID",
+        "SUM_AWAKE_EPOCH",
+        "[EIROS_SUM_WAKE]",
+        "sum_wake_ack_current",
+    ):
+        assert forbidden not in block
+
+
+def test_sum_poll_runs_only_after_normal_pulse_events_are_clear() -> None:
+    pulse_event = ANCHOR.index("if(data.event){")
+    sum_poll = ANCHOR.index("await pollSumController()")
+    assert pulse_event < sum_poll
