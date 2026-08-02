@@ -126,3 +126,28 @@ def test_ack_current_is_idempotent_after_success(tmp_path: Path) -> None:
     assert second["state"] == "AWAKE"
     assert second["last_acked_wake_id"] == first["last_acked_wake_id"]
     assert second["counters"]["wakes_acked"] == 1
+
+
+def test_reset_statistics_stops_controller_and_clears_cycle(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    store.tick("listener-1", pip_active=True, listener_healthy=True)
+    store.mark_wake_sent("listener-1", "bridge-confirmed")
+    store.ack_current(actor="chatgpt", listener_session_id="listener-1")
+
+    state = store.reset_statistics(actor="rico", listener_session_id="listener-1")
+
+    assert state["enabled"] is False
+    assert state["state"] == "IDLE"
+    assert state["color"] == "gray"
+    assert state["cycle_id"] == 0
+    assert state["awake_epoch"] == 0
+    assert state["wake_id"] == ""
+    assert state["started_at"] == 0
+    assert state["counters"] == {
+        "cycles_started": 0,
+        "wakes_sent": 0,
+        "wakes_acked": 0,
+        "retries": 0,
+        "errors": 0,
+    }

@@ -89,3 +89,28 @@ def test_sum_wake_ack_current_confirms_pending_wake_without_ids(
     assert acked["state"] == "AWAKE"
     assert acked["wake_id"] == wake["wake_id"]
     assert acked["counters"]["wakes_acked"] == 1
+
+
+def test_sum_controller_reset_action_uses_durable_reset(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from runtime import server_v2
+
+    store = SumControllerStore(
+        tmp_path / "sum-controller.json",
+        tmp_path / "sum-controller.jsonl",
+    )
+    monkeypatch.setattr(server_v2, "SUM_CONTROLLER", store)
+    store.set_enabled(True, actor="rico", listener_session_id="listener-1")
+    store.tick("listener-1", pip_active=True, listener_healthy=True)
+
+    state = server_v2.sum_controller_set(
+        False,
+        action="reset",
+        actor="rico",
+        listener_session_id="listener-1",
+    )
+    assert state["state"] == "IDLE"
+    assert state["cycle_id"] == 0
+    assert state["counters"]["cycles_started"] == 0

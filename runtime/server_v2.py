@@ -1603,6 +1603,11 @@ def sum_controller_set(
 ) -> dict[str, Any]:
     """Enable or disable the bounded SUM auto-wake controller."""
     normalized = str(action or "set").strip().lower()[:32]
+    if normalized == "reset":
+        return SUM_CONTROLLER.reset_statistics(
+            actor=str(actor or "rico")[:80],
+            listener_session_id=str(listener_session_id or "")[:180],
+        )
     if normalized in {"start", "resume", "enable"}:
         enabled = True
     elif normalized in {"pause", "stop", "disable"}:

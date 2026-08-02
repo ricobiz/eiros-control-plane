@@ -44,6 +44,15 @@ body.mode-fullscreen .console{display:block;margin-top:14px;padding:14px;border:
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{min-height:104px;padding:12px;border:1px solid #17334f;border-radius:14px;background:#07111c}.card.wide{grid-column:1/-1;min-height:92px}
 .k{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#557a9d}.v{margin-top:8px;font-size:22px;font-weight:780;color:#e8f4ff}.s{margin-top:5px;font-size:11px;line-height:1.35;color:#7899b8;word-break:break-word}
 .good{color:#39d98a}.warnText{color:#f5b849}.badText{color:#ff6b79}.eventText{white-space:pre-wrap;max-height:142px;overflow:auto}
+:root{--sum-idle:gray;--sum-wake:#ef4444;--sum-awake:#19c37d;--sum-working:#f5b849}
+.sumControl{display:flex;flex-direction:column;gap:12px}
+.sumTop{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sumHeading{font-size:12px;font-weight:800;letter-spacing:.1em;color:#cfe8ff}
+.sumSwitch{position:relative;display:inline-flex;align-items:center;gap:8px;font-size:11px;color:#8eb0cf}.sumSwitch input{position:absolute;opacity:0;pointer-events:none}.sumTrack{position:relative;width:48px;height:28px;border-radius:999px;background:#262b31;border:1px solid #4b5563;transition:.18s}.sumTrack::after{content:'';position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#a1a1aa;transition:.18s}.sumSwitch input:checked+.sumTrack{background:#0b3b2a;border-color:#19c37d;box-shadow:0 0 14px rgba(25,195,125,.22)}.sumSwitch input:checked+.sumTrack::after{transform:translateX(20px);background:#d8ffec}
+.sumState{display:flex;align-items:center;justify-content:center;min-height:54px;border-radius:14px;border:1px solid #3f3f46;font-size:18px;font-weight:850;letter-spacing:.08em;transition:.18s}.sumState.idle{background:#202328;border-color:#52525b;color:#d4d4d8}.sumState.wake{background:rgba(127,29,29,.45);border-color:var(--sum-wake);color:#fecaca;box-shadow:0 0 24px rgba(239,68,68,.2)}.sumState.awake{background:rgba(6,78,59,.48);border-color:var(--sum-awake);color:#d1fae5;box-shadow:0 0 24px rgba(25,195,125,.18)}.sumState.working{background:rgba(113,63,18,.48);border-color:var(--sum-working);color:#fef3c7;box-shadow:0 0 24px rgba(245,184,73,.18)}.sumState.error{background:rgba(127,29,29,.62);border-color:#ff6b79;color:#ffe4e6}
+.sumMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.sumMetric{padding:9px;border:1px solid #17334f;border-radius:11px;background:#050c14}.sumMetric .mk{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#557a9d}.sumMetric .mv{margin-top:5px;font-size:14px;font-weight:760;color:#dceeff;word-break:break-word}
+.sumActions{display:flex;flex-wrap:wrap;gap:7px}.sumAction{min-height:32px;padding:0 10px;border:1px solid #24506f;border-radius:9px;background:#091929;color:#a9cce9;font-size:11px;font-weight:700}.sumAction.danger{border-color:#7f1d1d;color:#fecaca;background:#2a0e12}.sumAction:disabled{opacity:.5}
+.sumLog{margin:0;padding:10px;border:1px solid #17334f;border-radius:11px;background:#02070c;color:#90b8da;max-height:250px;overflow:auto;white-space:pre-wrap;font:10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}.sumLog[hidden]{display:none}
 @media(max-width:520px){.grid{grid-template-columns:1fr}.card.wide{grid-column:auto}.consoleTitle{font-size:16px}}
 </style>
 </head>
@@ -69,6 +78,29 @@ body.mode-fullscreen .console{display:block;margin-top:14px;padding:14px;border:
     <div class="consoleActions"><button id="consoleRefresh" class="consoleBtn">Refresh</button><button id="collapse" class="consoleBtn">Compact</button></div>
   </div>
   <div class="grid">
+    <div id="sumPanel" class="card wide sumControl">
+      <div class="sumTop">
+        <div><div class="sumHeading">AUTO WAKE CYCLE</div><div class="s">SUM monitors this ChatGPT turn and continues only after a confirmed static transition.</div></div>
+        <label class="sumSwitch"><span>OFF / ON</span><input id="sumToggle" type="checkbox"/><span class="sumTrack"></span></label>
+      </div>
+      <div id="sumState" class="sumState idle">IDLE</div>
+      <div class="sumMetrics">
+        <div class="sumMetric"><div class="mk">Cycle</div><div id="sumCycle" class="mv">0</div></div>
+        <div class="sumMetric"><div class="mk">Wake attempts</div><div id="sumWakeAttempts" class="mv">0</div></div>
+        <div class="sumMetric"><div class="mk">Confirmed wakes</div><div id="sumConfirmedWakes" class="mv">0</div></div>
+        <div class="sumMetric"><div class="mk">Current duration</div><div id="sumCurrentDuration" class="mv">00:00</div></div>
+        <div class="sumMetric"><div class="mk">Last transition</div><div id="sumLastTransition" class="mv">IDLE</div></div>
+        <div class="sumMetric"><div class="mk">Wake ID</div><div id="sumWakeId" class="mv">—</div></div>
+      </div>
+      <div class="sumActions">
+        <button id="sumPause" class="sumAction" type="button">Pause</button>
+        <button id="sumStop" class="sumAction danger" type="button">Stop</button>
+        <button id="sumReset" class="sumAction" type="button">Reset statistics</button>
+        <button id="sumOpenLog" class="sumAction" type="button">Open log</button>
+        <button id="sumCopyDiagnostic" class="sumAction" type="button">Copy diagnostic</button>
+      </div>
+      <pre id="sumLog" class="sumLog" hidden></pre>
+    </div>
     <div class="card"><div class="k">Pulse</div><div id="pulseValue" class="v">—</div><div id="pulseSub" class="s">Waiting…</div></div>
     <div class="card"><div class="k">Room</div><div id="roomValue" class="v">—</div><div id="roomSub" class="s">Waiting…</div></div>
     <div class="card"><div class="k">Queue</div><div id="queueValue" class="v">—</div><div id="queueSub" class="s">Waiting…</div></div>
@@ -111,6 +143,20 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   const companionVideo=document.getElementById('companionVideo');
   const streamStatus=document.getElementById('streamStatus');
   const launchPip=document.getElementById('launchPip');
+  const sumStateEl=document.getElementById('sumState');
+  const sumToggle=document.getElementById('sumToggle');
+  const sumCycle=document.getElementById('sumCycle');
+  const sumWakeAttempts=document.getElementById('sumWakeAttempts');
+  const sumConfirmedWakes=document.getElementById('sumConfirmedWakes');
+  const sumCurrentDuration=document.getElementById('sumCurrentDuration');
+  const sumLastTransition=document.getElementById('sumLastTransition');
+  const sumWakeId=document.getElementById('sumWakeId');
+  const sumPause=document.getElementById('sumPause');
+  const sumStop=document.getElementById('sumStop');
+  const sumReset=document.getElementById('sumReset');
+  const sumOpenLog=document.getElementById('sumOpenLog');
+  const sumCopyDiagnostic=document.getElementById('sumCopyDiagnostic');
+  const sumLog=document.getElementById('sumLog');
 
   const agentId=String(boot.agentId||'chatgpt');
   const projectId=String(boot.projectId||'eiros-hub');
@@ -146,6 +192,10 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   let forcingInline=false;
   let videoPipState='inactive';
   let videoPipDetail='';
+  const sumConfig=boot.sumController||{};
+  let sumControllerState=null;
+  let sumRefreshTimer=null;
+  let sumLogVisible=false;
   const lifecycle=window.EirosWidgetLifecycle.createPulseLifecycle({
     target:window,
     projectId,
@@ -506,6 +556,12 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   if(launchPip)launchPip.addEventListener('click',requestSystemPiP);
   if(collapse)collapse.addEventListener('click',requestInline);
   if(consoleRefresh)consoleRefresh.addEventListener('click',()=>scheduleConsole(0));
+  if(sumToggle)sumToggle.addEventListener('change',async()=>{const desired=!!sumToggle.checked;try{await setSumEnabled(desired,'set')}catch(e){sumToggle.checked=!desired;renderSumState(sumControllerState||{})}});
+  if(sumPause)sumPause.addEventListener('click',()=>setSumEnabled(false,'pause').catch(()=>{}));
+  if(sumStop)sumStop.addEventListener('click',()=>setSumEnabled(false,'stop').catch(()=>{}));
+  if(sumReset)sumReset.addEventListener('click',()=>setSumEnabled(false,'reset').catch(()=>{}));
+  if(sumOpenLog)sumOpenLog.addEventListener('click',async()=>{sumLogVisible=!sumLogVisible;if(sumLog)sumLog.hidden=!sumLogVisible;if(sumOpenLog)sumOpenLog.textContent=sumLogVisible?'Hide log':'Open log';if(sumLogVisible)await loadSumLog().catch(()=>{})});
+  if(sumCopyDiagnostic)sumCopyDiagnostic.addEventListener('click',async()=>{const value=JSON.stringify({controller:sumControllerState,listener:{sessionId,anchorVersion,videoPipState,displayMode:displayMode()}},null,2);try{await navigator.clipboard.writeText(value);sumCopyDiagnostic.textContent='Copied'}catch(e){sumCopyDiagnostic.textContent='Copy failed'}setTimeout(()=>{sumCopyDiagnostic.textContent='Copy diagnostic'},1600)});
   root.addEventListener('click',e=>{if(document.body.classList.contains('mode-pip')&&e.target===root){lastHb=0;clearTimeout(pollTimer);poll()}});
   window.addEventListener('openai:set_globals',()=>paintPin(displayMode()));
   window.addEventListener('message',e=>{if(e.source!==window.parent)return;const m=e.data||{};if(m.method==='ui/notifications/host-context-changed'){const next=String(m.params?.displayMode||m.params?.hostContext?.displayMode||'inline');if(next!=='fullscreen')fullscreenArmed=false;paintPin(next)}});
@@ -536,6 +592,79 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   function unwrap(v){return v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};}
 
   function text(v){return String(v??'')}
+  const SUM_STATE_DOT_CLASS={IDLE:'',ARMED:'',WAKE:'bad',AWAKE:'ok',WORKING:'warn',STATIC_DEBOUNCE:'ok',ERROR:'bad'};
+  function formatSumDuration(seconds){
+    const total=Math.max(0,Math.floor(Number(seconds||0)));
+    const hours=Math.floor(total/3600),minutes=Math.floor((total%3600)/60),secs=total%60;
+    return hours>0?[hours,minutes,secs].map((v,i)=>i?String(v).padStart(2,'0'):String(v)).join(':'):[minutes,secs].map(v=>String(v).padStart(2,'0')).join(':');
+  }
+  function sumVisualState(raw){
+    const value=String(raw||'IDLE');
+    if(value==='WAKE')return 'wake';
+    if(value==='AWAKE'||value==='STATIC_DEBOUNCE')return 'awake';
+    if(value==='WORKING')return 'working';
+    if(value==='ERROR')return 'error';
+    return 'idle';
+  }
+  function sumCompactLabel(state){
+    const raw=String(state?.state||'IDLE');
+    const attempt=Number(state?.wake_attempt||0);
+    const cycle=Number(state?.cycle_id||0);
+    const entered=Number(state?.state_entered_at||0);
+    const elapsed=entered?Math.max(0,Math.floor(Date.now()/1000)-entered):0;
+    if(raw==='WAKE')return 'WAKE · attempt '+Math.max(1,attempt||1);
+    if(raw==='AWAKE'||raw==='STATIC_DEBOUNCE')return 'AWAKE · cycle '+cycle;
+    if(raw==='WORKING')return 'WORKING · '+formatSumDuration(elapsed);
+    if(raw==='ERROR')return 'ERROR · '+String(state?.error_code||'UNKNOWN');
+    return 'IDLE · monitoring';
+  }
+  function renderSumState(state){
+    const value=state&&typeof state==='object'?state:{};
+    sumControllerState=value;
+    const raw=String(value.state||'IDLE');
+    const visual=sumVisualState(raw);
+    const compact=sumCompactLabel(value);
+    if(sumStateEl){sumStateEl.className='sumState '+visual;sumStateEl.textContent=compact.toUpperCase()}
+    if(sumToggle)sumToggle.checked=!!value.enabled;
+    if(sumCycle)sumCycle.textContent=String(value.cycle_id||0);
+    if(sumWakeAttempts)sumWakeAttempts.textContent=String(value.counters?.wakes_sent||0);
+    if(sumConfirmedWakes)sumConfirmedWakes.textContent=String(value.counters?.wakes_acked||0);
+    const started=Number(value.started_at||0);
+    if(sumCurrentDuration)sumCurrentDuration.textContent=formatSumDuration(started?Math.floor(Date.now()/1000)-started:0);
+    if(sumLastTransition)sumLastTransition.textContent=raw+' · r'+String(value.revision||0);
+    if(sumWakeId)sumWakeId.textContent=String(value.wake_id||'—');
+    setDot(SUM_STATE_DOT_CLASS[raw]||'');
+    setLabel(compact);
+  }
+  async function refreshSumState(){
+    clearTimeout(sumRefreshTimer);
+    if(closed||sumConfig.available===false)return;
+    try{
+      const raw=await callTool('sum_controller_status',{});
+      renderSumState(unwrap(raw));
+    }catch(e){
+      if(sumStateEl){sumStateEl.className='sumState error';sumStateEl.textContent='ERROR · STATUS'}
+    }finally{
+      const active=String(document.body.dataset.displayMode||displayMode())==='fullscreen';
+      sumRefreshTimer=setTimeout(refreshSumState,active?1200:2500);
+    }
+  }
+  async function setSumEnabled(enabled,action='set'){
+    const raw=await callTool('sum_controller_set',{enabled:!!enabled,action:String(action||'set'),actor:'rico',listener_session_id:sessionId});
+    const state=unwrap(raw);renderSumState(state);return state;
+  }
+  function renderSumLog(entries){
+    if(!sumLog)return;
+    entries=Array.isArray(entries)?entries:[];
+    sumLog.textContent=entries.slice().reverse().map(entry=>{
+      const ts=entry.timestamp?new Date(Number(entry.timestamp)*1000).toLocaleTimeString():'—';
+      return [ts,entry.new_state||'?',entry.reason||'',entry.wake_id||'',entry.attempt?('try '+entry.attempt):'',entry.error_code||''].filter(Boolean).join(' · ');
+    }).join('\n')||'No SUM transitions yet.';
+  }
+  async function loadSumLog(){
+    const raw=await callTool('sum_controller_log',{limit:100});
+    const data=unwrap(raw);renderSumLog(data.entries||[]);
+  }
   function setClass(el,state){if(!el)return;el.classList.remove('good','warnText','badText');if(state)el.classList.add(state)}
   function scheduleConsole(delay=3500){clearTimeout(consoleTimer);consoleTimer=setTimeout(refreshConsole,delay)}
   async function refreshConsole(){
@@ -669,7 +798,8 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
         else{setDot('bad');setLabel('Wake failed #'+seq+' · will retry');}
         pollTimer=setTimeout(poll,2500);return;
       }
-      setDot('ok');setLabel('Wake Listener · listening · '+anchorVersion);
+      if(sumControllerState)renderSumState(sumControllerState);
+      else{setDot('');setLabel('IDLE · monitoring')}
       pollTimer=setTimeout(poll,1700);
     }catch(e){
       if(closed)return;
@@ -680,6 +810,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
 
   BridgeGuard.onReady(() => {
     console.log('[Pulse v4] bridge guard passed → starting original poll');
+    refreshSumState();
     poll();
   });
 })();

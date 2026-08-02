@@ -409,6 +409,48 @@ class SumControllerStore:
                 )
             return dict(state)
 
+    def reset_statistics(
+        self,
+        *,
+        actor: str,
+        listener_session_id: str = "",
+    ) -> dict[str, Any]:
+        with self._locked_state() as state:
+            previous_state = str(state.get("state") or "IDLE")
+            timestamp = self._timestamp()
+            state["enabled"] = False
+            state["state"] = "IDLE"
+            state["color"] = "gray"
+            state["cycle_id"] = 0
+            state["awake_epoch"] = 0
+            state["wake_id"] = ""
+            state["wake_attempt"] = 0
+            state["send_required"] = False
+            state["started_at"] = 0
+            state["state_entered_at"] = timestamp
+            state["listener_session_id"] = str(listener_session_id or "")[:180]
+            state["last_ack_at"] = 0
+            state["last_activity_at"] = 0
+            state["last_static_candidate_at"] = 0
+            state["last_wake_sent_at"] = 0
+            state["last_acked_wake_id"] = ""
+            state["activity_observed"] = False
+            state["stop_reason"] = "statistics_reset"
+            state["error_code"] = ""
+            state["counters"] = {
+                "cycles_started": 0,
+                "wakes_sent": 0,
+                "wakes_acked": 0,
+                "retries": 0,
+                "errors": 0,
+            }
+            return self._commit(
+                state,
+                previous_state=previous_state,
+                reason="STATISTICS_RESET",
+                actor=str(actor or "unknown")[:80],
+            )
+
     def read_log(self, limit: int = 100) -> dict[str, Any]:
         bounded = max(1, min(int(limit or 100), 1000))
         if not self.log_path.exists():
