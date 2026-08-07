@@ -90,3 +90,31 @@ def test_search_run_lifecycle_is_persisted(tmp_path: Path) -> None:
     assert latest["status"] == "ok"
     assert latest["result_count"] == 3
     assert latest["error_count"] == 1
+
+
+def test_reprocessing_only_source_clears_stale_derived_price(tmp_path: Path) -> None:
+    db = RentalDatabase(tmp_path / "rental.db")
+    db.initialize()
+    url = "https://agency.test/new-an-thoi"
+    first = normalize_listing(
+        "Sun Grand City New An Thoi nguyên căn 5 tầng 120m2 giá 40 triệu/tháng",
+        title="Cho thuê Sun Grand City New An Thới",
+    )
+    one = db.upsert_normalized_source(
+        LeadInput("scout:agency", url, url, {}),
+        first,
+        rank_listing(first, DEFAULT_SEARCH_PROFILE),
+    )
+    assert one.property.monthly_rent_vnd == 40_000_000
+
+    reparsed = normalize_listing(
+        "Sun Grand City New An Thoi nguyên căn 5 tầng 120m2. Giá thuê liên hệ.",
+        title="Cho thuê Sun Grand City New An Thới",
+    )
+    two = db.upsert_normalized_source(
+        LeadInput("scout:agency", url, url, {}),
+        reparsed,
+        rank_listing(reparsed, DEFAULT_SEARCH_PROFILE),
+    )
+    assert two.property.property_id == one.property.property_id
+    assert two.property.monthly_rent_vnd is None
