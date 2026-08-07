@@ -201,17 +201,6 @@ class RentalDatabase:
                 property_id = str(existing_source["property_id"])
                 source_id = str(existing_source["source_id"])
                 merged = True
-            if property_id is None and item.phones:
-                placeholders = ",".join("?" for _ in item.phones)
-                row = connection.execute(
-                    f"""SELECT pc.property_id FROM property_contacts pc
-                        JOIN contacts c ON c.contact_id=pc.contact_id
-                        WHERE c.kind='phone' AND c.value_normalized IN ({placeholders}) LIMIT 1""",
-                    tuple(item.phones),
-                ).fetchone()
-                if row:
-                    property_id = str(row["property_id"])
-                    merged = True
             if property_id is None and signature:
                 row = connection.execute(
                     "SELECT property_id FROM properties WHERE signature=? ORDER BY updated_at DESC LIMIT 1",

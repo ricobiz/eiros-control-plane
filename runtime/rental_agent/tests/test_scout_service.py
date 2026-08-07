@@ -19,8 +19,8 @@ class FakeAdapter:
         )
 
 
-def listing(source: str, url: str, text: str) -> DiscoveredListing:
-    return DiscoveredListing(source=source, url=url, title=text.split(" giá ")[0], text=text)
+def listing(source: str, url: str, text: str, *, title: str | None = None) -> DiscoveredListing:
+    return DiscoveredListing(source=source, url=url, title=title or text.split(" giá ")[0], text=text)
 
 
 def test_search_run_normalizes_dedups_ranks_and_persists(tmp_path: Path) -> None:
@@ -29,13 +29,13 @@ def test_search_run_normalizes_dedups_ranks_and_persists(tmp_path: Path) -> None
     first = FakeAdapter(
         "one",
         (
-            listing("one", "https://a.test/1", "Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng"),
+            listing("one", "https://a.test/1", "Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng", title="Sunset Town S5-12"),
             listing("one", "https://a.test/2", "Nguyên căn Primavera Phú Quốc 4 tầng 110m2 giá 45 triệu/tháng"),
         ),
     )
     second = FakeAdapter(
         "two",
-        (listing("two", "https://b.test/9", "Sunset Town Phu Quoc whole building 5 floors 120 m2 rent 25 million VND/month"),),
+        (listing("two", "https://b.test/9", "Sunset Town Phu Quoc whole building 5 floors 120 m2 rent 25 million VND/month", title="Sunset Town S5-12"),),
     )
     scout = ScoutService(db, adapters=(first, second))
 

@@ -36,8 +36,8 @@ def test_upsert_merges_different_sources_for_same_property_signature(tmp_path: P
     first_text = "Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng"
     second_text = "Sunset Town Phu Quoc whole building 5 floors 120 m2 rent 25 million VND/month"
 
-    first = normalize_listing(first_text)
-    second = normalize_listing(second_text)
+    first = normalize_listing(first_text, title="Sunset Town S5-12")
+    second = normalize_listing(second_text, title="Sunset Town S5-12")
     one = db.upsert_normalized_source(
         LeadInput("url", "https://a.test/1", "https://a.test/1", {"text": first_text}),
         first,
@@ -55,13 +55,13 @@ def test_upsert_merges_different_sources_for_same_property_signature(tmp_path: P
     assert db.get_property(one.property.property_id).monthly_rent_vnd == 25_000_000
 
 
-def test_upsert_merges_by_phone_even_when_property_signature_is_incomplete(tmp_path: Path) -> None:
+def test_upsert_keeps_same_agent_phone_as_contact_signal_without_merging_properties(tmp_path: Path) -> None:
     db = RentalDatabase(tmp_path / "rental.db")
     db.initialize()
     first_text = "Nhà khu An Thoi giá 20 triệu/tháng, Zalo 0912 345 678"
-    second_text = "Cho thuê nhà An Thoi 21 triệu, liên hệ 0912345678"
-    first = normalize_listing(first_text)
-    second = normalize_listing(second_text)
+    second_text = "Cho thuê nhà An Thoi giá 21 triệu/tháng, liên hệ 0912345678"
+    first = normalize_listing(first_text, title="Nhà An Thoi A")
+    second = normalize_listing(second_text, title="Nhà An Thoi B")
 
     one = db.upsert_normalized_source(
         LeadInput("text", first_text, context={"text": first_text}),
@@ -73,8 +73,11 @@ def test_upsert_merges_by_phone_even_when_property_signature_is_incomplete(tmp_p
         second,
         rank_listing(second, DEFAULT_SEARCH_PROFILE),
     )
-    assert one.property.property_id == two.property.property_id
-    assert len(db.list_contacts(one.property.property_id)) == 1
+    assert one.property.property_id != two.property.property_id
+    first_contacts = db.list_contacts(one.property.property_id)
+    second_contacts = db.list_contacts(two.property.property_id)
+    assert len(first_contacts) == len(second_contacts) == 1
+    assert first_contacts[0]["contact_id"] == second_contacts[0]["contact_id"]
 
 
 def test_search_run_lifecycle_is_persisted(tmp_path: Path) -> None:
