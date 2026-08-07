@@ -1,0 +1,23 @@
+[Unit]
+Description=EIROS Rental Agent MCP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=eiros-rental
+Group=eiros-rental
+WorkingDirectory=/opt/eiros-control-plane
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/eiros/rental-agent.env
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.rental_agent.server
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/eiros-rental
+
+[Install]
+WantedBy=multi-user.target
