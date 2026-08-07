@@ -12,7 +12,7 @@ from runtime.rental_agent.models import LeadInput, PropertyRecord, UpsertResult
 from runtime.rental_agent.normalize import NormalizedListing
 from runtime.rental_agent.ranking import FitResult
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_V1 = """
 PRAGMA foreign_keys = ON;
@@ -94,6 +94,52 @@ CREATE TABLE IF NOT EXISTS search_runs (
 );
 """
 
+MIGRATION_V3 = """
+CREATE TABLE IF NOT EXISTS outreach_threads (
+  thread_id TEXT PRIMARY KEY,
+  contact_id TEXT NOT NULL REFERENCES contacts(contact_id),
+  channel TEXT NOT NULL,
+  intent_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  last_outbound_at INTEGER,
+  last_inbound_at INTEGER,
+  UNIQUE(contact_id, channel, intent_key)
+);
+CREATE TABLE IF NOT EXISTS thread_properties (
+  thread_id TEXT NOT NULL REFERENCES outreach_threads(thread_id) ON DELETE CASCADE,
+  property_id TEXT NOT NULL REFERENCES properties(property_id) ON DELETE CASCADE,
+  PRIMARY KEY(thread_id, property_id)
+);
+CREATE TABLE IF NOT EXISTS messages (
+  message_id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL REFERENCES outreach_threads(thread_id) ON DELETE CASCADE,
+  direction TEXT NOT NULL,
+  status TEXT NOT NULL,
+  raw_text TEXT NOT NULL,
+  parsed_json TEXT NOT NULL DEFAULT '{}',
+  external_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  sent_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS jobs (
+  job_id TEXT PRIMARY KEY,
+  job_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  dedup_key TEXT NOT NULL UNIQUE,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  not_before INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  last_error TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_threads_status ON outreach_threads(status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_messages_thread_created ON messages(thread_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_status_not_before ON jobs(status, not_before, created_at);
+"""
+
 
 class RentalDatabase:
     def __init__(self, path: Path) -> None:
@@ -112,10 +158,16 @@ class RentalDatabase:
             if version == 0:
                 connection.executescript(SCHEMA_V1)
                 connection.executescript(MIGRATION_V2)
+                connection.executescript(MIGRATION_V3)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 connection.commit()
             elif version == 1:
                 connection.executescript(MIGRATION_V2)
+                connection.executescript(MIGRATION_V3)
+                connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+                connection.commit()
+            elif version == 2:
+                connection.executescript(MIGRATION_V3)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 connection.commit()
             elif version != SCHEMA_VERSION:
@@ -127,12 +179,18 @@ class RentalDatabase:
             properties = int(connection.execute("SELECT COUNT(*) FROM properties").fetchone()[0])
             sources = int(connection.execute("SELECT COUNT(*) FROM listing_sources").fetchone()[0])
             runs = int(connection.execute("SELECT COUNT(*) FROM search_runs").fetchone()[0]) if version >= 2 else 0
+            threads = int(connection.execute("SELECT COUNT(*) FROM outreach_threads").fetchone()[0]) if version >= 3 else 0
+            messages = int(connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0]) if version >= 3 else 0
+            jobs = int(connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]) if version >= 3 else 0
         return {
             "ok": version == SCHEMA_VERSION,
             "schema_version": version,
             "properties": properties,
             "listing_sources": sources,
             "search_runs": runs,
+            "outreach_threads": threads,
+            "messages": messages,
+            "jobs": jobs,
             "db_path": str(self.path),
         }
 
@@ -379,6 +437,221 @@ class RentalDatabase:
             item["query"] = json.loads(str(row["query_json"] or "{}"))
             result.append(item)
         return result
+
+    def get_or_create_thread(
+        self, property_id: str, contact_id: str, channel: str, *, intent_key: str | None = None
+    ) -> dict[str, Any]:
+        key = intent_key or f"property:{property_id}"
+        return self.get_or_create_group_thread(
+            property_ids=[property_id], contact_id=contact_id, channel=channel, intent_key=key
+        )
+
+    def get_or_create_group_thread(
+        self, *, property_ids: list[str], contact_id: str, channel: str, intent_key: str
+    ) -> dict[str, Any]:
+        normalized_channel = channel.strip().lower()
+        normalized_intent = intent_key.strip().lower()
+        unique_properties = sorted({value.strip() for value in property_ids if value.strip()})
+        if not unique_properties:
+            raise ValueError("property_ids are required")
+        if not contact_id.strip():
+            raise ValueError("contact_id is required")
+        if not normalized_channel:
+            raise ValueError("channel is required")
+        if not normalized_intent:
+            raise ValueError("intent_key is required")
+        now = int(time.time())
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT thread_id FROM outreach_threads WHERE contact_id=? AND channel=? AND intent_key=?",
+                (contact_id, normalized_channel, normalized_intent),
+            ).fetchone()
+            if row is None:
+                thread_id = f"thread_{uuid.uuid4().hex}"
+                connection.execute(
+                    """INSERT INTO outreach_threads(
+                       thread_id,contact_id,channel,intent_key,status,created_at,updated_at
+                       ) VALUES (?,?,?,?, 'draft', ?, ?)""",
+                    (thread_id, contact_id, normalized_channel, normalized_intent, now, now),
+                )
+            else:
+                thread_id = str(row["thread_id"])
+                connection.execute(
+                    "UPDATE outreach_threads SET updated_at=? WHERE thread_id=?", (now, thread_id)
+                )
+            for property_id in unique_properties:
+                connection.execute(
+                    "INSERT OR IGNORE INTO thread_properties(thread_id,property_id) VALUES (?,?)",
+                    (thread_id, property_id),
+                )
+            connection.commit()
+        detail = self.get_thread(thread_id)
+        if detail is None:
+            raise RuntimeError("Thread could not be read after upsert")
+        return detail
+
+    def set_thread_status(self, thread_id: str, status: str) -> dict[str, Any]:
+        now = int(time.time())
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE outreach_threads SET status=?,updated_at=? WHERE thread_id=?",
+                (status.strip(), now, thread_id),
+            )
+            if connection.total_changes == 0:
+                raise KeyError(f"Unknown thread: {thread_id}")
+            connection.commit()
+        detail = self.get_thread(thread_id)
+        if detail is None:
+            raise RuntimeError("Thread disappeared after status update")
+        return detail
+
+    def append_message(
+        self,
+        thread_id: str,
+        *,
+        direction: str,
+        status: str,
+        raw_text: str,
+        parsed: dict[str, Any] | None = None,
+        external_id: str = "",
+        sent_at: int | None = None,
+    ) -> dict[str, Any]:
+        normalized_direction = direction.strip().lower()
+        if normalized_direction not in {"outbound", "inbound"}:
+            raise ValueError("direction must be outbound or inbound")
+        if not raw_text.strip():
+            raise ValueError("raw_text is required")
+        now = int(time.time())
+        message_id = f"msg_{uuid.uuid4().hex}"
+        payload = parsed or {}
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM outreach_threads WHERE thread_id=?", (thread_id,)
+            ).fetchone() is None:
+                raise KeyError(f"Unknown thread: {thread_id}")
+            connection.execute(
+                """INSERT INTO messages(
+                   message_id,thread_id,direction,status,raw_text,parsed_json,external_id,created_at,sent_at
+                   ) VALUES (?,?,?,?,?,?,?,?,?)""",
+                (
+                    message_id, thread_id, normalized_direction, status.strip(), raw_text.strip(),
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True), external_id.strip(), now, sent_at,
+                ),
+            )
+            timestamp_column = "last_outbound_at" if normalized_direction == "outbound" else "last_inbound_at"
+            effective_time = sent_at if sent_at is not None else now
+            connection.execute(
+                f"UPDATE outreach_threads SET updated_at=?,{timestamp_column}=? WHERE thread_id=?",
+                (now, effective_time, thread_id),
+            )
+            connection.commit()
+        return {
+            "message_id": message_id,
+            "thread_id": thread_id,
+            "direction": normalized_direction,
+            "status": status.strip(),
+            "raw_text": raw_text.strip(),
+            "parsed": payload,
+            "external_id": external_id.strip(),
+            "created_at": now,
+            "sent_at": sent_at,
+        }
+
+    def list_threads(
+        self, *, property_id: str = "", status: str = "", limit: int = 100
+    ) -> list[dict[str, Any]]:
+        bounded = max(1, min(int(limit), 500))
+        clauses: list[str] = []
+        params: list[Any] = []
+        join = ""
+        if property_id.strip():
+            join = " JOIN thread_properties tp ON tp.thread_id=t.thread_id "
+            clauses.append("tp.property_id=?")
+            params.append(property_id.strip())
+        if status.strip():
+            clauses.append("t.status=?")
+            params.append(status.strip())
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        query = (
+            "SELECT DISTINCT t.*,c.kind AS contact_kind,c.value_normalized,c.display_value "
+            "FROM outreach_threads t JOIN contacts c ON c.contact_id=t.contact_id"
+            + join + where + " ORDER BY t.updated_at DESC,t.thread_id ASC LIMIT ?"
+        )
+        params.append(bounded)
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                props = connection.execute(
+                    "SELECT property_id FROM thread_properties WHERE thread_id=? ORDER BY property_id",
+                    (row["thread_id"],),
+                ).fetchall()
+                item["property_ids"] = [str(value["property_id"]) for value in props]
+                result.append(item)
+        return result
+
+    def get_thread(self, thread_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT t.*,c.kind AS contact_kind,c.value_normalized,c.display_value
+                   FROM outreach_threads t JOIN contacts c ON c.contact_id=t.contact_id
+                   WHERE t.thread_id=?""",
+                (thread_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            props = connection.execute(
+                "SELECT property_id FROM thread_properties WHERE thread_id=? ORDER BY property_id",
+                (thread_id,),
+            ).fetchall()
+            messages = connection.execute(
+                "SELECT * FROM messages WHERE thread_id=? ORDER BY created_at ASC,message_id ASC",
+                (thread_id,),
+            ).fetchall()
+        result = dict(row)
+        result["property_ids"] = [str(value["property_id"]) for value in props]
+        result["messages"] = []
+        for message in messages:
+            item = dict(message)
+            item["parsed"] = json.loads(str(message["parsed_json"] or "{}"))
+            result["messages"].append(item)
+        return result
+
+    def enqueue_job(
+        self,
+        *,
+        job_type: str,
+        dedup_key: str,
+        payload: dict[str, Any],
+        status: str = "queued",
+        not_before: int | None = None,
+    ) -> dict[str, Any]:
+        normalized_key = dedup_key.strip()
+        if not job_type.strip() or not normalized_key:
+            raise ValueError("job_type and dedup_key are required")
+        now = int(time.time())
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM jobs WHERE dedup_key=?", (normalized_key,)).fetchone()
+            reused = row is not None
+            if row is None:
+                job_id = f"job_{uuid.uuid4().hex}"
+                connection.execute(
+                    """INSERT INTO jobs(
+                       job_id,job_type,status,dedup_key,payload_json,attempts,not_before,created_at,updated_at,last_error
+                       ) VALUES (?,?,?,?,?,0,?,?,?,'')""",
+                    (
+                        job_id, job_type.strip(), status.strip(), normalized_key,
+                        json.dumps(payload, ensure_ascii=False, sort_keys=True), not_before, now, now,
+                    ),
+                )
+                connection.commit()
+                row = connection.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+            assert row is not None
+        item = dict(row)
+        item["payload"] = json.loads(str(row["payload_json"] or "{}"))
+        item["reused"] = reused
+        return item
 
     @staticmethod
     def _audit(connection: sqlite3.Connection, event_type: str, property_id: str | None, payload: dict[str, Any], now: int) -> None:

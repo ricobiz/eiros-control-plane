@@ -25,7 +25,7 @@ def test_migrates_v1_database_without_losing_existing_lead(tmp_path: Path) -> No
     db = RentalDatabase(path)
     db.initialize()
     health = db.health()
-    assert health["schema_version"] == 2
+    assert health["schema_version"] == 3
     assert db.get_property("prop_old") is not None
     assert db.list_sources("prop_old")[0]["source_value"] == "https://example.test/old"
 

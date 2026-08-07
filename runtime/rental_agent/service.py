@@ -9,6 +9,7 @@ from runtime.rental_agent.config import DEFAULT_DATA_DIR, DEFAULT_SEARCH_PROFILE
 from runtime.rental_agent.db import RentalDatabase
 from runtime.rental_agent.models import LeadInput
 from runtime.rental_agent.normalize import normalize_listing
+from runtime.rental_agent.outreach import OutreachPlanner
 from runtime.rental_agent.policy import RentalPolicy
 from runtime.rental_agent.ranking import rank_listing
 from runtime.rental_agent.scout.service import ScoutService
@@ -30,6 +31,7 @@ class RentalService:
         profile_dir = Path(browser_profile_dir) if browser_profile_dir is not None else DEFAULT_DATA_DIR / "browser" / "search"
         worker = browser_worker or BrowserWorker(profile_dir=profile_dir)
         self.scout_engine = ScoutService(database, adapters=scout_adapters, browser_worker=worker)
+        self.outreach_engine = OutreachPlanner(database, self.policy_engine)
 
     def status(self) -> dict[str, Any]:
         db_health = self.database.health()
@@ -115,6 +117,21 @@ class RentalService:
         if worker is None:
             return {"status": "needs_browser_runtime", "source": source, "error": "browser worker unavailable"}
         return worker.handoff_click(source, x, y)
+
+    def contacts(self, property_id: str) -> list[dict[str, Any]]:
+        return self.database.list_contacts(property_id)
+
+    def outreach_plan(self, property_ids: list[str] | None = None) -> dict[str, Any]:
+        return self.outreach_engine.plan(property_ids=property_ids)
+
+    def contact_qualified(self, property_ids: list[str] | None = None) -> dict[str, Any]:
+        return self.outreach_engine.enqueue(property_ids=property_ids)
+
+    def threads(self, *, property_id: str = "", status: str = "", limit: int = 100) -> list[dict[str, Any]]:
+        return self.database.list_threads(property_id=property_id, status=status, limit=limit)
+
+    def thread(self, thread_id: str) -> dict[str, Any] | None:
+        return self.database.get_thread(thread_id)
 
     def policy(self) -> dict[str, object]:
         return self.policy_engine.current()
