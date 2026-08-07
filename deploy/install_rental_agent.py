@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from runtime.rental_agent.tunnel import PROFILE_NAME, PROFILE_PATH, redacted_tunnel_status, render_profile, validate_tunnel_id
+
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE_NAME = "eiros-rental-mcp.service"
 SERVICE_SOURCE = ROOT / "deploy" / SERVICE_NAME
@@ -19,10 +21,13 @@ LOG_DIR = DATA_DIR / "logs"
 DB_PATH = DATA_DIR / "rental.db"
 SERVICE_USER = "eiros-rental"
 PORT = 8794
+TUNNEL_SERVICE_NAME = "eiros-rental-tunnel.service"
+TUNNEL_SERVICE_SOURCE = ROOT / "deploy" / TUNNEL_SERVICE_NAME
+TUNNEL_SERVICE_DEST = Path("/etc/systemd/system") / TUNNEL_SERVICE_NAME
 
 
-def action_list() -> list[str]:
-    return [
+def action_list(tunnel_id: str = "") -> list[str]:
+    actions = [
         f"ensure_system_user:{SERVICE_USER}",
         f"ensure_directory:{DATA_DIR}",
         f"ensure_directory:{BROWSER_DIR}",
@@ -33,16 +38,30 @@ def action_list() -> list[str]:
         f"enable_restart:{SERVICE_NAME}",
         f"initialize_database:{DB_PATH}",
     ]
+    if tunnel_id.strip():
+        validate_tunnel_id(tunnel_id)
+        actions.extend([
+            f"install_tunnel_profile:{PROFILE_NAME}",
+            f"install_unit:{TUNNEL_SERVICE_NAME}",
+            f"enable_restart:{TUNNEL_SERVICE_NAME}",
+        ])
+    return actions
 
 
-def report(dry_run: bool) -> dict[str, object]:
+def report(dry_run: bool, tunnel_id: str = "") -> dict[str, object]:
+    status = redacted_tunnel_status(
+        tunnel_id=tunnel_id,
+        runtime_key=os.environ.get("CONTROL_PLANE_API_KEY", ""),
+        profile_exists=PROFILE_PATH.exists(),
+    )
     return {
         "ok": True,
         "dry_run": dry_run,
         "service": SERVICE_NAME,
         "data_dir": str(DATA_DIR),
         "port": PORT,
-        "actions": action_list(),
+        "actions": action_list(tunnel_id),
+        "tunnel": status,
     }
 
 
@@ -116,7 +135,20 @@ def initialize_database() -> None:
     subprocess.run(command, env=env, check=True, stdout=subprocess.DEVNULL)
 
 
-def install() -> None:
+def install_tunnel(tunnel_id: str) -> None:
+    validate_tunnel_id(tunnel_id)
+    PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PROFILE_PATH.write_text(render_profile(tunnel_id), encoding="utf-8")
+    PROFILE_PATH.chmod(0o600)
+    shutil.chown(PROFILE_PATH.parent, user="eiros", group="eiros")
+    shutil.chown(PROFILE_PATH, user="eiros", group="eiros")
+    shutil.copy2(TUNNEL_SERVICE_SOURCE, TUNNEL_SERVICE_DEST)
+    run(["systemctl", "daemon-reload"])
+    run(["systemctl", "enable", TUNNEL_SERVICE_NAME])
+    run(["systemctl", "restart", TUNNEL_SERVICE_NAME])
+
+
+def install(tunnel_id: str = "") -> None:
     if os.geteuid() != 0:
         raise SystemExit("install_rental_agent.py must run as root")
     ensure_user()
@@ -124,15 +156,21 @@ def install() -> None:
     ensure_env()
     install_service()
     initialize_database()
+    if tunnel_id.strip():
+        install_tunnel(tunnel_id)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Install EIROS Rental Agent MCP foundation")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--tunnel-id", default=os.environ.get("EIROS_RENTAL_TUNNEL_ID", ""))
     args = parser.parse_args()
+    tunnel_id = args.tunnel_id.strip()
+    if tunnel_id:
+        validate_tunnel_id(tunnel_id)
     if not args.dry_run:
-        install()
-    print(json.dumps(report(args.dry_run), ensure_ascii=False, sort_keys=True))
+        install(tunnel_id=tunnel_id)
+    print(json.dumps(report(args.dry_run, tunnel_id=tunnel_id), ensure_ascii=False, sort_keys=True))
 
 
 if __name__ == "__main__":

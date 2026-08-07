@@ -1,0 +1,24 @@
+[Unit]
+Description=EIROS Rental Agent OpenAI Secure MCP Tunnel
+After=network-online.target eiros-rental-mcp.service
+Wants=network-online.target
+Requires=eiros-rental-mcp.service
+
+[Service]
+Type=simple
+User=eiros
+Group=eiros
+EnvironmentFile=/etc/eiros/tunnel.env
+WorkingDirectory=/opt/eiros-control-plane
+ExecStart=/usr/local/bin/tunnel-client run --profile rental-agent --health.listen-addr 127.0.0.1:0 --health.url-file /home/eiros/rental-tunnel-health.url
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/eiros
+
+[Install]
+WantedBy=multi-user.target
