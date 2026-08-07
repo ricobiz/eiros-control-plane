@@ -172,3 +172,11 @@ def test_status_does_not_start_browser_runtime(tmp_path: Path) -> None:
         assert created == []
     finally:
         controller.shutdown()
+
+
+def test_remote_browser_defaults_to_headed_for_human_handoff(tmp_path: Path) -> None:
+    controller = RemoteBrowserController(profile_dir=tmp_path / "browser" / "search")
+    try:
+        assert controller.headless is False
+    finally:
+        controller.shutdown()

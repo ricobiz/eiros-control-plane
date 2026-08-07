@@ -11,7 +11,7 @@ WorkingDirectory=/opt/eiros-control-plane
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/etc/eiros/rental-agent.env
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/eiros-playwright-browsers
-ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.rental_agent.server
+ExecStart=/usr/bin/xvfb-run -a -s "-screen 0 1440x1100x24" /opt/eiros-control-plane/venv/bin/python -m runtime.rental_agent.server
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
