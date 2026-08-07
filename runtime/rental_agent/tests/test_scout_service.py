@@ -74,3 +74,55 @@ def test_partial_source_failure_keeps_good_results(tmp_path: Path) -> None:
     assert summary["status"] == "partial"
     assert summary["canonical_count"] == 1
     assert summary["needs_browser_sources"] == ["blocked"]
+
+
+def test_scout_escalates_needs_browser_adapter_when_browser_worker_is_available(tmp_path: Path) -> None:
+    import re
+    from runtime.rental_agent.browser import BrowserPage, BrowserWorker
+
+    class BrowserOnlyAdapter(FakeAdapter):
+        seed_urls = ("https://browser.test/search",)
+        HOSTS = {"browser.test"}
+        DETAIL_PATTERN = re.compile(r"/listing/\d+$")
+
+    adapter = BrowserOnlyAdapter("browseronly", (), status="needs_browser")
+
+    def loader(url: str) -> BrowserPage:
+        if url.endswith("/search"):
+            return BrowserPage(url=url, final_url=url, title="Search", html='<a href="/listing/1">listing</a>')
+        return BrowserPage(
+            url=url,
+            final_url=url,
+            title="Sunset",
+            html="<html>Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng</html>",
+        )
+
+    db = RentalDatabase(tmp_path / "rental.db")
+    db.initialize()
+    worker = BrowserWorker(profile_dir=tmp_path / "profile", loader=loader)
+    scout = ScoutService(db, adapters=(adapter,), browser_worker=worker)
+    summary = scout.run(limit_per_source=3)
+    assert summary["status"] == "ok"
+    assert summary["canonical_count"] == 1
+    assert summary["needs_browser_sources"] == []
+
+
+def test_scout_reports_human_verification_source(tmp_path: Path) -> None:
+    import re
+    from runtime.rental_agent.browser import BrowserPage, BrowserWorker
+
+    class BrowserOnlyAdapter(FakeAdapter):
+        seed_urls = ("https://verify.test/search",)
+        HOSTS = {"verify.test"}
+        DETAIL_PATTERN = re.compile(r"/listing/\d+$")
+
+    adapter = BrowserOnlyAdapter("verify", (), status="needs_browser")
+    worker = BrowserWorker(
+        profile_dir=tmp_path / "profile",
+        loader=lambda url: BrowserPage(url=url, final_url=url, title="Verify", html="Verify you are human CAPTCHA"),
+    )
+    db = RentalDatabase(tmp_path / "rental.db")
+    db.initialize()
+    summary = ScoutService(db, adapters=(adapter,), browser_worker=worker).run(limit_per_source=3)
+    assert summary["status"] == "needs_user_action"
+    assert summary["needs_user_action_sources"] == ["verify"]

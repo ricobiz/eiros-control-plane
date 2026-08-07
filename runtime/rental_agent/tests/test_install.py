@@ -15,6 +15,7 @@ def test_systemd_unit_is_dedicated_and_restarts() -> None:
     assert "WorkingDirectory=/opt/eiros-control-plane" in text
     assert "ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.rental_agent.server" in text
     assert "EnvironmentFile=/etc/eiros/rental-agent.env" in text
+    assert "Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/eiros-playwright-browsers" in text
     assert "Restart=always" in text
 
 
@@ -37,6 +38,7 @@ def test_installer_dry_run_is_deterministic_and_non_mutating() -> None:
         "ensure_directory:/var/lib/eiros-rental/browser",
         "ensure_directory:/var/lib/eiros-rental/logs",
         "ensure_env:/etc/eiros/rental-agent.env",
+        "ensure_browser_runtime:/opt/eiros-playwright-browsers",
         "install_unit:eiros-rental-mcp.service",
         "systemd_daemon_reload",
         "enable_restart:eiros-rental-mcp.service",

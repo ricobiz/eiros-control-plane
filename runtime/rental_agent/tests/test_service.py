@@ -65,3 +65,28 @@ def test_sources_exposes_preserved_listing_provenance(tmp_path: Path) -> None:
     sources = service.sources(created["property_id"])
     assert len(sources) == 1
     assert sources[0]["source_kind"] == "text"
+
+
+def test_shortlist_includes_source_count(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    created = service.ingest_text("Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng")
+    rows = service.shortlist(limit=10)
+    row = next(item for item in rows if item["property_id"] == created["property_id"])
+    assert row["source_count"] == 1
+
+
+def test_service_wires_dedicated_search_browser_profile(tmp_path: Path) -> None:
+    service = RentalService(RentalDatabase(tmp_path / "rental.db"), browser_profile_dir=tmp_path / "browser" / "search")
+    worker = service.scout_engine.browser_worker
+    assert worker is not None
+    assert worker.status()["profile_dir"] == str(tmp_path / "browser" / "search")
+
+
+def test_status_exposes_search_browser_state(tmp_path: Path) -> None:
+    from runtime.rental_agent.browser import BrowserPage, BrowserWorker
+    worker = BrowserWorker(
+        profile_dir=tmp_path / "browser",
+        loader=lambda url: BrowserPage(url=url, final_url=url, title="ok", html="<html>ok page</html>"),
+    )
+    service = RentalService(RentalDatabase(tmp_path / "rental.db"), browser_worker=worker)
+    assert service.status()["browser"]["backend"] == "loader"

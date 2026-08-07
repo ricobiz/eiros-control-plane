@@ -10,6 +10,7 @@ Group=eiros-rental
 WorkingDirectory=/opt/eiros-control-plane
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/etc/eiros/rental-agent.env
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/eiros-playwright-browsers
 ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.rental_agent.server
 Restart=always
 RestartSec=3

@@ -38,3 +38,8 @@ def test_stable_fingerprint_ignores_whitespace_and_case() -> None:
     first = normalize_listing("SUNSET TOWN 5 tầng 120m2 giá 22 triệu/tháng")
     second = normalize_listing(" Sunset   Town 5 TẦNG 120 m2 GIÁ 22 TRIỆU / THÁNG ")
     assert first.text_fingerprint == second.text_fingerprint
+
+
+def test_detects_floor_only_commercial_space_as_not_whole_building() -> None:
+    item = normalize_listing("Cho Thuê Mặt Bằng Tầng 1 - Shophouse An Thoi 18 triệu/tháng 80m2")
+    assert item.whole_building is False

@@ -21,6 +21,7 @@ SERVICE_DEST = Path("/etc/systemd/system") / SERVICE_NAME
 ENV_PATH = Path("/etc/eiros/rental-agent.env")
 DATA_DIR = Path("/var/lib/eiros-rental")
 BROWSER_DIR = DATA_DIR / "browser"
+BROWSER_RUNTIME_DIR = Path("/opt/eiros-playwright-browsers")
 LOG_DIR = DATA_DIR / "logs"
 DB_PATH = DATA_DIR / "rental.db"
 SERVICE_USER = "eiros-rental"
@@ -37,6 +38,7 @@ def action_list(tunnel_id: str = "") -> list[str]:
         f"ensure_directory:{BROWSER_DIR}",
         f"ensure_directory:{LOG_DIR}",
         f"ensure_env:{ENV_PATH}",
+        f"ensure_browser_runtime:{BROWSER_RUNTIME_DIR}",
         f"install_unit:{SERVICE_NAME}",
         "systemd_daemon_reload",
         f"enable_restart:{SERVICE_NAME}",
@@ -111,6 +113,24 @@ def ensure_env() -> None:
         ENV_PATH.chmod(0o640)
 
 
+def ensure_browser_runtime() -> None:
+    BROWSER_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    BROWSER_RUNTIME_DIR.chmod(0o755)
+    env = dict(os.environ)
+    env["PLAYWRIGHT_BROWSERS_PATH"] = str(BROWSER_RUNTIME_DIR)
+    subprocess.run(
+        [
+            "/opt/eiros-control-plane/venv/bin/python",
+            "-m",
+            "playwright",
+            "install",
+            "chromium",
+        ],
+        env=env,
+        check=True,
+    )
+
+
 def install_service() -> None:
     shutil.copy2(SERVICE_SOURCE, SERVICE_DEST)
     run(["systemctl", "daemon-reload"])
@@ -158,6 +178,7 @@ def install(tunnel_id: str = "") -> None:
     ensure_user()
     ensure_directories()
     ensure_env()
+    ensure_browser_runtime()
     install_service()
     initialize_database()
     if tunnel_id.strip():

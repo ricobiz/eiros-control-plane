@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, Iterable
 
-from runtime.rental_agent.config import DEFAULT_SEARCH_PROFILE
+from runtime.rental_agent.browser import BrowserWorker
+from runtime.rental_agent.config import DEFAULT_DATA_DIR, DEFAULT_SEARCH_PROFILE
 from runtime.rental_agent.db import RentalDatabase
 from runtime.rental_agent.models import LeadInput
 from runtime.rental_agent.normalize import normalize_listing
@@ -19,11 +21,15 @@ class RentalService:
         policy: RentalPolicy | None = None,
         *,
         scout_adapters: Iterable[Any] | None = None,
+        browser_profile_dir: Path | None = None,
+        browser_worker: BrowserWorker | None = None,
     ) -> None:
         self.database = database
         self.policy_engine = policy or RentalPolicy()
         self.database.initialize()
-        self.scout_engine = ScoutService(database, adapters=scout_adapters)
+        profile_dir = Path(browser_profile_dir) if browser_profile_dir is not None else DEFAULT_DATA_DIR / "browser" / "search"
+        worker = browser_worker or BrowserWorker(profile_dir=profile_dir)
+        self.scout_engine = ScoutService(database, adapters=scout_adapters, browser_worker=worker)
 
     def status(self) -> dict[str, Any]:
         db_health = self.database.health()
@@ -34,6 +40,7 @@ class RentalService:
             "policy": self.policy_engine.current(),
             "profile": DEFAULT_SEARCH_PROFILE,
             "latest_search": runs[0] if runs else None,
+            "browser": self.scout_engine.browser_worker.status() if self.scout_engine.browser_worker else {"available": False},
         }
 
     def ingest_text(self, text: str, context: str | None = None) -> dict[str, Any]:
@@ -77,7 +84,12 @@ class RentalService:
         return None if record is None else asdict(record)
 
     def shortlist(self, limit: int = 20) -> list[dict[str, Any]]:
-        return [asdict(record) for record in self.database.list_properties(limit=limit)]
+        rows: list[dict[str, Any]] = []
+        for record in self.database.list_properties(limit=limit):
+            item = asdict(record)
+            item["source_count"] = len(self.database.list_sources(record.property_id))
+            rows.append(item)
+        return rows
 
     def sources(self, property_id: str) -> list[dict[str, Any]]:
         return self.database.list_sources(property_id)

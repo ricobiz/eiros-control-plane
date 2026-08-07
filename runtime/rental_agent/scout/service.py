@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Iterable
 
+from runtime.rental_agent.browser import BrowserWorker, discover_adapter_with_browser
 from runtime.rental_agent.config import DEFAULT_SEARCH_PROFILE
 from runtime.rental_agent.db import RentalDatabase
 from runtime.rental_agent.models import LeadInput
@@ -12,12 +13,20 @@ from runtime.rental_agent.scout.base import AdapterResult
 from runtime.rental_agent.scout.batdongsan import BatdongsanAdapter
 from runtime.rental_agent.scout.common import fetch_listing, make_client
 from runtime.rental_agent.scout.nhatot import NhaTotAdapter
+from runtime.rental_agent.scout.search_index import PublicWebSearchAdapter
 
 
 class ScoutService:
-    def __init__(self, database: RentalDatabase, *, adapters: Iterable[Any] | None = None) -> None:
+    def __init__(
+        self,
+        database: RentalDatabase,
+        *,
+        adapters: Iterable[Any] | None = None,
+        browser_worker: BrowserWorker | None = None,
+    ) -> None:
         self.database = database
-        self.adapters = tuple(adapters) if adapters is not None else (BatdongsanAdapter(), NhaTotAdapter())
+        self.adapters = tuple(adapters) if adapters is not None else (BatdongsanAdapter(), NhaTotAdapter(), PublicWebSearchAdapter())
+        self.browser_worker = browser_worker
 
     def run(self, *, sources: tuple[str, ...] | None = None, limit_per_source: int = 10) -> dict[str, Any]:
         bounded = max(1, min(int(limit_per_source), 30))
@@ -33,6 +42,7 @@ class ScoutService:
         merged_count = 0
         error_count = 0
         needs_browser_sources: list[str] = []
+        needs_user_action_sources: list[str] = []
 
         for adapter in selected:
             try:
@@ -44,8 +54,16 @@ class ScoutService:
                     listings=(),
                     errors=(f"{type(exc).__name__}: {exc}",),
                 )
+            if result.status == "needs_browser" and self.browser_worker is not None:
+                browser_result = discover_adapter_with_browser(adapter, self.browser_worker, limit=bounded)
+                if browser_result.status == "ok" or browser_result.listings:
+                    result = browser_result
+                elif browser_result.status == "needs_user_action":
+                    result = browser_result
             if result.status == "needs_browser":
                 needs_browser_sources.append(result.source)
+            if result.status == "needs_user_action":
+                needs_user_action_sources.append(result.source)
             if result.status != "ok":
                 error_count += max(1, len(result.errors))
             source_summaries.append({
@@ -101,6 +119,7 @@ class ScoutService:
             "qualified_count": qualified_count,
             "rejected_count": rejected_count,
             "needs_browser_sources": needs_browser_sources,
+            "needs_user_action_sources": needs_user_action_sources,
             "sources": source_summaries,
             "property_ids": sorted(property_ids),
         }

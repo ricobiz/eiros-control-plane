@@ -79,3 +79,33 @@ def test_adapter_marks_429_as_rate_limited() -> None:
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = NhaTotAdapter(client=client, seed_urls=(search_url,)).discover(limit=5)
     assert result.status == "rate_limited"
+
+
+def test_public_web_search_adapter_extracts_indexed_detail_snippets() -> None:
+    from runtime.rental_agent.scout.search_index import PublicWebSearchAdapter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=fixture("ddg_results.html"), request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter = PublicWebSearchAdapter(
+        client=client,
+        queries=("site:batdongsan.com.vn Sunset Town shophouse",),
+    )
+    result = adapter.discover(limit=5)
+    assert result.status == "ok"
+    assert len(result.listings) == 1
+    assert result.listings[0].source == "public_web"
+    assert result.listings[0].url.endswith("-pr12345678")
+    assert "22 triệu/tháng" in result.listings[0].text
+
+
+def test_public_web_search_adapter_marks_429_rate_limit() -> None:
+    from runtime.rental_agent.scout.search_index import PublicWebSearchAdapter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, text="Too many requests", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = PublicWebSearchAdapter(client=client, queries=("x",)).discover(limit=5)
+    assert result.status == "rate_limited"
