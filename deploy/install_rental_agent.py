@@ -6,11 +6,15 @@ import os
 import pwd
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from runtime.rental_agent.tunnel import PROFILE_NAME, PROFILE_PATH, redacted_tunnel_status, render_profile, validate_tunnel_id
 
-ROOT = Path(__file__).resolve().parents[1]
 SERVICE_NAME = "eiros-rental-mcp.service"
 SERVICE_SOURCE = ROOT / "deploy" / SERVICE_NAME
 SERVICE_DEST = Path("/etc/systemd/system") / SERVICE_NAME
