@@ -3,12 +3,12 @@
 Date: 2026-08-07
 Owner: Rico
 Operator surface: ChatGPT
-Execution surface: EIROS VPS through EBRIDGE MCP
+Execution surface: dedicated Rental Agent MCP service on EIROS VPS with its own tunnel/endpoint
 Status: Approved architecture, ready for implementation planning
 
 ## 1. Objective
 
-Build a fully self-contained rental-search and market-discovery contour on Rico's VPS, controlled entirely from the current ChatGPT conversation through MCP tools. No separate daily-use dashboard is required.
+Build a fully self-contained rental-search and market-discovery system on Rico's VPS as a dedicated MCP connector with its own service, tunnel/endpoint, durable storage, and MCP App UI. The operator remains in the current ChatGPT conversation; the optional interface renders directly inside ChatGPT as an MCP App card rather than as a separate daily-use website.
 
 The contour must support two entry modes:
 
@@ -78,16 +78,21 @@ Do not volunteer personal biography, nationality, business plans, company detail
 
 ## 4. Architecture decision
 
-Use a modular monolith behind one MCP surface.
+Deploy Rental Agent as a dedicated MCP connector, separate from the general-purpose EBRIDGE connector, while keeping a modular-monolith backend internally.
 
-Why:
-- simpler deployment and recovery than many microservices
-- one durable database and audit trail
-- one MCP connector surface for ChatGPT
-- isolated internal modules prevent a single giant file
-- easy to split into services later if real load requires it
+The dedicated connector owns:
+- its own FastMCP server/service
+- its own public MCP endpoint and tunnel/route
+- its own durable SQLite database and runtime directory
+- its own persistent browser/session profiles
+- its own `ui://` MCP App resources for an in-chat control/shortlist interface
+- its own tool namespace/prefix (`rental_*`)
 
-ChatGPT is the reasoning/operator layer. The VPS is the durable execution layer for browsing, storage, queues, authenticated messaging sessions, and logs.
+EBRIDGE remains the infrastructure/admin bridge and is not the normal operator surface for rental work. This separation reduces tool-catalog clutter, isolates failures and credentials, and allows the Rental Agent connector to be reconnected/upgraded independently.
+
+Internally, use a modular monolith rather than many microservices: one deployable rental-agent service with isolated modules for search, storage, dedup, browser automation, messaging, parsing, policy, and UI resources.
+
+ChatGPT is the reasoning/operator layer. The dedicated Rental Agent MCP service on the VPS is the durable execution layer for browsing, storage, queues, authenticated messaging sessions, logs, and in-chat UI data.
 
 ## 5. Internal components
 
@@ -256,8 +261,26 @@ Initial tool family:
 - `rental_channel_login(channel)` — create a user-visible login/QR handoff when authentication is needed
 - `rental_set_profile(profile_patch)` — change geography/budget/fit rules
 - `rental_policy()` — show current authority/disclosure policy
+- `rental_open_app()` — open the Rental Agent MCP App card directly inside ChatGPT
 
-Exact names may be adjusted during implementation to match existing EBRIDGE conventions, but the capability boundaries must remain.
+Exact names may be adjusted during implementation, but the capability boundaries and dedicated-connector separation must remain.
+
+### 6.1 Dedicated connector transport and in-chat UI
+
+Run Rental Agent as a separate systemd service and MCP server from EBRIDGE. It receives its own externally reachable HTTPS MCP endpoint through a dedicated tunnel/route. The connector can therefore be added/reconnected in ChatGPT independently of EBRIDGE.
+
+The connector exposes one or more `ui://rental-agent/...` resources. `rental_open_app()` returns the current MCP App resource so ChatGPT renders the interface inline in the conversation.
+
+The first UI version should stay operational rather than decorative and include:
+- active search profile and budget
+- Scout/search-run status
+- shortlist cards with photo, price, location, floor count, freshness and fit score
+- property detail view with source duplicates and price observations
+- contact/channel status
+- outreach/thread status and latest replies
+- `needs_user_action` states such as Zalo/WhatsApp/Telegram re-authentication
+
+The UI is not a second control plane. Every action visible in the card maps to the same MCP tools and durable backend that ChatGPT uses. Normal operation can remain entirely conversational; the card is a compact visual surface for reviewing listings, photos, statuses and conversations.
 
 ## 7. Search and browsing execution
 
@@ -353,14 +376,15 @@ No real owner/agent messages are sent during automated tests.
 
 ## 13. Delivery sequence
 
-Phase 1: core DB + schema + policy + MCP skeleton
-Phase 2: ingest + normalize + dedup + ranking
-Phase 3: autonomous Scout/search adapters
-Phase 4: persistent browser worker
-Phase 5: Zalo adapter and login handoff
-Phase 6: WhatsApp/Telegram adapters
-Phase 7: reply parser + conversation ledger + automatic qualified outreach
-Phase 8: current Phu Quoc search profile end-to-end verification
+Phase 1: dedicated Rental Agent MCP service + runtime directory + SQLite schema + policy + initial tools
+Phase 2: dedicated HTTPS tunnel/route + ChatGPT connector registration contract + minimal `rental_open_app()` MCP App card
+Phase 3: ingest + normalize + dedup + ranking
+Phase 4: autonomous Scout/search adapters
+Phase 5: persistent browser worker
+Phase 6: Zalo adapter and login handoff
+Phase 7: WhatsApp/Telegram adapters
+Phase 8: reply parser + conversation ledger + automatic qualified outreach
+Phase 9: current Phu Quoc search profile end-to-end verification and in-chat UI polish
 
 ## 14. Success condition for v1
 
