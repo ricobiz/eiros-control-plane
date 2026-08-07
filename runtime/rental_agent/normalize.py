@@ -39,22 +39,26 @@ def _canonical_text(value: str) -> str:
 
 def _parse_price(text: str) -> int | None:
     simple = _ascii(text).replace("đ", "d")
-    patterns = (
-        r"(?:gia|thue|rent)?\s*[:=-]?\s*(\d+(?:[.,]\d+)?)\s*(?:trieu|tr)\s*(?:/\s*(?:thang|month))?",
-        r"(\d+(?:[.,]\d+)?)\s*(?:million)\s*(?:vnd|dong)?\s*(?:/\s*month)?",
+    monthly_patterns = (
+        r"(\d+(?:[.,]\d+)?)\s*(?:trieu|tr)\s*(?:vnd|dong|d)?\s*(?:/|moi\s*)?\s*(?:thang|month)\b",
+        r"(\d+(?:[.,]\d+)?)\s*million\s*(?:vnd|dong)?\s*(?:/|per\s*)?\s*month\b",
+        r"(?:gia\s*thue|rent)\s*[:=-]?\s*(?:tu\s*)?(\d+(?:[.,]\d+)?)\s*(?:trieu|tr)\b(?!\s*/?\s*m(?:2|²)\b)",
     )
-    for pattern in patterns:
+    for pattern in monthly_patterns:
         match = re.search(pattern, simple, flags=re.I)
         if match:
             amount = float(match.group(1).replace(",", "."))
             return int(round(amount * 1_000_000))
-    match = re.search(r"(\d{7,9})\s*(?:vnd|dong|d)?(?:\s*/\s*(?:thang|month))?", simple, flags=re.I)
-    if match:
-        amount = int(match.group(1))
-        if amount >= 1_000_000:
-            return amount
-    return None
 
+    numeric_patterns = (
+        r"(\d{7,9})\s*(?:vnd|dong|d)?\s*/\s*(?:thang|month)\b",
+        r"(?:gia\s*thue|rent)\s*[:=-]?\s*(\d{7,9})\s*(?:vnd|dong|d)?\b",
+    )
+    for pattern in numeric_patterns:
+        match = re.search(pattern, simple, flags=re.I)
+        if match:
+            return int(match.group(1))
+    return None
 
 def _parse_first_number(text: str, patterns: tuple[str, ...], *, as_float: bool = False):
     simple = _ascii(text).replace("đ", "d")

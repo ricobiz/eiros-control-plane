@@ -43,3 +43,15 @@ def test_stable_fingerprint_ignores_whitespace_and_case() -> None:
 def test_detects_floor_only_commercial_space_as_not_whole_building() -> None:
     item = normalize_listing("Cho Thuê Mặt Bằng Tầng 1 - Shophouse An Thoi 18 triệu/tháng 80m2")
     assert item.whole_building is False
+
+
+def test_price_parser_ignores_per_square_meter_incentive() -> None:
+    item = normalize_listing(
+        "Cho thuê Shophouse The Center. Chủ đầu tư hỗ trợ hoàn thiện 3 triệu/m2 sàn. Hotline 0941235578"
+    )
+    assert item.monthly_rent_vnd is None
+
+
+def test_price_parser_accepts_explicit_monthly_rent_context() -> None:
+    item = normalize_listing("Nhà 5 tầng, giá thuê 25 triệu/tháng")
+    assert item.monthly_rent_vnd == 25_000_000
