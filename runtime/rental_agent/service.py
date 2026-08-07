@@ -100,6 +100,22 @@ class RentalService:
     def refresh(self, property_id: str) -> dict[str, Any]:
         return self.scout_engine.refresh_property(property_id)
 
+    def browser_status(self) -> dict[str, object]:
+        worker = self.scout_engine.browser_worker
+        return {"available": False, "sources": []} if worker is None else worker.handoff_status()
+
+    def browser_snapshot(self, source: str) -> dict[str, object]:
+        worker = self.scout_engine.browser_worker
+        if worker is None:
+            return {"status": "needs_browser_runtime", "source": source, "error": "browser worker unavailable"}
+        return worker.handoff_snapshot(source)
+
+    def browser_click(self, source: str, x: float, y: float) -> dict[str, object]:
+        worker = self.scout_engine.browser_worker
+        if worker is None:
+            return {"status": "needs_browser_runtime", "source": source, "error": "browser worker unavailable"}
+        return worker.handoff_click(source, x, y)
+
     def policy(self) -> dict[str, object]:
         return self.policy_engine.current()
 
