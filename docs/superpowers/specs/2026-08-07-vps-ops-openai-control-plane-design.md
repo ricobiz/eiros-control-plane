@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Owner: Rico
 Operator: ChatGPT through Ebridge VPS Ops MCP
-Status: User-approved direction; written spec pending review
+Status: User-approved; implementation contract corrected against installed tunnel-client CLI
 
 ## 1. Objective
 
@@ -113,17 +113,17 @@ The tool must refuse deletion of the current EBRIDGE tunnel if its id is marked 
 
 ### 4.6 Runtime lifecycle
 
-Expose installed tunnel-client runtime capabilities through typed tools:
+The installed tunnel-client exposes the native runtime lifecycle `create`, `connect`, `list`, `status`, `stop`, `rm`, and `cleanup` rather than separate remote `get/update/delete` subcommands. VPS Ops keeps a stable typed MCP contract and maps it to those native operations:
 
-- `openai_runtime_list(...)`
-- `openai_runtime_get(runtime_or_alias)`
-- `openai_runtime_create(alias, tunnel_id, mcp_server_url, organization_ids=None, workspace_ids=None, ...)`
-- `openai_runtime_update(...)`
-- `openai_runtime_delete(runtime_or_alias, confirm_runtime)`
+- `openai_runtime_list(...)` -> native `runtimes list`;
+- `openai_runtime_get(runtime_or_alias)` -> native `runtimes status`;
+- `openai_runtime_create(alias, name, description, organization_ids=None, workspace_ids=None)` -> native idempotent `runtimes create` (create or reuse remote tunnel alias);
+- `openai_runtime_update(runtime_or_alias, tunnel_id, mcp_server_url, profile_name="")` -> native `runtimes connect` / reconcile;
+- `openai_runtime_delete(runtime_or_alias, confirm_runtime)` -> native `runtimes stop` followed by `runtimes rm`; this removes local alias metadata and never deletes the remote tunnel.
 
-Exact argument mapping follows the installed `tunnel-client runtimes ... --help` contract discovered during implementation. The MCP wrapper contract stays stable even if the CLI flags differ by installed version.
+Remote tunnel deletion remains exclusively `openai_tunnel_delete`. Runtime admin calls use the secret reference `file:/etc/eiros/openai-admin.key` directly, avoiding dependence on which OS user's HOME contains an active admin-profile.
 
-Creation/update requires no confirmation. Deletion uses the same same-value confirmation guard as tunnel deletion.
+Creation/reconcile requires no confirmation. Runtime removal uses the same same-value confirmation guard as tunnel deletion.
 
 ### 4.7 Local tunnel profile lifecycle
 

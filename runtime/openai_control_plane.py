@@ -212,7 +212,7 @@ class OpenAIControlPlane:
         tunnel_text = f"{tunnel_help.stdout}\n{tunnel_help.stderr}".lower()
         runtime_text = f"{runtime_help.stdout}\n{runtime_help.stderr}".lower()
         tunnel_crud = tunnel_help.ok and all(word in tunnel_text for word in ("create", "update", "delete", "get", "list"))
-        runtime_crud = runtime_help.ok and all(word in runtime_text for word in ("create", "update", "delete"))
+        runtime_crud = runtime_help.ok and all(word in runtime_text for word in ("create", "connect", "list", "status", "stop", "rm"))
 
         return {
             "ok": bool(profiles_result.ok or self.admin_secret_path.exists()),
@@ -744,6 +744,130 @@ class OpenAIControlPlane:
             duration_ms=disable.duration_ms + reload_result.duration_ms, error_category="",
         )
         return {"ok": True, "service": service, "profile": slug}
+
+    def daemon_health(self, profile_name: str) -> dict[str, Any]:
+        slug = self.validate_slug(profile_name)
+        url_file = self.health_url_dir / f"{slug}-tunnel-health.url"
+        if not url_file.is_file():
+            return {"ok": False, "ready": False, "profile": slug, "error": "health_url_missing"}
+        result = self._run_tunnel_client(["health", "--url-file", str(url_file), "--json"], timeout=30)
+        if not result.ok:
+            return {
+                "ok": False,
+                "ready": False,
+                "profile": slug,
+                "error": "daemon_failed",
+                "diagnostic": redact_text(result.stderr or result.stdout)[:2000],
+            }
+        payload = self._json_or_empty(result.stdout)
+        ready = True
+        if isinstance(payload, dict):
+            if "ready" in payload:
+                ready = bool(payload.get("ready"))
+            elif "ok" in payload:
+                ready = bool(payload.get("ok"))
+        return {"ok": True, "ready": ready, "profile": slug, "health": _sanitize(payload)}
+
+    def connector_provision(
+        self,
+        alias: str,
+        name: str,
+        description: str,
+        mcp_server_url: str,
+        inherit_scope_from_tunnel: str = "",
+        organization_ids: list[str] | tuple[str, ...] | None = None,
+        workspace_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        slug = self.validate_slug(alias)
+        url = self.validate_local_mcp_url(mcp_server_url)
+        orgs, workspaces = self._resolve_scope(organization_ids, workspace_ids, inherit_scope_from_tunnel)
+
+        runtime = self.runtime_create(
+            alias=slug,
+            name=str(name),
+            description=str(description),
+            organization_ids=orgs,
+            workspace_ids=workspaces,
+        )
+        tunnel_id = str(runtime.get("tunnel_id") or "")
+        if not tunnel_id:
+            status = self.runtime_get(slug)
+            tunnel_id = str(status.get("tunnel_id") or "")
+        if not tunnel_id:
+            raise ControlPlaneError("parse_error", "runtime creation did not return a tunnel id")
+        self.validate_tunnel_id(tunnel_id)
+
+        raw_meta = runtime.get("raw_meta") if isinstance(runtime.get("raw_meta"), dict) else {}
+        if raw_meta.get("created") is True:
+            tunnel_state = "created"
+        elif raw_meta.get("reused") is True:
+            tunnel_state = "reused"
+        else:
+            tunnel_state = "reused"
+
+        profile_path = self.profile_dir / f"{slug}.yaml"
+        profile_existed = profile_path.exists()
+        self.profile_create(slug, tunnel_id, url)
+        profile_state = "updated" if profile_existed else "created"
+
+        doctor_ok = False
+        doctor_error = ""
+        try:
+            doctor = self.profile_validate(slug)
+            doctor_ok = bool(doctor.get("ok"))
+        except ControlPlaneError as exc:
+            if exc.category != "doctor_failed":
+                raise
+            doctor_error = exc.category
+
+        service_path = self.systemd_dir / self._service_name_for_profile(slug)
+        daemon_existed = service_path.exists()
+        daemon = self.daemon_install(slug)
+        if daemon_existed:
+            self.daemon_restart(slug)
+        daemon_state = "restarted" if daemon_existed else "installed"
+
+        status: dict[str, Any]
+        try:
+            status = self.daemon_status(slug)
+        except ControlPlaneError as exc:
+            status = {"ok": False, "active_state": "", "error": exc.category}
+
+        health = self.daemon_health(slug)
+        ready = bool(health.get("ready")) or (
+            status.get("active_state") == "active" and status.get("sub_state") in {"running", "exited"}
+        )
+        needs_user_action = "" if ready else (doctor_error or "daemon_failed")
+
+        result = {
+            "ok": True,
+            "alias": slug,
+            "tunnel": {"state": tunnel_state, "tunnel_id": tunnel_id},
+            "runtime": {"state": tunnel_state, "alias": slug, "tunnel_id": tunnel_id},
+            "profile": {"state": profile_state, "name": slug, "doctor_ok": doctor_ok},
+            "daemon": {"state": daemon_state, "service": daemon.get("service", self._service_name_for_profile(slug))},
+            "ready": ready,
+            "needs_user_action": needs_user_action,
+            "health": _sanitize(health),
+        }
+        self._write_audit(
+            operation="connector_provision",
+            target_type="connector",
+            target=slug,
+            requested={
+                "name": str(name),
+                "description": str(description),
+                "mcp_server_url": url,
+                "organization_ids": orgs,
+                "workspace_ids": workspaces,
+                "inherit_scope_from_tunnel": str(inherit_scope_from_tunnel or ""),
+            },
+            ok=True,
+            exit_code=0,
+            duration_ms=0,
+            error_category="" if ready else needs_user_action,
+        )
+        return result
 
     def _write_audit(
         self,

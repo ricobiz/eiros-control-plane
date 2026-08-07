@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+
+from runtime.openai_control_plane import ControlPlaneError, OpenAIControlPlane, redact_text
 
 ROOT = Path("/opt/eiros-control-plane")
 ALLOWED_SERVICES = {
@@ -29,13 +32,48 @@ mcp = FastMCP(
     instructions=(
         "Dedicated audited VPS operations connector for Rico's EIROS server. "
         "Use vps_health and vps_snapshot first. Use service_status and service_journal "
-        "for allowlisted services. File tools are restricted to EIROS workspace/log paths."
+        "for allowlisted services. File tools are restricted to EIROS workspace/log paths. "
+        "For OpenAI MCP connector lifecycle, prefer openai_connector_provision for new managed connectors; "
+        "use lower-level openai_tunnel_*, openai_runtime_*, openai_profile_* and openai_tunnel_daemon_* tools "
+        "for inspection and repair. Never request or expose API key values."
     ),
     stateless_http=True,
     json_response=True,
     host="127.0.0.1",
     port=8790,
 )
+
+
+def _discover_protected_tunnel_ids() -> set[str]:
+    ids: set[str] = set()
+    profile = Path("/home/eiros/.config/tunnel-client/eiros.yaml")
+    try:
+        with profile.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped.startswith("tunnel_id:"):
+                    continue
+                value = stripped.split(":", 1)[1].strip().strip("\"'")
+                if re.fullmatch(r"tunnel_[a-z0-9]{32}", value):
+                    ids.add(value)
+                break
+    except OSError:
+        pass
+    return ids
+
+
+OPENAI_CONTROL_PLANE = OpenAIControlPlane(protected_tunnel_ids=_discover_protected_tunnel_ids())
+
+
+def _cp_call(method: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    try:
+        fn = getattr(OPENAI_CONTROL_PLANE, method)
+        result = fn(*args, **kwargs)
+        return result if isinstance(result, dict) else {"ok": True, "result": result}
+    except ControlPlaneError as exc:
+        return {"ok": False, "error": exc.category, "message": redact_text(exc.message)[:4000]}
+    except Exception as exc:
+        return {"ok": False, "error": "control_plane_internal_error", "message": redact_text(str(exc))[:4000]}
 
 
 def _run(args: list[str], timeout: int = 20, cwd: str | None = None) -> dict[str, Any]:
@@ -229,6 +267,234 @@ def git_diff(max_chars: int = 120000) -> dict[str, Any]:
     return r
 
 
+@mcp.tool()
+def openai_admin_status() -> dict[str, Any]:
+    """Read redacted OpenAI tunnel admin capability status without exposing secrets."""
+    return _cp_call("admin_status")
+
+
+@mcp.tool()
+def openai_control_plane_audit(limit: int = 100) -> dict[str, Any]:
+    """Read bounded redacted OpenAI control-plane audit events."""
+    return _cp_call("audit", limit=limit)
+
+
+@mcp.tool()
+def openai_tunnel_list(organization_id: str = "", workspace_id: str = "") -> dict[str, Any]:
+    """List OpenAI tunnels for exactly one explicit organization or workspace scope."""
+    return _cp_call("tunnel_list", organization_id=organization_id, workspace_id=workspace_id)
+
+
+@mcp.tool()
+def openai_tunnel_get(tunnel_id: str) -> dict[str, Any]:
+    """Read one OpenAI tunnel by id."""
+    return _cp_call("tunnel_get", tunnel_id)
+
+
+@mcp.tool()
+def openai_tunnel_create(
+    name: str,
+    description: str,
+    organization_ids: list[str] | None = None,
+    workspace_ids: list[str] | None = None,
+    inherit_scope_from_tunnel: str = "",
+) -> dict[str, Any]:
+    """Create an OpenAI tunnel, optionally inheriting scope from a known-good tunnel."""
+    return _cp_call(
+        "tunnel_create",
+        name=name,
+        description=description,
+        organization_ids=organization_ids,
+        workspace_ids=workspace_ids,
+        inherit_scope_from_tunnel=inherit_scope_from_tunnel,
+    )
+
+
+@mcp.tool()
+def openai_tunnel_update(
+    tunnel_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    organization_ids: list[str] | None = None,
+    workspace_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Update OpenAI tunnel metadata or scope without deleting it."""
+    return _cp_call(
+        "tunnel_update",
+        tunnel_id,
+        name=name,
+        description=description,
+        organization_ids=organization_ids,
+        workspace_ids=workspace_ids,
+    )
+
+
+@mcp.tool()
+def openai_tunnel_delete(tunnel_id: str, confirm_tunnel_id: str) -> dict[str, Any]:
+    """Delete an OpenAI tunnel only when confirm_tunnel_id exactly matches tunnel_id."""
+    return _cp_call("tunnel_delete", tunnel_id, confirm_tunnel_id=confirm_tunnel_id)
+
+
+@mcp.tool()
+def openai_runtime_list(organization_id: str = "", workspace_id: str = "") -> dict[str, Any]:
+    """List managed native tunnel-client runtime aliases and scoped remote metadata."""
+    return _cp_call("runtime_list", organization_id=organization_id, workspace_id=workspace_id)
+
+
+@mcp.tool()
+def openai_runtime_get(runtime_or_alias: str) -> dict[str, Any]:
+    """Read native tunnel-client runtime status for one alias."""
+    return _cp_call("runtime_get", runtime_or_alias)
+
+
+@mcp.tool()
+def openai_runtime_create(
+    alias: str,
+    name: str,
+    description: str,
+    organization_ids: list[str] | None = None,
+    workspace_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create or reuse a native remote tunnel alias."""
+    return _cp_call(
+        "runtime_create",
+        alias=alias,
+        name=name,
+        description=description,
+        organization_ids=organization_ids,
+        workspace_ids=workspace_ids,
+    )
+
+
+@mcp.tool()
+def openai_runtime_update(
+    runtime_or_alias: str,
+    tunnel_id: str,
+    mcp_server_url: str,
+    profile_name: str = "",
+) -> dict[str, Any]:
+    """Reconcile/connect a runtime alias to an existing tunnel and local MCP endpoint."""
+    return _cp_call(
+        "runtime_update",
+        runtime_or_alias,
+        tunnel_id=tunnel_id,
+        mcp_server_url=mcp_server_url,
+        profile_name=profile_name,
+    )
+
+
+@mcp.tool()
+def openai_runtime_delete(runtime_or_alias: str, confirm_runtime: str) -> dict[str, Any]:
+    """Stop and remove local runtime alias metadata; remote tunnel deletion is separate."""
+    return _cp_call("runtime_delete", runtime_or_alias, confirm_runtime=confirm_runtime)
+
+
+@mcp.tool()
+def openai_profile_list() -> dict[str, Any]:
+    """List local tunnel-client profiles."""
+    return _cp_call("profile_list")
+
+
+@mcp.tool()
+def openai_profile_get(name: str) -> dict[str, Any]:
+    """Read one tunnel-client profile with secret values redacted."""
+    return _cp_call("profile_get", name)
+
+
+@mcp.tool()
+def openai_profile_create(
+    name: str,
+    tunnel_id: str,
+    mcp_server_url: str,
+    health_listen_addr: str = "127.0.0.1:0",
+    health_url_file: str = "",
+) -> dict[str, Any]:
+    """Create or replace a local tunnel-client profile for one MCP endpoint."""
+    return _cp_call(
+        "profile_create",
+        name,
+        tunnel_id,
+        mcp_server_url,
+        health_listen_addr=health_listen_addr,
+        health_url_file=health_url_file,
+    )
+
+
+@mcp.tool()
+def openai_profile_validate(name: str) -> dict[str, Any]:
+    """Run tunnel-client doctor for a local profile."""
+    return _cp_call("profile_validate", name)
+
+
+@mcp.tool()
+def openai_profile_delete(name: str, confirm_name: str) -> dict[str, Any]:
+    """Delete a local profile only when confirm_name exactly matches name."""
+    return _cp_call("profile_delete", name, confirm_name=confirm_name)
+
+
+@mcp.tool()
+def openai_tunnel_daemon_install(profile_name: str, service_name: str = "") -> dict[str, Any]:
+    """Install and start a namespaced systemd tunnel daemon for a profile."""
+    return _cp_call("daemon_install", profile_name, service_name=service_name)
+
+
+@mcp.tool()
+def openai_tunnel_daemon_status(profile_name_or_service: str) -> dict[str, Any]:
+    """Read status for a managed OpenAI tunnel daemon."""
+    return _cp_call("daemon_status", profile_name_or_service)
+
+
+@mcp.tool()
+def openai_tunnel_daemon_start(profile_name: str) -> dict[str, Any]:
+    """Start a managed OpenAI tunnel daemon."""
+    return _cp_call("daemon_start", profile_name)
+
+
+@mcp.tool()
+def openai_tunnel_daemon_stop(profile_name: str) -> dict[str, Any]:
+    """Stop a managed OpenAI tunnel daemon without deleting it."""
+    return _cp_call("daemon_stop", profile_name)
+
+
+@mcp.tool()
+def openai_tunnel_daemon_restart(profile_name: str) -> dict[str, Any]:
+    """Restart a managed OpenAI tunnel daemon."""
+    return _cp_call("daemon_restart", profile_name)
+
+
+@mcp.tool()
+def openai_tunnel_daemon_health(profile_name: str) -> dict[str, Any]:
+    """Probe tunnel-client readiness for one managed profile."""
+    return _cp_call("daemon_health", profile_name)
+
+
+@mcp.tool()
+def openai_tunnel_daemon_remove(profile_name: str, confirm_name: str) -> dict[str, Any]:
+    """Remove a generated tunnel systemd service only with same-name confirmation."""
+    return _cp_call("daemon_remove", profile_name, confirm_name=confirm_name)
+
+
+@mcp.tool()
+def openai_connector_provision(
+    alias: str,
+    name: str,
+    description: str,
+    mcp_server_url: str,
+    inherit_scope_from_tunnel: str = "",
+    organization_ids: list[str] | None = None,
+    workspace_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Idempotently provision a complete managed OpenAI MCP connector stack."""
+    return _cp_call(
+        "connector_provision",
+        alias=alias,
+        name=name,
+        description=description,
+        mcp_server_url=mcp_server_url,
+        inherit_scope_from_tunnel=inherit_scope_from_tunnel,
+        organization_ids=organization_ids,
+        workspace_ids=workspace_ids,
+    )
 
 
 # ==== EIROS FULL ROOT EXECUTOR ====

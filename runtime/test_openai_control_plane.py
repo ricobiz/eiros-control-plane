@@ -73,7 +73,7 @@ def test_admin_status_is_redacted_and_reports_capabilities(tmp_path: Path) -> No
             },
             {"ok": True, "exit_code": 0, "stdout": "tunnel-client version 1.2.3\n", "stderr": "", "duration_ms": 1},
             {"ok": True, "exit_code": 0, "stdout": "create update delete get list\n", "stderr": "", "duration_ms": 1},
-            {"ok": True, "exit_code": 0, "stdout": "create update delete get list\n", "stderr": "", "duration_ms": 1},
+            {"ok": True, "exit_code": 0, "stdout": "create connect list status stop rm cleanup\n", "stderr": "", "duration_ms": 1},
         ]
     )
     op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", admin_secret_path=secret_ref)
@@ -368,3 +368,80 @@ def test_runtime_commands_use_file_secret_reference_not_home_scoped_admin_profil
     assert "--admin-key" in call
     assert f"file:{secret}" in call
     assert "--admin-profile" not in call
+
+
+def test_connector_provision_orchestrates_create_then_reuse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tid = "tunnel_12121212121212121212121212121212"
+    op = OpenAIControlPlane(
+        runner=FakeRunner(),
+        system_runner=FakeSystemRunner(),
+        audit_path=tmp_path / "audit.jsonl",
+        profile_dir=tmp_path / "profiles",
+        systemd_dir=tmp_path / "systemd",
+        health_url_dir=tmp_path / "health",
+    )
+    calls: list[str] = []
+    create_count = {"n": 0}
+
+    def fake_get_scope(source: str) -> dict[str, Any]:
+        calls.append("scope")
+        return {"tunnel_id": source, "organization_ids": ["org_scope"], "workspace_ids": []}
+
+    def fake_runtime_create(**kwargs: Any) -> dict[str, Any]:
+        calls.append("runtime_create")
+        create_count["n"] += 1
+        return {
+            "ok": True,
+            "alias": kwargs["alias"],
+            "tunnel_id": tid,
+            "state": "",
+            "profile": "",
+            "raw_meta": {"created": create_count["n"] == 1, "reused": create_count["n"] > 1},
+        }
+
+    monkeypatch.setattr(op, "tunnel_get", fake_get_scope)
+    monkeypatch.setattr(op, "runtime_create", fake_runtime_create)
+    monkeypatch.setattr(op, "profile_create", lambda *a, **k: calls.append("profile_create") or {"ok": True, "name": "rental-agent"})
+    monkeypatch.setattr(op, "profile_validate", lambda *a, **k: calls.append("profile_validate") or {"ok": True})
+    monkeypatch.setattr(op, "daemon_install", lambda *a, **k: calls.append("daemon_install") or {"ok": True, "service": "eiros-tunnel-rental-agent.service"})
+    monkeypatch.setattr(op, "daemon_status", lambda *a, **k: calls.append("daemon_status") or {"ok": True, "active_state": "active", "sub_state": "running"})
+    monkeypatch.setattr(op, "daemon_health", lambda *a, **k: calls.append("daemon_health") or {"ok": True, "ready": True})
+
+    source = "tunnel_34343434343434343434343434343434"
+    first = op.connector_provision(
+        alias="rental-agent",
+        name="EIROS Rental Agent",
+        description="Dedicated rental",
+        mcp_server_url="http://127.0.0.1:8794/mcp",
+        inherit_scope_from_tunnel=source,
+    )
+    second = op.connector_provision(
+        alias="rental-agent",
+        name="EIROS Rental Agent",
+        description="Dedicated rental",
+        mcp_server_url="http://127.0.0.1:8794/mcp",
+        inherit_scope_from_tunnel=source,
+    )
+
+    assert first["ok"] is True and first["ready"] is True
+    assert first["tunnel"]["state"] == "created"
+    assert first["tunnel"]["tunnel_id"] == tid
+    assert second["tunnel"]["state"] == "reused"
+    assert second["needs_user_action"] == ""
+    assert calls.count("runtime_create") == 2
+    assert calls.count("profile_create") == 2
+
+
+def test_daemon_health_uses_profile_health_url_file(tmp_path: Path) -> None:
+    runner = FakeRunner([
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"ok": True, "ready": True}), "stderr": "", "duration_ms": 2}
+    ])
+    health_dir = tmp_path / "health"
+    health_dir.mkdir()
+    (health_dir / "rental-agent-tunnel-health.url").write_text("http://127.0.0.1:49152\n", encoding="utf-8")
+    op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", health_url_dir=health_dir)
+    result = op.daemon_health("rental-agent")
+    assert result["ok"] is True
+    assert result["ready"] is True
+    assert "health" in runner.calls[0]
+    assert "--url-file" in runner.calls[0]
