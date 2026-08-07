@@ -25,7 +25,7 @@ def test_status_reports_schema_and_market_discovery_policy(tmp_path: Path) -> No
     status = service.status()
 
     assert status["ok"] is True
-    assert status["database"]["schema_version"] == 1
+    assert status["database"]["schema_version"] == 2
     assert status["policy"]["mode"] == "market_discovery_only"
 
 
