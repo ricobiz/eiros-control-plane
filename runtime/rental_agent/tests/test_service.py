@@ -39,3 +39,12 @@ def test_shortlist_is_json_serializable_and_stable(tmp_path: Path) -> None:
     assert {row["property_id"] for row in rows} == {first["property_id"], second["property_id"]}
     assert rows == sorted(rows, key=lambda row: (-row["fit_score"], -row["updated_at"], row["property_id"]))
     json.dumps(rows)
+
+
+def test_status_exposes_active_search_profile_for_in_chat_app(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    status = service.status()
+
+    assert status["profile"]["location"] == "Phu Quoc"
+    assert "Sunset Town" in status["profile"]["zones"]
+    assert status["profile"]["budget_vnd_month"]["target_max"] == 25_000_000

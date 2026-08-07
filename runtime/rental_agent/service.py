@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from runtime.rental_agent.config import DEFAULT_SEARCH_PROFILE
 from runtime.rental_agent.db import RentalDatabase
 from runtime.rental_agent.models import LeadInput
 from runtime.rental_agent.policy import RentalPolicy
@@ -20,6 +21,7 @@ class RentalService:
             "ok": bool(db_health.get("ok")),
             "database": db_health,
             "policy": self.policy_engine.current(),
+            "profile": DEFAULT_SEARCH_PROFILE,
         }
 
     def ingest_text(self, text: str, context: str | None = None) -> dict[str, Any]:

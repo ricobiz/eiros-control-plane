@@ -16,6 +16,15 @@ SERVER_NAME = "EIROS Rental Agent"
 SERVER_HOST = DEFAULT_HOST
 SERVER_PORT = DEFAULT_PORT
 APP_URI = "ui://eiros-rental/app-v1.html"
+APP_HTML_PATH = Path(__file__).resolve().parent / "ui" / "app.html"
+APP_META: dict[str, Any] = {
+    "ui": {
+        "prefersBorder": True,
+        "csp": {"connectDomains": [], "resourceDomains": []},
+    },
+    "openai/widgetDescription": "EIROS Rental Agent — shortlist, properties and discovery status.",
+    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+}
 
 mcp = FastMCP(
     SERVER_NAME,
@@ -65,6 +74,18 @@ WRITE_IDEMPOTENT = ToolAnnotations(
     destructiveHint=False,
     idempotentHint=True,
 )
+
+
+@mcp.resource(
+    APP_URI,
+    name="EIROS Rental Agent App",
+    title="EIROS Rental Agent",
+    description="In-chat rental discovery status, shortlist and lead ingest.",
+    mime_type="text/html;profile=mcp-app",
+    meta=APP_META,
+)
+def rental_app_resource() -> str:
+    return APP_HTML_PATH.read_text(encoding="utf-8")
 
 
 @mcp.tool(
@@ -151,10 +172,16 @@ def rental_policy() -> dict[str, object]:
     title="Open Rental Agent",
     description="Open the Rental Agent MCP App card inside ChatGPT.",
     annotations=READ_ONLY,
+    meta={
+        "ui": {"resourceUri": APP_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": APP_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Rental Agent…",
+        "openai/toolInvocation/invoked": "EIROS Rental Agent opened.",
+    },
     structured_output=True,
 )
 def rental_open_app() -> dict[str, str]:
-    return {"ui_uri": APP_URI, "status": "ui_foundation_pending"}
+    return {"resource_uri": APP_URI, "status": "ready"}
 
 
 if __name__ == "__main__":
