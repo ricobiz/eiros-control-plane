@@ -13,6 +13,7 @@ from runtime.rental_agent.scout.base import AdapterResult
 from runtime.rental_agent.scout.batdongsan import BatdongsanAdapter
 from runtime.rental_agent.scout.common import fetch_listing, make_client
 from runtime.rental_agent.scout.nhatot import NhaTotAdapter
+from runtime.rental_agent.scout.kiengiang_agency import KienGiangAgencyAdapter
 from runtime.rental_agent.scout.search_index import PublicWebSearchAdapter
 
 
@@ -25,7 +26,7 @@ class ScoutService:
         browser_worker: BrowserWorker | None = None,
     ) -> None:
         self.database = database
-        self.adapters = tuple(adapters) if adapters is not None else (BatdongsanAdapter(), NhaTotAdapter(), PublicWebSearchAdapter())
+        self.adapters = tuple(adapters) if adapters is not None else (BatdongsanAdapter(), NhaTotAdapter(), KienGiangAgencyAdapter(), PublicWebSearchAdapter())
         self.browser_worker = browser_worker
 
     def run(self, *, sources: tuple[str, ...] | None = None, limit_per_source: int = 10) -> dict[str, Any]:
