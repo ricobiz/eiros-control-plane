@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 
@@ -24,11 +25,19 @@ class PropertyRecord:
     area_m2: float | None
     lease_min_months: int | None
     deposit_months: float | None
+    whole_building: bool | None
     fit_score: float
+    fit_dimensions: dict[str, float]
+    signature: str
     created_at: int
     updated_at: int
 
-from enum import Enum
+
+@dataclass(slots=True, frozen=True)
+class UpsertResult:
+    property: PropertyRecord
+    source_id: str
+    merged: bool
 
 
 class AuthorityAction(str, Enum):

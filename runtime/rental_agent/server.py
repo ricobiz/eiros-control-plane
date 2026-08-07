@@ -83,6 +83,12 @@ WRITE_IDEMPOTENT = ToolAnnotations(
     destructiveHint=False,
     idempotentHint=True,
 )
+SEARCH_WRITE = ToolAnnotations(
+    readOnlyHint=False,
+    openWorldHint=True,
+    destructiveHint=False,
+    idempotentHint=False,
+)
 
 
 @mcp.resource(
@@ -163,6 +169,40 @@ def rental_property(property_id: str) -> dict[str, Any]:
 def rental_shortlist(limit: int = 20) -> dict[str, Any]:
     rows = _service().shortlist(limit=max(1, min(int(limit), 100)))
     return {"count": len(rows), "properties": rows}
+
+
+@mcp.tool(
+    name="rental_search",
+    title="Search rental market",
+    description="Run a bounded autonomous public-market discovery pass, normalize, deduplicate and rank results.",
+    annotations=SEARCH_WRITE,
+    structured_output=True,
+)
+def rental_search(sources: list[str] | None = None, limit: int = 10) -> dict[str, Any]:
+    return _service().search(sources=sources, limit=max(1, min(int(limit), 30)))
+
+
+@mcp.tool(
+    name="rental_sources",
+    title="Rental property sources",
+    description="Read all preserved source listings and provenance for one canonical property.",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def rental_sources(property_id: str) -> dict[str, Any]:
+    rows = _service().sources(property_id)
+    return {"property_id": property_id, "count": len(rows), "sources": rows}
+
+
+@mcp.tool(
+    name="rental_refresh",
+    title="Refresh rental property",
+    description="Re-fetch known public listing URLs for one property and update normalized facts without contacting anyone.",
+    annotations=SEARCH_WRITE,
+    structured_output=True,
+)
+def rental_refresh(property_id: str) -> dict[str, Any]:
+    return _service().refresh(property_id)
 
 
 @mcp.tool(

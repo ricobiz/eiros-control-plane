@@ -12,6 +12,9 @@ EXPECTED_TOOLS = {
     "rental_shortlist",
     "rental_policy",
     "rental_open_app",
+    "rental_search",
+    "rental_sources",
+    "rental_refresh",
 }
 
 
