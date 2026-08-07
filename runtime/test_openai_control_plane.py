@@ -223,3 +223,148 @@ def test_tunnel_update_and_delete_build_expected_commands(tmp_path: Path) -> Non
     deleted = op.tunnel_delete(tid, confirm_tunnel_id=tid)
     assert deleted["ok"] is True
     assert "--confirm" in runner.calls[1]
+
+
+class FakeSystemRunner(FakeRunner):
+    pass
+
+
+def test_runtime_create_get_update_delete_map_to_native_cli(tmp_path: Path) -> None:
+    alias = "rental-agent"
+    tid = "tunnel_abababababababababababababababab"
+    runner = FakeRunner([
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"alias": alias, "tunnel_id": tid}), "stderr": "", "duration_ms": 2},
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"alias": alias, "state": "running", "tunnel_id": tid}), "stderr": "", "duration_ms": 2},
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"alias": alias, "state": "connected", "tunnel_id": tid}), "stderr": "", "duration_ms": 2},
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"alias": alias, "stopped": True}), "stderr": "", "duration_ms": 2},
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"alias": alias, "removed": True}), "stderr": "", "duration_ms": 2},
+    ])
+    op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", admin_profile_name="platform-admin")
+
+    created = op.runtime_create(alias=alias, name="Rental", description="desc", organization_ids=["org_scope"])
+    assert created["alias"] == alias
+    assert "create" in runner.calls[0] and "--admin-key" in runner.calls[0]
+
+    status = op.runtime_get(alias)
+    assert status["alias"] == alias
+    assert "status" in runner.calls[1]
+
+    updated = op.runtime_update(alias, tunnel_id=tid, mcp_server_url="http://127.0.0.1:8794/mcp", profile_name=alias)
+    assert updated["alias"] == alias
+    assert "connect" in runner.calls[2]
+    assert "--tunnel-id" in runner.calls[2]
+    assert "--mcp-server-url" in runner.calls[2]
+
+    deleted = op.runtime_delete(alias, confirm_runtime=alias)
+    assert deleted["ok"] is True
+    assert "stop" in runner.calls[3]
+    assert "rm" in runner.calls[4]
+
+
+def test_runtime_delete_requires_confirmation(tmp_path: Path) -> None:
+    op = OpenAIControlPlane(runner=FakeRunner(), audit_path=tmp_path / "audit.jsonl")
+    with pytest.raises(ControlPlaneError) as exc:
+        op.runtime_delete("rental-agent", confirm_runtime="other")
+    assert exc.value.category == "confirmation_mismatch"
+
+
+def test_profile_create_validate_get_and_delete_are_secret_safe(tmp_path: Path) -> None:
+    profile_dir = tmp_path / "profiles"
+    profile_dir.mkdir()
+    tid = "tunnel_cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    runner = FakeRunner([
+        {"ok": True, "exit_code": 0, "stdout": "Created profile rental-agent", "stderr": "", "duration_ms": 2},
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"ok": True, "checks": ["config"]}), "stderr": "", "duration_ms": 2},
+    ])
+    op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", profile_dir=profile_dir)
+
+    created = op.profile_create("rental-agent", tid, "http://127.0.0.1:8794/mcp")
+    assert created["name"] == "rental-agent"
+    init_call = runner.calls[0]
+    assert "init" in init_call and "--profile" in init_call and "rental-agent" in init_call
+    assert "--control-plane-api-key-ref" in init_call
+    assert "env:CONTROL_PLANE_API_KEY" in init_call
+
+    (profile_dir / "rental-agent.yaml").write_text(
+        'control_plane:\n  api_key: "sk-runtime-secret-value"\n  tunnel_id: "' + tid + '"\n',
+        encoding="utf-8",
+    )
+    got = op.profile_get("rental-agent")
+    encoded = json.dumps(got)
+    assert "sk-runtime-secret-value" not in encoded
+    assert "[REDACTED]" in encoded
+
+    checked = op.profile_validate("rental-agent")
+    assert checked["ok"] is True
+    assert "doctor" in runner.calls[1]
+
+    deleted = op.profile_delete("rental-agent", confirm_name="rental-agent")
+    assert deleted["ok"] is True
+    assert not (profile_dir / "rental-agent.yaml").exists()
+
+
+def test_profile_delete_protects_core_profiles(tmp_path: Path) -> None:
+    op = OpenAIControlPlane(audit_path=tmp_path / "audit.jsonl", profile_dir=tmp_path / "profiles")
+    with pytest.raises(ControlPlaneError) as exc:
+        op.profile_delete("eiros", confirm_name="eiros")
+    assert exc.value.category == "protected_target"
+
+
+def test_daemon_install_builds_namespaced_unit_and_lifecycle(tmp_path: Path) -> None:
+    systemd_dir = tmp_path / "systemd"
+    system_runner = FakeSystemRunner([
+        {"ok": True, "exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 1},
+        {"ok": True, "exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 1},
+        {"ok": True, "exit_code": 0, "stdout": "ActiveState=active\nSubState=running\n", "stderr": "", "duration_ms": 1},
+        {"ok": True, "exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 1},
+        {"ok": True, "exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 1},
+        {"ok": True, "exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 1},
+    ])
+    op = OpenAIControlPlane(
+        runner=FakeRunner(),
+        system_runner=system_runner,
+        audit_path=tmp_path / "audit.jsonl",
+        systemd_dir=systemd_dir,
+        health_url_dir=tmp_path / "health",
+    )
+
+    installed = op.daemon_install("rental-agent")
+    assert installed["service"] == "eiros-tunnel-rental-agent.service"
+    unit = (systemd_dir / "eiros-tunnel-rental-agent.service").read_text(encoding="utf-8")
+    assert "User=eiros" in unit
+    assert "EnvironmentFile=/etc/eiros/tunnel.env" in unit
+    assert "tunnel-client run --profile rental-agent" in unit
+    assert "Restart=always" in unit
+
+    status = op.daemon_status("rental-agent")
+    assert status["active_state"] == "active"
+    op.daemon_restart("rental-agent")
+    op.daemon_stop("rental-agent")
+    removed = op.daemon_remove("rental-agent", confirm_name="rental-agent")
+    assert removed["ok"] is True
+    assert not (systemd_dir / "eiros-tunnel-rental-agent.service").exists()
+
+
+def test_daemon_remove_protects_core_service(tmp_path: Path) -> None:
+    op = OpenAIControlPlane(audit_path=tmp_path / "audit.jsonl", systemd_dir=tmp_path / "systemd")
+    with pytest.raises(ControlPlaneError) as exc:
+        op.daemon_remove("eiros", confirm_name="eiros")
+    assert exc.value.category == "protected_target"
+
+
+def test_runtime_commands_use_file_secret_reference_not_home_scoped_admin_profile(tmp_path: Path) -> None:
+    runner = FakeRunner([
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"alias": "rental-agent"}), "stderr": "", "duration_ms": 1}
+    ])
+    secret = tmp_path / "admin.key"
+    op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", admin_secret_path=secret)
+    op.runtime_create(
+        alias="rental-agent",
+        name="Rental",
+        description="desc",
+        organization_ids=["org_scope"],
+    )
+    call = runner.calls[0]
+    assert "--admin-key" in call
+    assert f"file:{secret}" in call
+    assert "--admin-profile" not in call

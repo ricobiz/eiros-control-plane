@@ -77,7 +77,7 @@ def _sanitize(value: Any) -> Any:
     return value
 
 
-def _default_runner(argv: list[str], timeout: int = 30) -> dict[str, Any]:
+def _default_exec_runner(argv: list[str], timeout: int = 30) -> dict[str, Any]:
     started = time.time()
     try:
         proc = subprocess.run(
@@ -116,16 +116,26 @@ class OpenAIControlPlane:
     def __init__(
         self,
         runner: Runner | None = None,
+        system_runner: Runner | None = None,
         audit_path: Path | str = DEFAULT_AUDIT_PATH,
         admin_secret_path: Path | str = DEFAULT_ADMIN_SECRET_PATH,
+        admin_profile_name: str = "platform-admin",
+        profile_dir: Path | str = Path("/home/eiros/.config/tunnel-client"),
+        systemd_dir: Path | str = Path("/etc/systemd/system"),
+        health_url_dir: Path | str = Path("/home/eiros"),
         protected_tunnel_ids: set[str] | None = None,
         protected_profile_names: set[str] | None = None,
         protected_service_names: set[str] | None = None,
         control_plane_base_url: str = DEFAULT_CONTROL_PLANE_BASE_URL,
     ) -> None:
-        self.runner = runner or _default_runner
+        self.runner = runner or _default_exec_runner
+        self.system_runner = system_runner or _default_exec_runner
         self.audit_path = Path(audit_path)
         self.admin_secret_path = Path(admin_secret_path)
+        self.admin_profile_name = self.validate_slug(admin_profile_name)
+        self.profile_dir = Path(profile_dir)
+        self.systemd_dir = Path(systemd_dir)
+        self.health_url_dir = Path(health_url_dir)
         self.protected_tunnel_ids = set(protected_tunnel_ids or set())
         self.protected_profile_names = set(protected_profile_names or {"eiros", "eiros-vps-ops"})
         self.protected_service_names = set(protected_service_names or {"eiros-tunnel.service"})
@@ -418,6 +428,322 @@ class OpenAIControlPlane:
         )
         payload = self._json_or_empty(result.stdout)
         return {"ok": True, "tunnel_id": tunnel_id, "result": _sanitize(payload)}
+
+    def _runtime_call(self, command: list[str], timeout: int = 60) -> CommandResult:
+        args = ["runtimes", *command, "--admin-key", f"file:{self.admin_secret_path}", "--json"]
+        return self._run_tunnel_client(args, timeout=timeout)
+
+    @staticmethod
+    def _normalize_runtime(payload: Any, alias: str = "") -> dict[str, Any]:
+        data = payload if isinstance(payload, dict) else {}
+        return {
+            "ok": True,
+            "alias": str(data.get("alias") or alias),
+            "tunnel_id": str(data.get("tunnel_id") or data.get("id") or ""),
+            "state": str(data.get("state") or data.get("status") or ""),
+            "profile": str(data.get("profile") or data.get("profile_name") or ""),
+            "raw_meta": _sanitize({k: v for k, v in data.items() if k not in {"alias", "tunnel_id", "id", "state", "status", "profile", "profile_name"}}),
+        }
+
+    def runtime_list(self, organization_id: str = "", workspace_id: str = "") -> dict[str, Any]:
+        command = ["list"]
+        if organization_id:
+            command += ["--organization-id", self._bounded_ids([organization_id], "organization")[0]]
+        if workspace_id:
+            command += ["--workspace-id", self._bounded_ids([workspace_id], "workspace")[0]]
+        result = self._runtime_call(command, timeout=30)
+        self._require_ok(result, category="tunnel_client_error")
+        payload = self._json_or_empty(result.stdout)
+        rows: list[Any] = []
+        if isinstance(payload, list):
+            rows = payload
+        elif isinstance(payload, dict):
+            for key in ("runtimes", "aliases", "items"):
+                if isinstance(payload.get(key), list):
+                    rows = payload[key]
+                    break
+        return {"ok": True, "runtimes": [self._normalize_runtime(row) for row in rows if isinstance(row, dict)]}
+
+    def runtime_create(
+        self,
+        alias: str,
+        name: str,
+        description: str,
+        organization_ids: list[str] | tuple[str, ...] | None = None,
+        workspace_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        slug = self.validate_slug(alias)
+        orgs = self._bounded_ids(organization_ids, "organization")
+        workspaces = self._bounded_ids(workspace_ids, "workspace")
+        if not orgs and not workspaces:
+            raise ControlPlaneError("scope_required", "runtime creation requires organization/workspace scope")
+        command = ["create", "--alias", slug, "--name", str(name), "--description", str(description)]
+        for value in orgs:
+            command += ["--organization-id", value]
+        for value in workspaces:
+            command += ["--workspace-id", value]
+        result = self._runtime_call(command, timeout=90)
+        self._require_ok(result)
+        normalized = self._normalize_runtime(self._json_or_empty(result.stdout), slug)
+        self._write_audit(
+            operation="runtime_create", target_type="runtime", target=slug,
+            requested={"name": str(name), "description": str(description), "organization_ids": orgs, "workspace_ids": workspaces},
+            ok=True, exit_code=result.exit_code, duration_ms=result.duration_ms, error_category="",
+        )
+        return normalized
+
+    def runtime_get(self, runtime_or_alias: str) -> dict[str, Any]:
+        alias = self.validate_slug(runtime_or_alias)
+        result = self._runtime_call(["status", alias], timeout=30)
+        if not result.ok:
+            detail = (result.stderr or result.stdout).lower()
+            if "not found" in detail or "unknown alias" in detail:
+                raise ControlPlaneError("runtime_not_found", "runtime alias not found")
+            self._require_ok(result)
+        return self._normalize_runtime(self._json_or_empty(result.stdout), alias)
+
+    def runtime_update(
+        self,
+        runtime_or_alias: str,
+        *,
+        tunnel_id: str,
+        mcp_server_url: str,
+        profile_name: str = "",
+    ) -> dict[str, Any]:
+        alias = self.validate_slug(runtime_or_alias)
+        self.validate_tunnel_id(tunnel_id)
+        url = self.validate_local_mcp_url(mcp_server_url)
+        profile = self.validate_slug(profile_name or alias)
+        command = [
+            "connect", "--alias", alias, "--tunnel-id", tunnel_id,
+            "--mcp-server-url", url, "--profile", profile,
+            "--profile-dir", str(self.profile_dir),
+            "--runtime-api-key", "env:CONTROL_PLANE_API_KEY",
+        ]
+        result = self._runtime_call(command, timeout=120)
+        self._require_ok(result)
+        normalized = self._normalize_runtime(self._json_or_empty(result.stdout), alias)
+        if not normalized["tunnel_id"]:
+            normalized["tunnel_id"] = tunnel_id
+        self._write_audit(
+            operation="runtime_update", target_type="runtime", target=alias,
+            requested={"tunnel_id": tunnel_id, "mcp_server_url": url, "profile": profile},
+            ok=True, exit_code=result.exit_code, duration_ms=result.duration_ms, error_category="",
+        )
+        return normalized
+
+    def runtime_delete(self, runtime_or_alias: str, confirm_runtime: str) -> dict[str, Any]:
+        alias = self.validate_slug(runtime_or_alias)
+        if str(confirm_runtime or "") != alias:
+            raise ControlPlaneError("confirmation_mismatch", "confirm_runtime must equal runtime alias")
+        stop_result = self._runtime_call(["stop", alias], timeout=60)
+        if not stop_result.ok and "not found" not in (stop_result.stderr or stop_result.stdout).lower():
+            self._require_ok(stop_result)
+        rm_result = self._runtime_call(["rm", alias], timeout=60)
+        self._require_ok(rm_result)
+        self._write_audit(
+            operation="runtime_delete", target_type="runtime", target=alias,
+            requested={}, ok=True, exit_code=rm_result.exit_code,
+            duration_ms=stop_result.duration_ms + rm_result.duration_ms, error_category="",
+        )
+        return {"ok": True, "alias": alias, "remote_tunnel_deleted": False}
+
+    def profile_list(self) -> dict[str, Any]:
+        result = self._run_tunnel_client(["profiles", "list", "--profile-dir", str(self.profile_dir), "--json"], timeout=30)
+        self._require_ok(result, category="tunnel_client_error")
+        payload = self._json_or_empty(result.stdout)
+        names: list[str] = []
+        if isinstance(payload, list):
+            for row in payload:
+                if isinstance(row, str):
+                    names.append(row)
+                elif isinstance(row, dict) and row.get("name"):
+                    names.append(str(row["name"]))
+        elif isinstance(payload, dict):
+            rows = payload.get("profiles")
+            if isinstance(rows, list):
+                for row in rows:
+                    if isinstance(row, str):
+                        names.append(row)
+                    elif isinstance(row, dict) and row.get("name"):
+                        names.append(str(row["name"]))
+        return {"ok": True, "profiles": sorted(set(names))}
+
+    def profile_get(self, name: str) -> dict[str, Any]:
+        slug = self.validate_slug(name)
+        path = self.profile_dir / f"{slug}.yaml"
+        if not path.is_file():
+            raise ControlPlaneError("profile_not_found", "profile not found")
+        text = redact_text(path.read_text(encoding="utf-8", errors="replace"))
+        return {"ok": True, "name": slug, "path": str(path), "content_redacted": text[:120000]}
+
+    def profile_create(
+        self,
+        name: str,
+        tunnel_id: str,
+        mcp_server_url: str,
+        health_listen_addr: str = "127.0.0.1:0",
+        health_url_file: str = "",
+    ) -> dict[str, Any]:
+        slug = self.validate_slug(name)
+        self.validate_tunnel_id(tunnel_id)
+        url = self.validate_local_mcp_url(mcp_server_url)
+        self.profile_dir.mkdir(parents=True, exist_ok=True)
+        health_file = health_url_file or str(self.health_url_dir / f"{slug}-tunnel-health.url")
+        args = [
+            "init", "--profile", slug, "--profile-dir", str(self.profile_dir),
+            "--tunnel-id", tunnel_id, "--mcp-server-url", url,
+            "--control-plane-api-key-ref", "env:CONTROL_PLANE_API_KEY",
+            "--health-listen-addr", str(health_listen_addr), "--force",
+        ]
+        result = self._run_tunnel_client(args, timeout=60)
+        self._require_ok(result)
+        self._write_audit(
+            operation="profile_create", target_type="profile", target=slug,
+            requested={"tunnel_id": tunnel_id, "mcp_server_url": url, "health_url_file": health_file},
+            ok=True, exit_code=result.exit_code, duration_ms=result.duration_ms, error_category="",
+        )
+        return {"ok": True, "name": slug, "profile_path": str(self.profile_dir / f"{slug}.yaml"), "health_url_file": health_file}
+
+    def profile_validate(self, name: str) -> dict[str, Any]:
+        slug = self.validate_slug(name)
+        result = self._run_tunnel_client(["doctor", "--profile", slug, "--profile-dir", str(self.profile_dir), "--json"], timeout=60)
+        if not result.ok:
+            detail = redact_text(result.stderr or result.stdout)[:4000]
+            raise ControlPlaneError("doctor_failed", detail)
+        payload = self._json_or_empty(result.stdout)
+        return {"ok": True, "name": slug, "diagnostic": _sanitize(payload if payload else {"text": result.stdout[:4000]})}
+
+    def profile_delete(self, name: str, confirm_name: str) -> dict[str, Any]:
+        slug = self.validate_slug(name)
+        if str(confirm_name or "") != slug:
+            raise ControlPlaneError("confirmation_mismatch", "confirm_name must equal profile name")
+        if slug in self.protected_profile_names:
+            raise ControlPlaneError("protected_target", "protected profile cannot be deleted")
+        path = self.profile_dir / f"{slug}.yaml"
+        if path.exists():
+            path.unlink()
+        self._write_audit(
+            operation="profile_delete", target_type="profile", target=slug,
+            requested={}, ok=True, exit_code=0, duration_ms=0, error_category="",
+        )
+        return {"ok": True, "name": slug}
+
+    @staticmethod
+    def _service_name_for_profile(profile_name: str) -> str:
+        slug = OpenAIControlPlane.validate_slug(profile_name)
+        return f"eiros-tunnel-{slug}.service"
+
+    def _run_system(self, argv: list[str], timeout: int = 30) -> CommandResult:
+        raw = self.system_runner([str(a) for a in argv], timeout)
+        return CommandResult(
+            ok=bool(raw.get("ok")), exit_code=raw.get("exit_code"),
+            stdout=redact_text(str(raw.get("stdout") or ""))[-120000:],
+            stderr=redact_text(str(raw.get("stderr") or ""))[-120000:],
+            duration_ms=int(raw.get("duration_ms") or 0),
+        )
+
+    def _unit_text(self, profile_name: str) -> str:
+        slug = self.validate_slug(profile_name)
+        health_file = self.health_url_dir / f"{slug}-tunnel-health.url"
+        return (
+            "[Unit]\n"
+            f"Description=EIROS OpenAI MCP Tunnel ({slug})\n"
+            "After=network-online.target\nWants=network-online.target\n\n"
+            "[Service]\nType=simple\nUser=eiros\nGroup=eiros\n"
+            "EnvironmentFile=/etc/eiros/tunnel.env\n"
+            f"ExecStart={TUNNEL_CLIENT} run --profile {slug} --health.listen-addr 127.0.0.1:0 --health.url-file {health_file}\n"
+            "Restart=always\nRestartSec=3\nTimeoutStopSec=20\nNoNewPrivileges=true\nPrivateTmp=true\n\n"
+            "[Install]\nWantedBy=multi-user.target\n"
+        )
+
+    def daemon_install(self, profile_name: str, service_name: str = "") -> dict[str, Any]:
+        slug = self.validate_slug(profile_name)
+        expected = self._service_name_for_profile(slug)
+        if service_name and str(service_name) != expected:
+            raise ControlPlaneError("invalid_identifier", "service name must match managed profile")
+        self.systemd_dir.mkdir(parents=True, exist_ok=True)
+        path = self.systemd_dir / expected
+        path.write_text(self._unit_text(slug), encoding="utf-8")
+        reload_result = self._run_system(["systemctl", "daemon-reload"], timeout=30)
+        if not reload_result.ok:
+            raise ControlPlaneError("daemon_failed", reload_result.stderr or "daemon-reload failed")
+        enable_result = self._run_system(["systemctl", "enable", "--now", expected], timeout=60)
+        if not enable_result.ok:
+            raise ControlPlaneError("daemon_failed", enable_result.stderr or "enable/start failed")
+        self._write_audit(
+            operation="daemon_install", target_type="service", target=expected,
+            requested={"profile": slug}, ok=True, exit_code=enable_result.exit_code,
+            duration_ms=reload_result.duration_ms + enable_result.duration_ms, error_category="",
+        )
+        return {"ok": True, "profile": slug, "service": expected, "unit_path": str(path)}
+
+    def daemon_status(self, profile_name_or_service: str) -> dict[str, Any]:
+        raw = str(profile_name_or_service or "").strip()
+        service = raw if raw.endswith(".service") else self._service_name_for_profile(raw)
+        if not re.fullmatch(r"eiros-tunnel-[a-z0-9][a-z0-9-]{0,62}\.service", service):
+            raise ControlPlaneError("invalid_identifier", "invalid managed service")
+        result = self._run_system([
+            "systemctl", "show", service,
+            "--property=ActiveState,SubState,MainPID,Result,ExecMainStatus,FragmentPath", "--no-pager",
+        ], timeout=20)
+        if not result.ok:
+            raise ControlPlaneError("daemon_failed", result.stderr or result.stdout)
+        fields: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                fields[key] = value
+        return {
+            "ok": True, "service": service,
+            "active_state": fields.get("ActiveState", ""),
+            "sub_state": fields.get("SubState", ""),
+            "main_pid": fields.get("MainPID", ""),
+            "result": fields.get("Result", ""),
+            "fragment_path": fields.get("FragmentPath", ""),
+        }
+
+    def daemon_start(self, profile_name: str) -> dict[str, Any]:
+        service = self._service_name_for_profile(profile_name)
+        result = self._run_system(["systemctl", "start", service], timeout=60)
+        if not result.ok:
+            raise ControlPlaneError("daemon_failed", result.stderr or result.stdout)
+        return {"ok": True, "service": service, "action": "start"}
+
+    def daemon_restart(self, profile_name: str) -> dict[str, Any]:
+        service = self._service_name_for_profile(profile_name)
+        result = self._run_system(["systemctl", "restart", service], timeout=60)
+        if not result.ok:
+            raise ControlPlaneError("daemon_failed", result.stderr or result.stdout)
+        return {"ok": True, "service": service, "action": "restart"}
+
+    def daemon_stop(self, profile_name: str) -> dict[str, Any]:
+        service = self._service_name_for_profile(profile_name)
+        result = self._run_system(["systemctl", "stop", service], timeout=60)
+        if not result.ok:
+            raise ControlPlaneError("daemon_failed", result.stderr or result.stdout)
+        return {"ok": True, "service": service, "action": "stop"}
+
+    def daemon_remove(self, profile_name: str, confirm_name: str) -> dict[str, Any]:
+        slug = self.validate_slug(profile_name)
+        if str(confirm_name or "") != slug:
+            raise ControlPlaneError("confirmation_mismatch", "confirm_name must equal profile name")
+        service = self._service_name_for_profile(slug)
+        if slug in self.protected_profile_names or service in self.protected_service_names:
+            raise ControlPlaneError("protected_target", "protected tunnel daemon cannot be removed")
+        disable = self._run_system(["systemctl", "disable", "--now", service], timeout=60)
+        path = self.systemd_dir / service
+        if path.exists():
+            path.unlink()
+        reload_result = self._run_system(["systemctl", "daemon-reload"], timeout=30)
+        if not reload_result.ok:
+            raise ControlPlaneError("daemon_failed", reload_result.stderr or reload_result.stdout)
+        self._write_audit(
+            operation="daemon_remove", target_type="service", target=service,
+            requested={"profile": slug}, ok=True, exit_code=reload_result.exit_code,
+            duration_ms=disable.duration_ms + reload_result.duration_ms, error_category="",
+        )
+        return {"ok": True, "service": service, "profile": slug}
 
     def _write_audit(
         self,
