@@ -15,6 +15,9 @@ EXPECTED_TOOLS = {
     "rental_search",
     "rental_sources",
     "rental_refresh",
+    "rental_browser_status",
+    "rental_browser_snapshot",
+    "rental_browser_click",
 }
 
 

@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 import asyncio
+import base64
 from typing import Callable
 
 from runtime.rental_agent.scout.base import AdapterResult, DiscoveredListing
@@ -29,6 +30,22 @@ class BrowserFetchResult:
     error: str = ""
 
 
+HANDOFF_SOURCES = {
+    "batdongsan": "https://batdongsan.com.vn/cho-thue-shophouse-nha-pho-thuong-mai-the-sunset",
+    "nhatot": "https://www.nhatot.com/thue-van-phong-mat-bang-kinh-doanh-thi-tran-an-thoi-thanh-pho-phu-quoc-kien-giang",
+}
+HANDOFF_VIEWPORT = {"width": 1280, "height": 900}
+
+
+def authorize_verification_click(
+    *, html: str, title: str, x: float, y: float, width: int, height: int
+) -> None:
+    if not (0 <= float(x) < int(width) and 0 <= float(y) < int(height)):
+        raise ValueError("click coordinates are outside browser viewport")
+    if not BrowserWorker._verification_required(html, title):
+        raise PermissionError("click is only allowed on a detected human verification page")
+
+
 class BrowserWorker:
     def __init__(
         self,
@@ -49,6 +66,106 @@ class BrowserWorker:
             "headless": self.headless,
             "backend": "loader" if self.loader is not None else ("playwright" if available else "missing"),
         }
+
+    def handoff_status(self) -> dict[str, object]:
+        return {
+            **self.status(),
+            "sources": sorted(HANDOFF_SOURCES),
+            "viewport": dict(HANDOFF_VIEWPORT),
+            "click_policy": "human_verification_only",
+        }
+
+    @staticmethod
+    def _handoff_url(source: str) -> str:
+        key = source.strip().lower()
+        if key not in HANDOFF_SOURCES:
+            raise ValueError(f"unsupported browser handoff source: {source}")
+        return HANDOFF_SOURCES[key]
+
+    def _handoff_direct(self, source: str, click: tuple[float, float] | None = None) -> dict[str, object]:
+        url = self._handoff_url(source)
+        self.profile_dir.mkdir(parents=True, exist_ok=True)
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=str(self.profile_dir),
+                headless=self.headless,
+                viewport=dict(HANDOFF_VIEWPORT),
+                locale="vi-VN",
+                timezone_id="Asia/Ho_Chi_Minh",
+                args=["--disable-dev-shm-usage"],
+            )
+            try:
+                page = context.pages[0] if context.pages else context.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=25_000)
+                try:
+                    page.wait_for_load_state("networkidle", timeout=5_000)
+                except Exception:
+                    pass
+                before_html = page.content()
+                before_title = page.title()
+                if click is not None:
+                    authorize_verification_click(
+                        html=before_html,
+                        title=before_title,
+                        x=click[0],
+                        y=click[1],
+                        width=HANDOFF_VIEWPORT["width"],
+                        height=HANDOFF_VIEWPORT["height"],
+                    )
+                    page.mouse.click(float(click[0]), float(click[1]))
+                    page.wait_for_timeout(2500)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=5_000)
+                    except Exception:
+                        pass
+                html = page.content()
+                title = page.title()
+                verification = self._verification_required(html, title)
+                screenshot = page.screenshot(type="jpeg", quality=58, full_page=False)
+                return {
+                    "source": source.strip().lower(),
+                    "status": "needs_user_action" if verification else "verified",
+                    "verification_required": verification,
+                    "url": url,
+                    "final_url": page.url,
+                    "title": title,
+                    "viewport": dict(HANDOFF_VIEWPORT),
+                    "screenshot_mime": "image/jpeg",
+                    "screenshot_base64": base64.b64encode(screenshot).decode("ascii"),
+                    "profile_persistent": True,
+                    "error": "human verification required" if verification else "",
+                }
+            finally:
+                context.close()
+
+    def _run_handoff(self, source: str, click: tuple[float, float] | None = None) -> dict[str, object]:
+        self._handoff_url(source)
+        if not self._playwright_available():
+            return {
+                "source": source.strip().lower(),
+                "status": "needs_browser_runtime",
+                "verification_required": False,
+                "screenshot_base64": "",
+                "error": "playwright runtime is not installed",
+            }
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return self._handoff_direct(source, click)
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="rental-browser-handoff") as executor:
+            return executor.submit(self._handoff_direct, source, click).result(timeout=45)
+
+    def handoff_snapshot(self, source: str) -> dict[str, object]:
+        return self._run_handoff(source)
+
+    def handoff_click(self, source: str, x: float, y: float) -> dict[str, object]:
+        # Bounds are checked before spawning Chromium and checked again against the
+        # actual verification page immediately before the click.
+        if not (0 <= float(x) < HANDOFF_VIEWPORT["width"] and 0 <= float(y) < HANDOFF_VIEWPORT["height"]):
+            raise ValueError("click coordinates are outside browser viewport")
+        return self._run_handoff(source, (float(x), float(y)))
 
     @staticmethod
     def _playwright_available() -> bool:

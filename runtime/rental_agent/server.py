@@ -206,6 +206,39 @@ def rental_refresh(property_id: str) -> dict[str, Any]:
 
 
 @mcp.tool(
+    name="rental_browser_status",
+    title="Rental source browser status",
+    description="Read the isolated rental search browser handoff state and allowlisted verification sources.",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def rental_browser_status() -> dict[str, object]:
+    return _service().browser_status()
+
+
+@mcp.tool(
+    name="rental_browser_snapshot",
+    title="Open rental source verification",
+    description="Open an allowlisted rental source in the persistent search browser and return a screenshot for manual human verification.",
+    annotations=SEARCH_WRITE,
+    structured_output=True,
+)
+def rental_browser_snapshot(source: str) -> dict[str, object]:
+    return _service().browser_snapshot(source)
+
+
+@mcp.tool(
+    name="rental_browser_click",
+    title="Click rental source verification",
+    description="Apply one user-chosen coordinate click only while an allowlisted source is showing a detected human-verification page.",
+    annotations=SEARCH_WRITE,
+    structured_output=True,
+)
+def rental_browser_click(source: str, x: float, y: float) -> dict[str, object]:
+    return _service().browser_click(source, x, y)
+
+
+@mcp.tool(
     name="rental_policy",
     title="Rental authority policy",
     description="Read the current Rental Agent action and disclosure policy.",

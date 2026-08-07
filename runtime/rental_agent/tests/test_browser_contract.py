@@ -85,3 +85,56 @@ def test_playwright_backend_runs_off_asyncio_loop_thread(tmp_path: Path, monkeyp
     result = asyncio.run(invoke())
     assert result.status == "ok"
     assert seen["thread"] != caller_thread
+
+
+def test_handoff_sources_are_explicitly_allowlisted(tmp_path: Path) -> None:
+    worker = BrowserWorker(profile_dir=tmp_path / "profile")
+    status = worker.handoff_status()
+    assert set(status["sources"]) == {"batdongsan", "nhatot"}
+    assert status["profile_dir"] == str(tmp_path / "profile")
+
+
+def test_handoff_rejects_unknown_source(tmp_path: Path) -> None:
+    import pytest
+
+    worker = BrowserWorker(profile_dir=tmp_path / "profile")
+    with pytest.raises(ValueError, match="unsupported browser handoff source"):
+        worker.handoff_snapshot("example")
+
+
+def test_verification_click_policy_only_allows_challenge_pages() -> None:
+    import pytest
+    from runtime.rental_agent.browser import authorize_verification_click
+
+    authorize_verification_click(
+        html="<html>Verify you are human CAPTCHA</html>",
+        title="Just a moment",
+        x=640,
+        y=400,
+        width=1280,
+        height=900,
+    )
+    with pytest.raises(PermissionError, match="verification page"):
+        authorize_verification_click(
+            html="<html>normal rental listing</html>",
+            title="Sunset Town listing",
+            x=640,
+            y=400,
+            width=1280,
+            height=900,
+        )
+
+
+def test_verification_click_policy_rejects_out_of_bounds_coordinates() -> None:
+    import pytest
+    from runtime.rental_agent.browser import authorize_verification_click
+
+    with pytest.raises(ValueError, match="outside browser viewport"):
+        authorize_verification_click(
+            html="Verify you are human CAPTCHA",
+            title="Verify",
+            x=1500,
+            y=400,
+            width=1280,
+            height=900,
+        )
