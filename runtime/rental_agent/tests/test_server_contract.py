@@ -18,6 +18,11 @@ EXPECTED_TOOLS = {
     "rental_browser_status",
     "rental_browser_snapshot",
     "rental_browser_click",
+    "rental_contacts",
+    "rental_outreach_plan",
+    "rental_contact_qualified",
+    "rental_threads",
+    "rental_thread",
 }
 
 

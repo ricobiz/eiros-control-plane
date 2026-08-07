@@ -7,7 +7,7 @@ from runtime.rental_agent.models import LeadInput
 def test_initialize_and_ingest_text_lead(tmp_path: Path) -> None:
     db = RentalDatabase(tmp_path / "rental.db")
     db.initialize()
-    assert db.health()["schema_version"] == 2
+    assert db.health()["schema_version"] == 3
 
     result = db.create_lead(
         LeadInput(

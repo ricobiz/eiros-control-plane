@@ -238,6 +238,64 @@ def rental_browser_click(source: str, x: float, y: float) -> dict[str, object]:
     return _service().browser_click(source, x, y)
 
 
+
+@mcp.tool(
+    name="rental_contacts",
+    title="Rental property contacts",
+    description="Read public contact methods associated with one rental property and their provenance.",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def rental_contacts(property_id: str) -> dict[str, Any]:
+    rows = _service().contacts(property_id)
+    return {"property_id": property_id, "count": len(rows), "contacts": rows}
+
+
+@mcp.tool(
+    name="rental_outreach_plan",
+    title="Plan rental discovery outreach",
+    description="Dry-run discovery outreach for qualified leads, grouped by contact to avoid duplicate messages. Sends nothing.",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def rental_outreach_plan(property_ids: list[str] | None = None) -> dict[str, Any]:
+    return _service().outreach_plan(property_ids)
+
+
+@mcp.tool(
+    name="rental_contact_qualified",
+    title="Queue qualified rental contacts",
+    description="Create durable draft threads and deduplicated outreach jobs for qualified leads. Does not send until a channel is authenticated.",
+    annotations=WRITE_IDEMPOTENT,
+    structured_output=True,
+)
+def rental_contact_qualified(property_ids: list[str] | None = None) -> dict[str, Any]:
+    return _service().contact_qualified(property_ids)
+
+
+@mcp.tool(
+    name="rental_threads",
+    title="Rental outreach threads",
+    description="List durable rental conversation threads, optionally filtered by property or status.",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def rental_threads(property_id: str = "", status: str = "", limit: int = 100) -> dict[str, Any]:
+    rows = _service().threads(property_id=property_id, status=status, limit=max(1, min(int(limit), 500)))
+    return {"count": len(rows), "threads": rows}
+
+
+@mcp.tool(
+    name="rental_thread",
+    title="Rental outreach thread",
+    description="Read one durable rental conversation thread including linked properties and message ledger.",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def rental_thread(thread_id: str) -> dict[str, Any]:
+    row = _service().thread(thread_id)
+    return {"found": row is not None, "thread": row}
+
 @mcp.tool(
     name="rental_policy",
     title="Rental authority policy",

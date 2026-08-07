@@ -25,7 +25,7 @@ def test_status_reports_schema_and_market_discovery_policy(tmp_path: Path) -> No
     status = service.status()
 
     assert status["ok"] is True
-    assert status["database"]["schema_version"] == 2
+    assert status["database"]["schema_version"] == 3
     assert status["policy"]["mode"] == "market_discovery_only"
 
 
@@ -90,3 +90,25 @@ def test_status_exposes_search_browser_state(tmp_path: Path) -> None:
     )
     service = RentalService(RentalDatabase(tmp_path / "rental.db"), browser_worker=worker)
     assert service.status()["browser"]["backend"] == "loader"
+
+
+def test_service_exposes_contacts_and_outreach_wrappers(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    created = service.ingest_text(
+        "Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng, Zalo 0912345678"
+    )
+    contacts = service.contacts(created["property_id"])
+    assert len(contacts) == 1
+    assert contacts[0]["value_normalized"] == "+84912345678"
+
+    plan = service.outreach_plan([created["property_id"]])
+    assert plan["message_count"] == 1
+    queued = service.contact_qualified([created["property_id"]])
+    assert queued["queued_count"] == 1
+    assert queued["sent_count"] == 0
+
+    threads = service.threads(property_id=created["property_id"])
+    assert len(threads) == 1
+    detail = service.thread(threads[0]["thread_id"])
+    assert detail is not None
+    assert detail["messages"][0]["status"] == "draft"
