@@ -35,7 +35,11 @@ def test_app_resource_registered_with_chatgpt_metadata() -> None:
     assert server.APP_URI in {str(resource.uri) for resource in resources}
     assert server.APP_META["ui"] == {
         "prefersBorder": True,
-        "csp": {"connectDomains": [], "resourceDomains": []},
+        "domain": server.WIDGET_ORIGIN,
+        "csp": {
+            "connectDomains": [server.WIDGET_ORIGIN],
+            "resourceDomains": [server.WIDGET_ORIGIN],
+        },
     }
     assert server.APP_META["openai/widgetDescription"] == (
         "EIROS Rental Agent — shortlist, properties and discovery status."

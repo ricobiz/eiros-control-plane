@@ -17,13 +17,22 @@ SERVER_HOST = DEFAULT_HOST
 SERVER_PORT = DEFAULT_PORT
 APP_URI = "ui://eiros-rental/app-v1.html"
 APP_HTML_PATH = Path(__file__).resolve().parent / "ui" / "app.html"
+WIDGET_ORIGIN = "https://eiros.br-be.com"
 APP_META: dict[str, Any] = {
     "ui": {
         "prefersBorder": True,
-        "csp": {"connectDomains": [], "resourceDomains": []},
+        "domain": WIDGET_ORIGIN,
+        "csp": {
+            "connectDomains": [WIDGET_ORIGIN],
+            "resourceDomains": [WIDGET_ORIGIN],
+        },
     },
     "openai/widgetDescription": "EIROS Rental Agent — shortlist, properties and discovery status.",
-    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    "openai/widgetDomain": WIDGET_ORIGIN,
+    "openai/widgetCSP": {
+        "connect_domains": [WIDGET_ORIGIN],
+        "resource_domains": [WIDGET_ORIGIN],
+    },
 }
 
 mcp = FastMCP(
