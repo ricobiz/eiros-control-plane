@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;--bg:#090b0e;--card:#101319;--line:#262b34;--muted:#858d99;--text:#edf0f4;--ok:#40d5a7;--warn:#e1a95a}
+*{box-sizing:border-box}html,body{margin:0;background:transparent;color:var(--text)}body{-webkit-font-smoothing:antialiased}.shell{overflow:hidden;border:1px solid var(--line);border-radius:20px;background:linear-gradient(180deg,#11151a,#080a0d);box-shadow:0 18px 48px rgba(0,0,0,.24)}header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:10px}.mark{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;background:#edf0f4;color:#090a0d;font-size:10px;font-weight:900}.title{font-size:14px;font-weight:850;letter-spacing:.02em}.sub{margin-top:3px;color:#747d89;font-size:9px}.live{display:flex;align-items:center;gap:6px;color:#99a2ad;font-size:9px}.dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}main{display:grid;gap:10px;padding:10px}.card{padding:12px;border:1px solid var(--line);border-radius:14px;background:rgba(15,18,23,.95)}.sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.eyebrow{color:#6f7884;font-size:8px;font-weight:800;letter-spacing:.15em;text-transform:uppercase}h2{margin:3px 0 0;font-size:14px}.profile{margin-top:5px;color:#858e9a;font-size:10px;line-height:1.45}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:10px}.metric{padding:9px;border:1px solid #272d36;border-radius:10px;background:#0a0d10}.metric b{display:block;font-size:16px;font-variant-numeric:tabular-nums}.metric span{display:block;margin-top:4px;color:#6d7682;font-size:7px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.row{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}button,input{font:inherit}button{min-height:32px;padding:0 11px;border:1px solid #dfe3e8;border-radius:8px;background:#e7eaee;color:#090a0c;font-size:10px;font-weight:800}button.secondary{border-color:#343a44;background:#171a1f;color:#d9dde3}button:disabled{opacity:.45}.ingestGrid{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:9px}input{width:100%;height:34px;padding:0 9px;border:1px solid #303640;border-radius:8px;background:#090b0e;color:#e6e9ed;font-size:10px}.status{margin-top:7px;color:#818a96;font-size:9px;line-height:1.4;white-space:pre-wrap}.list{display:grid;gap:8px;margin-top:9px}.empty{padding:18px 10px;text-align:center;color:#6c7580;font-size:10px}.property{padding:10px;border:1px solid #272d36;border-radius:11px;background:#0a0d10}.propertyTop{display:flex;justify-content:space-between;gap:9px}.propertyTitle{font-size:11px;font-weight:800;line-height:1.35}.price{white-space:nowrap;font-size:11px;font-weight:850}.meta{margin-top:5px;color:#79828e;font-size:9px;line-height:1.45}.badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.badge{padding:3px 6px;border:1px solid #303640;border-radius:999px;color:#89929e;font-size:8px}.footer{padding:0 12px 12px;color:#5f6874;font-size:8px}.warn{color:var(--warn)}@media(max-width:480px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.ingestGrid{grid-template-columns:1fr}.sectionHead{display:block}}
+</style>
+</head>
+<body>
+<div class="shell">
+<header>
+  <div class="brand"><div class="mark">RA</div><div><div class="title">EIROS RENTAL AGENT</div><div class="sub">Market discovery · Phu Quoc</div></div></div>
+  <div class="live"><span class="dot"></span><span id="healthLabel">CONNECTING</span></div>
+</header>
+<main>
+  <section class="card">
+    <div class="sectionHead"><div><div class="eyebrow">Active search</div><h2>Sunset Town / South Phu Quoc</h2><div id="profile" class="profile">Loading search profile…</div></div><button id="refresh" class="secondary">Обновить</button></div>
+    <div class="metrics">
+      <div class="metric"><b id="countProperties">—</b><span>Properties</span></div>
+      <div class="metric"><b id="countQualified">0</b><span>Qualified</span></div>
+      <div class="metric"><b id="countContacted">0</b><span>Contacted</span></div>
+      <div class="metric"><b id="countNeeds">0</b><span>Needs action</span></div>
+    </div>
+    <div id="topStatus" class="status"></div>
+  </section>
+
+  <section class="card">
+    <div class="eyebrow">Quick ingest</div><h2>Добавить лид</h2>
+    <div class="ingestGrid"><input id="leadInput" placeholder="Ссылка, телефон или текст объявления"/><button id="ingest">Добавить</button></div>
+    <div id="ingestStatus" class="status">Rental Agent определит тип лида по содержимому.</div>
+  </section>
+
+  <section class="card">
+    <div class="sectionHead"><div><div class="eyebrow">Shortlist</div><h2>Текущие варианты</h2></div><span id="shortCount" class="badge">0</span></div>
+    <div id="list" class="list"><div class="empty">Пока нет объектов. Добавь лид или запусти Scout после его подключения.</div></div>
+  </section>
+</main>
+<div class="footer">Текущий режим: market discovery only · без торга, брони, депозитов и договоров.</div>
+</div>
+<script>
+(()=>{
+  const $=id=>document.getElementById(id);
+  const text=v=>String(v??'');
+  const unwrap=v=>v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};
+  async function callTool(name,args={}){
+    for(const host of [window.openai,window.mcp]){
+      if(!host)continue;
+      for(const method of ['callTool','invokeTool','invoke']){
+        if(typeof host[method]==='function'){
+          try{return unwrap(await host[method](name,args))}catch(e){
+            try{return unwrap(await host[method]({name,arguments:args}))}catch(_){}
+          }
+        }
+      }
+    }
+    throw new Error('MCP Apps bridge unavailable');
+  }
+  function formatVnd(value){const n=Number(value);if(!Number.isFinite(n)||n<=0)return 'Цена ?';return (n/1e6).toLocaleString('ru-RU',{maximumFractionDigits:1})+' млн ₫/мес';}
+  function renderProfile(status){const p=status.profile||{};const b=p.budget_vnd_month||{};$('profile').textContent=[(p.zones||[]).join(' · '),`цель ${Number(b.target_min||0)/1e6}–${Number(b.target_max||0)/1e6} млн ₫`,p.property_type||''].filter(Boolean).join(' · ');}
+  function renderList(payload){const rows=Array.isArray(payload.properties)?payload.properties:[];$('shortCount').textContent=String(rows.length);$('list').innerHTML='';if(!rows.length){$('list').innerHTML='<div class="empty">Пока нет объектов. Добавь лид или запусти Scout после его подключения.</div>';return;}for(const p of rows){const el=document.createElement('div');el.className='property';const title=text(p.title||p.project_name||p.locality||p.property_id);el.innerHTML=`<div class="propertyTop"><div class="propertyTitle"></div><div class="price"></div></div><div class="meta"></div><div class="badges"></div>`;el.querySelector('.propertyTitle').textContent=title;el.querySelector('.price').textContent=formatVnd(p.monthly_rent_vnd);el.querySelector('.meta').textContent=[p.locality,p.floors?`${p.floors} этажей`:null,p.area_m2?`${p.area_m2} м²`:null].filter(Boolean).join(' · ')||'Данные ещё не разобраны';const badges=el.querySelector('.badges');for(const label of [`fit ${Number(p.fit_score||0).toFixed(0)}`,p.status||'new',p.property_id]){const b=document.createElement('span');b.className='badge';b.textContent=label;badges.appendChild(b)}$('list').appendChild(el)}}
+  async function refresh(){try{$('healthLabel').textContent='SYNC';const [status,shortlist]=await Promise.all([callTool('rental_status',{}),callTool('rental_shortlist',{limit:30})]);$('healthLabel').textContent=status.ok?'ONLINE':'DEGRADED';$('countProperties').textContent=String(status.database?.properties??0);$('countQualified').textContent=String(status.counts?.qualified??0);$('countContacted').textContent=String(status.counts?.contacted??0);$('countNeeds').textContent=String(status.counts?.needs_action??0);renderProfile(status);$('topStatus').textContent=`DB schema ${status.database?.schema_version??'?'} · ${status.policy?.mode??'unknown'}`;renderList(shortlist)}catch(e){$('healthLabel').textContent='ERROR';$('topStatus').textContent=text(e&&e.message||e)}}
+  async function ingest(){const value=$('leadInput').value.trim();if(!value)return;$('ingest').disabled=true;$('ingestStatus').textContent='Сохраняю…';try{let name,args;if(/^https?:\/\//i.test(value)){name='rental_ingest_url';args={url:value}}else if(/^\+?[\d\s().-]{7,}$/.test(value)){name='rental_ingest_phone';args={phone:value}}else{name='rental_ingest_text';args={text:value}}const result=await callTool(name,args);$('ingestStatus').textContent='Сохранено · '+text(result.property_id||'');$('leadInput').value='';await refresh()}catch(e){$('ingestStatus').textContent='Ошибка · '+text(e&&e.message||e)}finally{$('ingest').disabled=false}}
+  $('refresh').addEventListener('click',refresh);$('ingest').addEventListener('click',ingest);$('leadInput').addEventListener('keydown',e=>{if(e.key==='Enter')ingest()});refresh();
+})();
+</script>
+</body>
+</html>
