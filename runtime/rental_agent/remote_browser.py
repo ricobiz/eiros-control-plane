@@ -140,7 +140,7 @@ class RemoteBrowserController:
         profile_dir: Path,
         runtime_factory: Callable[[], Any] | None = None,
         viewport: dict[str, int] | None = None,
-        headless: bool = True,
+        headless: bool = False,
         command_timeout: float = 45.0,
     ) -> None:
         self.profile_dir = Path(profile_dir)

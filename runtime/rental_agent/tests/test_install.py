@@ -13,7 +13,8 @@ def test_systemd_unit_is_dedicated_and_restarts() -> None:
     assert "Description=EIROS Rental Agent MCP" in text
     assert "User=eiros-rental" in text
     assert "WorkingDirectory=/opt/eiros-control-plane" in text
-    assert "ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.rental_agent.server" in text
+    assert "ExecStart=/usr/bin/xvfb-run" in text
+    assert "/opt/eiros-control-plane/venv/bin/python -m runtime.rental_agent.server" in text
     assert "EnvironmentFile=/etc/eiros/rental-agent.env" in text
     assert "Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/eiros-playwright-browsers" in text
     assert "Restart=always" in text
