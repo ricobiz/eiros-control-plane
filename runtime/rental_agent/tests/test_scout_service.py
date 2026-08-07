@@ -126,3 +126,26 @@ def test_scout_reports_human_verification_source(tmp_path: Path) -> None:
     summary = ScoutService(db, adapters=(adapter,), browser_worker=worker).run(limit_per_source=3)
     assert summary["status"] == "needs_user_action"
     assert summary["needs_user_action_sources"] == ["verify"]
+
+
+def test_scout_surfaces_browser_runtime_error_instead_of_hiding_it(tmp_path: Path) -> None:
+    import re
+    from runtime.rental_agent.browser import BrowserWorker
+
+    class BrowserOnlyAdapter(FakeAdapter):
+        seed_urls = ("https://broken.test/search",)
+        HOSTS = {"broken.test"}
+        DETAIL_PATTERN = re.compile(r"/listing/\d+$")
+
+    adapter = BrowserOnlyAdapter("broken", (), status="needs_browser")
+
+    def broken_loader(url: str):
+        raise RuntimeError("chromium launch failed")
+
+    worker = BrowserWorker(profile_dir=tmp_path / "profile", loader=broken_loader)
+    db = RentalDatabase(tmp_path / "rental.db")
+    db.initialize()
+    summary = ScoutService(db, adapters=(adapter,), browser_worker=worker).run(limit_per_source=3)
+    assert summary["status"] == "browser_error"
+    assert summary["sources"][0]["status"] == "browser_error"
+    assert "chromium launch failed" in summary["sources"][0]["errors"][0]
