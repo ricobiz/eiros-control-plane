@@ -117,3 +117,109 @@ def test_audit_writer_redacts_and_returns_bounded_newest_events(tmp_path: Path) 
     result = op.audit(limit=1)
     assert len(result["events"]) == 1
     assert result["events"][0]["operation"] == "tunnel_update"
+
+
+def test_tunnel_get_normalizes_metadata(tmp_path: Path) -> None:
+    tid = "tunnel_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    runner = FakeRunner([
+        {
+            "ok": True,
+            "exit_code": 0,
+            "stdout": json.dumps({
+                "id": tid,
+                "name": "EBRIDGE",
+                "description": "core",
+                "organization_ids": ["org_test123"],
+                "workspace_ids": [],
+                "request_id": "req_hidden",
+            }),
+            "stderr": "",
+            "duration_ms": 3,
+        }
+    ])
+    op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", admin_secret_path=tmp_path / "admin.key")
+    result = op.tunnel_get(tid)
+    assert result["tunnel_id"] == tid
+    assert result["name"] == "EBRIDGE"
+    assert result["organization_ids"] == ["org_test123"]
+    assert "request_id" in result["raw_meta"]
+    assert runner.calls[0][:5] == [
+        "/usr/local/bin/tunnel-client", "admin", "--admin-key", f"file:{tmp_path / 'admin.key'}", "--json"
+    ]
+
+
+def test_tunnel_create_inherits_scope_without_guessing(tmp_path: Path) -> None:
+    source_tid = "tunnel_cccccccccccccccccccccccccccccccc"
+    new_tid = "tunnel_dddddddddddddddddddddddddddddddd"
+    runner = FakeRunner([
+        {
+            "ok": True,
+            "exit_code": 0,
+            "stdout": json.dumps({
+                "id": source_tid,
+                "name": "EBRIDGE",
+                "organization_ids": ["org_scope"],
+                "workspace_ids": ["ws_scope"],
+            }),
+            "stderr": "",
+            "duration_ms": 2,
+        },
+        {
+            "ok": True,
+            "exit_code": 0,
+            "stdout": json.dumps({
+                "id": new_tid,
+                "name": "EIROS Rental Agent",
+                "description": "Dedicated rental",
+                "organization_ids": ["org_scope"],
+                "workspace_ids": ["ws_scope"],
+            }),
+            "stderr": "",
+            "duration_ms": 5,
+        },
+    ])
+    op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", admin_secret_path=tmp_path / "admin.key")
+    result = op.tunnel_create(
+        name="EIROS Rental Agent",
+        description="Dedicated rental",
+        inherit_scope_from_tunnel=source_tid,
+    )
+    assert result["tunnel_id"] == new_tid
+    create_argv = runner.calls[1]
+    assert "--organization-id" in create_argv and "org_scope" in create_argv
+    assert "--workspace-id" in create_argv and "ws_scope" in create_argv
+    assert "--name" in create_argv and "EIROS Rental Agent" in create_argv
+
+
+def test_tunnel_create_requires_scope_when_not_inherited(tmp_path: Path) -> None:
+    op = OpenAIControlPlane(runner=FakeRunner(), audit_path=tmp_path / "audit.jsonl")
+    with pytest.raises(ControlPlaneError) as exc:
+        op.tunnel_create(name="No Scope", description="x")
+    assert exc.value.category == "scope_required"
+
+
+def test_tunnel_delete_requires_same_id_and_protects_ebridge(tmp_path: Path) -> None:
+    tid = "tunnel_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    op = OpenAIControlPlane(runner=FakeRunner(), audit_path=tmp_path / "audit.jsonl", protected_tunnel_ids={tid})
+    with pytest.raises(ControlPlaneError) as exc:
+        op.tunnel_delete(tid, confirm_tunnel_id="tunnel_ffffffffffffffffffffffffffffffff")
+    assert exc.value.category == "confirmation_mismatch"
+
+    with pytest.raises(ControlPlaneError) as exc:
+        op.tunnel_delete(tid, confirm_tunnel_id=tid)
+    assert exc.value.category == "protected_target"
+
+
+def test_tunnel_update_and_delete_build_expected_commands(tmp_path: Path) -> None:
+    tid = "tunnel_ffffffffffffffffffffffffffffffff"
+    runner = FakeRunner([
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"id": tid, "name": "Renamed"}), "stderr": "", "duration_ms": 2},
+        {"ok": True, "exit_code": 0, "stdout": json.dumps({"id": tid, "deleted": True}), "stderr": "", "duration_ms": 2},
+    ])
+    op = OpenAIControlPlane(runner=runner, audit_path=tmp_path / "audit.jsonl", admin_secret_path=tmp_path / "admin.key")
+    updated = op.tunnel_update(tid, name="Renamed")
+    assert updated["name"] == "Renamed"
+    assert "update" in runner.calls[0]
+    deleted = op.tunnel_delete(tid, confirm_tunnel_id=tid)
+    assert deleted["ok"] is True
+    assert "--confirm" in runner.calls[1]

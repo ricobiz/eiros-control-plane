@@ -214,6 +214,211 @@ class OpenAIControlPlane:
             "runtime_crud_available": runtime_crud,
         }
 
+    def _admin_prefix(self) -> list[str]:
+        return ["admin", "--admin-key", f"file:{self.admin_secret_path}", "--json", "tunnels"]
+
+    @staticmethod
+    def _bounded_ids(values: list[str] | tuple[str, ...] | None, kind: str) -> list[str]:
+        result: list[str] = []
+        for raw in values or ():
+            value = str(raw or "").strip()
+            if not value or len(value) > 128 or not re.fullmatch(r"[A-Za-z0-9_.:-]+", value):
+                raise ControlPlaneError("invalid_identifier", f"invalid {kind} id")
+            if value not in result:
+                result.append(value)
+        return result
+
+    def _require_ok(self, result: CommandResult, *, category: str = "tunnel_client_error") -> None:
+        if result.ok:
+            return
+        detail = redact_text(result.stderr or result.stdout or "tunnel-client failed")[:2000]
+        lowered = detail.lower()
+        mapped = category
+        if "not found" in lowered or "404" in lowered:
+            mapped = "tunnel_not_found"
+        elif "admin" in lowered and ("key" in lowered or "credential" in lowered or "unauthorized" in lowered):
+            mapped = "admin_not_configured"
+        raise ControlPlaneError(mapped, detail)
+
+    @staticmethod
+    def _normalize_tunnel(payload: Any) -> dict[str, Any]:
+        data = payload if isinstance(payload, dict) else {}
+        tunnel_id = str(data.get("id") or data.get("tunnel_id") or "")
+        known = {
+            "id", "tunnel_id", "name", "description", "organization_ids", "workspace_ids",
+            "status", "state", "created_at", "updated_at",
+        }
+        raw_meta = {str(k): _sanitize(v) for k, v in data.items() if str(k) not in known}
+        return {
+            "tunnel_id": tunnel_id,
+            "name": str(data.get("name") or ""),
+            "description": str(data.get("description") or ""),
+            "organization_ids": [str(x) for x in (data.get("organization_ids") or [])],
+            "workspace_ids": [str(x) for x in (data.get("workspace_ids") or [])],
+            "status": str(data.get("status") or data.get("state") or ""),
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at"),
+            "raw_meta": raw_meta,
+        }
+
+    def tunnel_get(self, tunnel_id: str) -> dict[str, Any]:
+        self.validate_tunnel_id(tunnel_id)
+        result = self._run_tunnel_client([*self._admin_prefix(), "get", tunnel_id], timeout=30)
+        self._require_ok(result)
+        payload = self._json_or_empty(result.stdout)
+        normalized = self._normalize_tunnel(payload)
+        if not normalized["tunnel_id"]:
+            normalized["tunnel_id"] = tunnel_id
+        return normalized
+
+    def tunnel_list(self, organization_id: str = "", workspace_id: str = "") -> dict[str, Any]:
+        org = str(organization_id or "").strip()
+        workspace = str(workspace_id or "").strip()
+        if bool(org) == bool(workspace):
+            raise ControlPlaneError("scope_required", "provide exactly one organization_id or workspace_id")
+        args = [*self._admin_prefix(), "list"]
+        if org:
+            args += ["--organization-id", self._bounded_ids([org], "organization")[0]]
+        else:
+            args += ["--workspace-id", self._bounded_ids([workspace], "workspace")[0]]
+        result = self._run_tunnel_client(args, timeout=30)
+        self._require_ok(result)
+        payload = self._json_or_empty(result.stdout)
+        rows: list[Any]
+        if isinstance(payload, list):
+            rows = payload
+        elif isinstance(payload, dict):
+            rows = payload.get("tunnels") if isinstance(payload.get("tunnels"), list) else []
+        else:
+            rows = []
+        return {"ok": True, "tunnels": [self._normalize_tunnel(row) for row in rows if isinstance(row, dict)]}
+
+    def _resolve_scope(
+        self,
+        organization_ids: list[str] | tuple[str, ...] | None,
+        workspace_ids: list[str] | tuple[str, ...] | None,
+        inherit_scope_from_tunnel: str,
+    ) -> tuple[list[str], list[str]]:
+        orgs = self._bounded_ids(organization_ids, "organization")
+        workspaces = self._bounded_ids(workspace_ids, "workspace")
+        if orgs or workspaces:
+            return orgs, workspaces
+        source = str(inherit_scope_from_tunnel or "").strip()
+        if source:
+            inherited = self.tunnel_get(source)
+            orgs = self._bounded_ids(inherited.get("organization_ids") or [], "organization")
+            workspaces = self._bounded_ids(inherited.get("workspace_ids") or [], "workspace")
+        if not orgs and not workspaces:
+            raise ControlPlaneError("scope_required", "organization/workspace scope is required")
+        return orgs, workspaces
+
+    def tunnel_create(
+        self,
+        name: str,
+        description: str,
+        organization_ids: list[str] | tuple[str, ...] | None = None,
+        workspace_ids: list[str] | tuple[str, ...] | None = None,
+        inherit_scope_from_tunnel: str = "",
+    ) -> dict[str, Any]:
+        clean_name = str(name or "").strip()
+        clean_description = str(description or "").strip()
+        if not clean_name or len(clean_name) > 200 or len(clean_description) > 1000:
+            raise ControlPlaneError("invalid_identifier", "invalid tunnel name/description")
+        orgs, workspaces = self._resolve_scope(organization_ids, workspace_ids, inherit_scope_from_tunnel)
+        args = [*self._admin_prefix(), "create", "--name", clean_name, "--description", clean_description]
+        for value in orgs:
+            args += ["--organization-id", value]
+        for value in workspaces:
+            args += ["--workspace-id", value]
+        result = self._run_tunnel_client(args, timeout=60)
+        if not result.ok:
+            self._write_audit(
+                operation="tunnel_create", target_type="tunnel", target=clean_name,
+                requested={"name": clean_name, "description": clean_description, "organization_ids": orgs, "workspace_ids": workspaces},
+                ok=False, exit_code=result.exit_code, duration_ms=result.duration_ms, error_category="tunnel_client_error",
+            )
+            self._require_ok(result)
+        normalized = self._normalize_tunnel(self._json_or_empty(result.stdout))
+        self._write_audit(
+            operation="tunnel_create", target_type="tunnel", target=normalized.get("tunnel_id") or clean_name,
+            requested={"name": clean_name, "description": clean_description, "organization_ids": orgs, "workspace_ids": workspaces},
+            ok=True, exit_code=result.exit_code, duration_ms=result.duration_ms, error_category="",
+        )
+        return normalized
+
+    def tunnel_update(
+        self,
+        tunnel_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        organization_ids: list[str] | tuple[str, ...] | None = None,
+        workspace_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        self.validate_tunnel_id(tunnel_id)
+        args = [*self._admin_prefix(), "update", tunnel_id]
+        requested: dict[str, Any] = {}
+        if name is not None:
+            clean = str(name).strip()
+            if not clean or len(clean) > 200:
+                raise ControlPlaneError("invalid_identifier", "invalid tunnel name")
+            args += ["--name", clean]
+            requested["name"] = clean
+        if description is not None:
+            clean = str(description).strip()
+            if len(clean) > 1000:
+                raise ControlPlaneError("invalid_identifier", "description too long")
+            args += ["--description", clean]
+            requested["description"] = clean
+        if organization_ids is not None:
+            orgs = self._bounded_ids(organization_ids, "organization")
+            for value in orgs:
+                args += ["--organization-id", value]
+            requested["organization_ids"] = orgs
+        if workspace_ids is not None:
+            workspaces = self._bounded_ids(workspace_ids, "workspace")
+            for value in workspaces:
+                args += ["--workspace-id", value]
+            requested["workspace_ids"] = workspaces
+        if not requested:
+            return self.tunnel_get(tunnel_id)
+        result = self._run_tunnel_client(args, timeout=60)
+        if not result.ok:
+            self._write_audit(
+                operation="tunnel_update", target_type="tunnel", target=tunnel_id,
+                requested=requested, ok=False, exit_code=result.exit_code, duration_ms=result.duration_ms,
+                error_category="tunnel_client_error",
+            )
+            self._require_ok(result)
+        normalized = self._normalize_tunnel(self._json_or_empty(result.stdout))
+        if not normalized["tunnel_id"]:
+            normalized["tunnel_id"] = tunnel_id
+        self._write_audit(
+            operation="tunnel_update", target_type="tunnel", target=tunnel_id,
+            requested=requested, ok=True, exit_code=result.exit_code, duration_ms=result.duration_ms, error_category="",
+        )
+        return normalized
+
+    def tunnel_delete(self, tunnel_id: str, confirm_tunnel_id: str) -> dict[str, Any]:
+        self.validate_tunnel_id(tunnel_id)
+        if str(confirm_tunnel_id or "") != tunnel_id:
+            raise ControlPlaneError("confirmation_mismatch", "confirm_tunnel_id must equal tunnel_id")
+        if tunnel_id in self.protected_tunnel_ids:
+            raise ControlPlaneError("protected_target", "protected tunnel cannot be deleted")
+        result = self._run_tunnel_client([*self._admin_prefix(), "delete", tunnel_id, "--confirm"], timeout=60)
+        if not result.ok:
+            self._write_audit(
+                operation="tunnel_delete", target_type="tunnel", target=tunnel_id,
+                requested={}, ok=False, exit_code=result.exit_code, duration_ms=result.duration_ms,
+                error_category="tunnel_client_error",
+            )
+            self._require_ok(result)
+        self._write_audit(
+            operation="tunnel_delete", target_type="tunnel", target=tunnel_id,
+            requested={}, ok=True, exit_code=result.exit_code, duration_ms=result.duration_ms, error_category="",
+        )
+        payload = self._json_or_empty(result.stdout)
+        return {"ok": True, "tunnel_id": tunnel_id, "result": _sanitize(payload)}
+
     def _write_audit(
         self,
         *,
