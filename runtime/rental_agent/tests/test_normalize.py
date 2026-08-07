@@ -55,3 +55,35 @@ def test_price_parser_ignores_per_square_meter_incentive() -> None:
 def test_price_parser_accepts_explicit_monthly_rent_context() -> None:
     item = normalize_listing("Nhà 5 tầng, giá thuê 25 triệu/tháng")
     assert item.monthly_rent_vnd == 25_000_000
+
+
+def test_title_project_identity_wins_over_page_boilerplate() -> None:
+    item = normalize_listing(
+        "Sidebar mentions The Center and Sunset Town. Sun Grand City New An Thoi nhà phố 5 tầng.",
+        title="Cho thuê Shophouse Sun Grand City New An Thới",
+    )
+    assert item.project_name == "New An Thoi"
+
+
+def test_dia_trung_hai_title_maps_to_sunset_town() -> None:
+    item = normalize_listing(
+        "Trang có nhiều nội dung The Center và Primavera ở footer.",
+        title="Cho thuê shophouse Địa Trung Hải Sun Group Phú Quốc",
+    )
+    assert item.project_name == "Sunset Town"
+
+
+def test_multiple_distinct_monthly_prices_are_treated_as_ambiguous() -> None:
+    item = normalize_listing(
+        "Giỏ hàng: dãy AT giá thuê 35 triệu/tháng; dãy L1 giá thuê 25 triệu/tháng.",
+        title="Giỏ hàng cho thuê New An Thới",
+    )
+    assert item.monthly_rent_vnd is None
+
+
+def test_explicit_title_monthly_price_wins_over_ambiguous_body_portfolio_prices() -> None:
+    item = normalize_listing(
+        "Khu vực có căn 35 triệu/tháng và căn 25 triệu/tháng.",
+        title="Cho thuê căn New An Thới giá 20 triệu/tháng",
+    )
+    assert item.monthly_rent_vnd == 20_000_000
