@@ -39,26 +39,27 @@ def _canonical_text(value: str) -> str:
 
 def _parse_price(text: str) -> int | None:
     simple = _ascii(text).replace("đ", "d")
-    monthly_patterns = (
+    values: set[int] = set()
+    million_patterns = (
         r"(\d+(?:[.,]\d+)?)\s*(?:trieu|tr)\s*(?:vnd|dong|d)?\s*(?:/|moi\s*)?\s*(?:thang|month)\b",
         r"(\d+(?:[.,]\d+)?)\s*million\s*(?:vnd|dong)?\s*(?:/|per\s*)?\s*month\b",
         r"(?:gia\s*thue|rent)\s*[:=-]?\s*(?:tu\s*)?(\d+(?:[.,]\d+)?)\s*(?:trieu|tr)\b(?!\s*/?\s*m(?:2|²)\b)",
     )
-    for pattern in monthly_patterns:
-        match = re.search(pattern, simple, flags=re.I)
-        if match:
+    for pattern in million_patterns:
+        for match in re.finditer(pattern, simple, flags=re.I):
             amount = float(match.group(1).replace(",", "."))
-            return int(round(amount * 1_000_000))
+            values.add(int(round(amount * 1_000_000)))
 
     numeric_patterns = (
         r"(\d{7,9})\s*(?:vnd|dong|d)?\s*/\s*(?:thang|month)\b",
         r"(?:gia\s*thue|rent)\s*[:=-]?\s*(\d{7,9})\s*(?:vnd|dong|d)?\b",
     )
     for pattern in numeric_patterns:
-        match = re.search(pattern, simple, flags=re.I)
-        if match:
-            return int(match.group(1))
-    return None
+        for match in re.finditer(pattern, simple, flags=re.I):
+            values.add(int(match.group(1)))
+
+    return next(iter(values)) if len(values) == 1 else None
+
 
 def _parse_first_number(text: str, patterns: tuple[str, ...], *, as_float: bool = False):
     simple = _ascii(text).replace("đ", "d")
@@ -92,14 +93,14 @@ def _extract_phones(text: str) -> tuple[str, ...]:
 
 def _project_name(text: str) -> str:
     simple = _ascii(text).replace("đ", "d")
-    if "sunset town" in simple:
+    if "new an thoi" in simple or "sun grand city new an thoi" in simple:
+        return "New An Thoi"
+    if "the center" in simple or "the centre" in simple:
+        return "The Center"
+    if "dia trung hai" in simple or "sunset town" in simple:
         return "Sunset Town"
     if "primavera" in simple:
         return "Primavera"
-    if "the center" in simple or "the centre" in simple:
-        return "The Center"
-    if "new an thoi" in simple:
-        return "New An Thoi"
     return ""
 
 
@@ -165,9 +166,11 @@ def normalize_listing(text: str, *, title: str = "") -> NormalizedListing:
             r"(?:hop dong|lease)\s*(?:[:=-]?\s*)?(\d+)\s*(?:thang|months?)",
         ),
     )
-    price = _parse_price(raw)
-    project = _project_name(raw)
-    locality = _locality(raw)
+    title_clean = title.strip()
+    title_price = _parse_price(title_clean) if title_clean else None
+    price = title_price if title_price is not None else _parse_price(raw)
+    project = _project_name(title_clean) or _project_name(raw)
+    locality = _locality(title_clean) or _locality(raw)
     whole = _whole_building(raw)
     phones = _extract_phones(raw)
     evidence: list[str] = []
