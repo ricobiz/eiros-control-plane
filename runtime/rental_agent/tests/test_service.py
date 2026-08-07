@@ -48,3 +48,20 @@ def test_status_exposes_active_search_profile_for_in_chat_app(tmp_path: Path) ->
     assert status["profile"]["location"] == "Phu Quoc"
     assert "Sunset Town" in status["profile"]["zones"]
     assert status["profile"]["budget_vnd_month"]["target_max"] == 25_000_000
+
+
+def test_ingest_text_normalizes_and_ranks_immediately(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    created = service.ingest_text("Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng")
+    assert created["monthly_rent_vnd"] == 22_000_000
+    assert created["floors"] == 5
+    assert created["fit_score"] >= 80
+    assert created["status"] == "qualified"
+
+
+def test_sources_exposes_preserved_listing_provenance(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    created = service.ingest_text("Nguyên căn Sunset Town Phú Quốc 5 tầng 120m2 giá 22 triệu/tháng")
+    sources = service.sources(created["property_id"])
+    assert len(sources) == 1
+    assert sources[0]["source_kind"] == "text"
