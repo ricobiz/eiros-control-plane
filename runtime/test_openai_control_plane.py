@@ -445,3 +445,93 @@ def test_daemon_health_uses_profile_health_url_file(tmp_path: Path) -> None:
     assert result["ready"] is True
     assert "health" in runner.calls[0]
     assert "--url-file" in runner.calls[0]
+
+
+def test_profile_create_repairs_profile_ownership_when_cli_writes_file(tmp_path: Path) -> None:
+    profile_dir = tmp_path / "profiles"
+    profile_dir.mkdir()
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str], timeout: int = 30) -> dict[str, Any]:
+        if "init" in argv:
+            (profile_dir / "rental-agent.yaml").write_text("config_version: 1\n", encoding="utf-8")
+        return {"ok": True, "exit_code": 0, "stdout": "ok", "stderr": "", "duration_ms": 1}
+
+    def system_runner(argv: list[str], timeout: int = 30) -> dict[str, Any]:
+        calls.append(list(argv))
+        return {"ok": True, "exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 1}
+
+    op = OpenAIControlPlane(
+        runner=runner,
+        system_runner=system_runner,
+        audit_path=tmp_path / "audit.jsonl",
+        profile_dir=profile_dir,
+    )
+    tid = "tunnel_56565656565656565656565656565656"
+    op.profile_create("rental-agent", tid, "http://127.0.0.1:8794/mcp")
+
+    assert ["chown", "eiros:eiros", str(profile_dir / "rental-agent.yaml")] in calls
+
+
+def test_connector_provision_does_not_claim_ready_without_health(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tid = "tunnel_78787878787878787878787878787878"
+    op = OpenAIControlPlane(
+        runner=FakeRunner(),
+        system_runner=FakeSystemRunner(),
+        audit_path=tmp_path / "audit.jsonl",
+        profile_dir=tmp_path / "profiles",
+        systemd_dir=tmp_path / "systemd",
+        health_url_dir=tmp_path / "health",
+    )
+    monkeypatch.setattr(op, "tunnel_get", lambda source: {"organization_ids": ["org_scope"], "workspace_ids": []})
+    monkeypatch.setattr(op, "runtime_create", lambda **kwargs: {"tunnel_id": tid, "raw_meta": {"created": True}})
+    monkeypatch.setattr(op, "profile_create", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(op, "profile_validate", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(op, "daemon_install", lambda *a, **k: {"ok": True, "service": "eiros-tunnel-rental-agent.service"})
+    monkeypatch.setattr(op, "daemon_status", lambda *a, **k: {"ok": True, "active_state": "active", "sub_state": "running"})
+    monkeypatch.setattr(op, "daemon_health", lambda *a, **k: {"ok": False, "ready": False, "error": "health_url_missing"})
+
+    result = op.connector_provision(
+        alias="rental-agent",
+        name="Rental",
+        description="desc",
+        mcp_server_url="http://127.0.0.1:8794/mcp",
+        inherit_scope_from_tunnel="tunnel_90909090909090909090909090909090",
+    )
+    assert result["ready"] is False
+    assert result["needs_user_action"] == "daemon_failed"
+
+
+def test_connector_provision_retries_health_until_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tid = "tunnel_98989898989898989898989898989898"
+    op = OpenAIControlPlane(
+        runner=FakeRunner(),
+        system_runner=FakeSystemRunner(),
+        audit_path=tmp_path / "audit.jsonl",
+        profile_dir=tmp_path / "profiles",
+        systemd_dir=tmp_path / "systemd",
+        health_url_dir=tmp_path / "health",
+        health_probe_attempts=3,
+        health_probe_interval=0,
+    )
+    monkeypatch.setattr(op, "tunnel_get", lambda source: {"organization_ids": ["org_scope"], "workspace_ids": []})
+    monkeypatch.setattr(op, "runtime_create", lambda **kwargs: {"tunnel_id": tid, "raw_meta": {"reused": True}})
+    monkeypatch.setattr(op, "profile_create", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(op, "profile_validate", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(op, "daemon_install", lambda *a, **k: {"ok": True, "service": "eiros-tunnel-rental-agent.service"})
+    monkeypatch.setattr(op, "daemon_status", lambda *a, **k: {"ok": True, "active_state": "active", "sub_state": "running"})
+    probes = iter([
+        {"ok": False, "ready": False, "error": "health_url_missing"},
+        {"ok": True, "ready": True, "health": {"readyz": {"ok": True}}},
+    ])
+    monkeypatch.setattr(op, "daemon_health", lambda *a, **k: next(probes))
+
+    result = op.connector_provision(
+        alias="rental-agent",
+        name="Rental",
+        description="desc",
+        mcp_server_url="http://127.0.0.1:8794/mcp",
+        inherit_scope_from_tunnel="tunnel_10101010101010101010101010101010",
+    )
+    assert result["ready"] is True
+    assert result["needs_user_action"] == ""

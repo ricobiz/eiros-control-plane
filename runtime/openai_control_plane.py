@@ -123,6 +123,8 @@ class OpenAIControlPlane:
         profile_dir: Path | str = Path("/home/eiros/.config/tunnel-client"),
         systemd_dir: Path | str = Path("/etc/systemd/system"),
         health_url_dir: Path | str = Path("/home/eiros"),
+        health_probe_attempts: int = 12,
+        health_probe_interval: float = 0.25,
         protected_tunnel_ids: set[str] | None = None,
         protected_profile_names: set[str] | None = None,
         protected_service_names: set[str] | None = None,
@@ -136,6 +138,8 @@ class OpenAIControlPlane:
         self.profile_dir = Path(profile_dir)
         self.systemd_dir = Path(systemd_dir)
         self.health_url_dir = Path(health_url_dir)
+        self.health_probe_attempts = max(1, min(int(health_probe_attempts), 60))
+        self.health_probe_interval = max(0.0, min(float(health_probe_interval), 5.0))
         self.protected_tunnel_ids = set(protected_tunnel_ids or set())
         self.protected_profile_names = set(protected_profile_names or {"eiros", "eiros-vps-ops"})
         self.protected_service_names = set(protected_service_names or {"eiros-tunnel.service"})
@@ -598,6 +602,12 @@ class OpenAIControlPlane:
         ]
         result = self._run_tunnel_client(args, timeout=60)
         self._require_ok(result)
+        profile_path = self.profile_dir / f"{slug}.yaml"
+        if profile_path.exists():
+            profile_path.chmod(0o600)
+            ownership = self._run_system(["chown", "eiros:eiros", str(profile_path)], timeout=20)
+            if not ownership.ok:
+                raise ControlPlaneError("profile_not_found", ownership.stderr or "unable to set profile ownership")
         self._write_audit(
             operation="profile_create", target_type="profile", target=slug,
             requested={"tunnel_id": tunnel_id, "mcp_server_url": url, "health_url_file": health_file},
@@ -833,11 +843,15 @@ class OpenAIControlPlane:
         except ControlPlaneError as exc:
             status = {"ok": False, "active_state": "", "error": exc.category}
 
-        health = self.daemon_health(slug)
-        ready = bool(health.get("ready")) or (
-            status.get("active_state") == "active" and status.get("sub_state") in {"running", "exited"}
-        )
-        needs_user_action = "" if ready else (doctor_error or "daemon_failed")
+        health: dict[str, Any] = {"ok": False, "ready": False, "error": "health_not_checked"}
+        for attempt in range(self.health_probe_attempts):
+            health = self.daemon_health(slug)
+            if bool(health.get("ready")):
+                break
+            if attempt + 1 < self.health_probe_attempts and self.health_probe_interval > 0:
+                time.sleep(self.health_probe_interval)
+        ready = bool(health.get("ready"))
+        needs_user_action = "" if ready else "daemon_failed"
 
         result = {
             "ok": True,
