@@ -27,3 +27,26 @@ class PropertyRecord:
     fit_score: float
     created_at: int
     updated_at: int
+
+from enum import Enum
+
+
+class AuthorityAction(str, Enum):
+    SEARCH = "search"
+    INGEST = "ingest"
+    CONTACT_DISCOVERY = "contact_discovery"
+    REQUEST_MEDIA = "request_media"
+    COMPARE_RANK = "compare_rank"
+    NEGOTIATE = "negotiate"
+    SCHEDULE_VIEWING = "schedule_viewing"
+    BINDING_COMMITMENT = "binding_commitment"
+    AGREE_DEPOSIT = "agree_deposit"
+    SEND_MONEY = "send_money"
+    CONTRACT = "contract"
+
+
+@dataclass(slots=True, frozen=True)
+class ActionDecision:
+    action: AuthorityAction
+    allowed: bool
+    reason: str
