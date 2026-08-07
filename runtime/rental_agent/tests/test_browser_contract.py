@@ -56,3 +56,32 @@ def test_browser_discovers_detail_links_without_bypassing_challenges(tmp_path: P
     assert result.status == "ok"
     assert len(result.listings) == 1
     assert result.listings[0].url == "https://example.test/listing/1"
+
+
+def test_playwright_backend_runs_off_asyncio_loop_thread(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+    import threading
+
+    worker = BrowserWorker(profile_dir=tmp_path / "profile")
+    caller_thread = threading.get_ident()
+    seen: dict[str, int] = {}
+
+    monkeypatch.setattr(worker, "_playwright_available", lambda: True)
+
+    def fake_direct(url: str) -> BrowserPage:
+        seen["thread"] = threading.get_ident()
+        return BrowserPage(
+            url=url,
+            final_url=url,
+            title="Threaded",
+            html="<html><body>whole building listing page</body></html>",
+        )
+
+    monkeypatch.setattr(worker, "_load_playwright_direct", fake_direct, raising=False)
+
+    async def invoke() -> object:
+        return worker.fetch("https://example.test/listing/1")
+
+    result = asyncio.run(invoke())
+    assert result.status == "ok"
+    assert seen["thread"] != caller_thread

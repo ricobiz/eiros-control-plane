@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+import asyncio
 from typing import Callable
 
 from runtime.rental_agent.scout.base import AdapterResult, DiscoveredListing
@@ -69,7 +71,7 @@ class BrowserWorker:
         )
         return any(marker in text for marker in markers)
 
-    def _load_playwright(self, url: str) -> BrowserPage:
+    def _load_playwright_direct(self, url: str) -> BrowserPage:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         from playwright.sync_api import sync_playwright
 
@@ -97,6 +99,19 @@ class BrowserWorker:
                 )
             finally:
                 context.close()
+
+    def _load_playwright(self, url: str) -> BrowserPage:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return self._load_playwright_direct(url)
+
+        # Playwright's sync API cannot run on a thread that already owns an
+        # asyncio event loop (FastMCP/ASGI does). Keep the public Scout API
+        # synchronous, but isolate the browser driver in its own bounded thread.
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="rental-browser") as executor:
+            future = executor.submit(self._load_playwright_direct, url)
+            return future.result(timeout=40)
 
     def fetch(self, url: str) -> BrowserFetchResult:
         if self.loader is None and not self._playwright_available():
