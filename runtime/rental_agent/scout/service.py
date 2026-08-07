@@ -55,11 +55,7 @@ class ScoutService:
                     errors=(f"{type(exc).__name__}: {exc}",),
                 )
             if result.status == "needs_browser" and self.browser_worker is not None:
-                browser_result = discover_adapter_with_browser(adapter, self.browser_worker, limit=bounded)
-                if browser_result.status == "ok" or browser_result.listings:
-                    result = browser_result
-                elif browser_result.status == "needs_user_action":
-                    result = browser_result
+                result = discover_adapter_with_browser(adapter, self.browser_worker, limit=bounded)
             if result.status == "needs_browser":
                 needs_browser_sources.append(result.source)
             if result.status == "needs_user_action":
