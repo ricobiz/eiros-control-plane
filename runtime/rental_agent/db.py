@@ -197,10 +197,15 @@ class RentalDatabase:
             property_id: str | None = None
             source_id: str | None = None
             merged = False
+            replace_current_fields = False
             if existing_source:
                 property_id = str(existing_source["property_id"])
                 source_id = str(existing_source["source_id"])
                 merged = True
+                source_count = int(connection.execute(
+                    "SELECT COUNT(*) FROM listing_sources WHERE property_id=?", (property_id,)
+                ).fetchone()[0])
+                replace_current_fields = source_count == 1
             if property_id is None and signature:
                 row = connection.execute(
                     "SELECT property_id FROM properties WHERE signature=? ORDER BY updated_at DESC LIMIT 1",
@@ -228,6 +233,8 @@ class RentalDatabase:
             current = connection.execute("SELECT * FROM properties WHERE property_id=?", (property_id,)).fetchone()
             assert current is not None
             def choose(new: Any, old: Any) -> Any:
+                if replace_current_fields:
+                    return new
                 return old if new in (None, "") else new
             connection.execute(
                 """UPDATE properties SET status=?, title=?, project_name=?, locality=?, monthly_rent_vnd=?,
@@ -243,10 +250,14 @@ class RentalDatabase:
                     choose(item.area_m2, current["area_m2"]),
                     choose(item.lease_min_months, current["lease_min_months"]),
                     choose(item.deposit_months, current["deposit_months"]),
-                    (None if item.whole_building is None and current["whole_building"] is None else int(item.whole_building) if item.whole_building is not None else current["whole_building"]),
+                    (
+                        None if replace_current_fields and item.whole_building is None
+                        else int(item.whole_building) if item.whole_building is not None
+                        else current["whole_building"]
+                    ),
                     fit.total,
                     json.dumps(fit.dimensions, sort_keys=True),
-                    signature or str(current["signature"] or ""),
+                    signature if replace_current_fields else (signature or str(current["signature"] or "")),
                     now,
                     now,
                     property_id,
