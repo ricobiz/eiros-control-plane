@@ -152,3 +152,23 @@ def test_close_and_scout_loader_share_same_runtime(tmp_path: Path) -> None:
         assert any(event[0] == "load_page" for event in runtime.events)
     finally:
         controller.shutdown()
+
+
+def test_status_does_not_start_browser_runtime(tmp_path: Path) -> None:
+    created = []
+
+    def factory():
+        created.append(True)
+        return FakeRuntime()
+
+    controller = RemoteBrowserController(
+        profile_dir=tmp_path / "browser" / "search",
+        runtime_factory=factory,
+    )
+    try:
+        status = controller.status()
+        assert status["active_sessions"] == 0
+        assert status["thread_alive"] is False
+        assert created == []
+    finally:
+        controller.shutdown()

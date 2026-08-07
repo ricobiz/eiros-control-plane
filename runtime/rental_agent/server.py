@@ -238,6 +238,73 @@ def rental_browser_click(source: str, x: float, y: float) -> dict[str, object]:
     return _service().browser_click(source, x, y)
 
 
+@mcp.tool(
+    name="rental_browser_open",
+    title="Open rental remote browser",
+    description="Create or reuse a persistent remote-browser session for an allowlisted rental source.",
+    annotations=SEARCH_WRITE,
+    structured_output=True,
+)
+def rental_browser_open(source: str) -> dict[str, object]:
+    return _service().browser_open(source)
+
+
+@mcp.tool(
+    name="rental_browser_frame",
+    title="Read rental remote browser frame",
+    description="Read the latest changed frame and status from a persistent rental browser session.",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def rental_browser_frame(session_id: str, after_seq: int = 0) -> dict[str, object]:
+    return _service().browser_frame(session_id, after_seq=max(0, int(after_seq)))
+
+
+@mcp.tool(
+    name="rental_browser_input",
+    title="Control rental remote browser",
+    description=(
+        "Send pointer, scroll, key, text, back or reload input to a persistent rental browser session. "
+        "When explicit human verification is active, user_gesture must be true and must originate from the user-facing app gesture."
+    ),
+    annotations=SEARCH_WRITE,
+    structured_output=True,
+)
+def rental_browser_input(
+    session_id: str,
+    event_type: str,
+    x: float = 0.0,
+    y: float = 0.0,
+    delta_x: float = 0.0,
+    delta_y: float = 0.0,
+    key: str = "",
+    text: str = "",
+    user_gesture: bool = False,
+) -> dict[str, object]:
+    return _service().browser_input(
+        session_id,
+        event_type,
+        x=x,
+        y=y,
+        delta_x=delta_x,
+        delta_y=delta_y,
+        key=key,
+        text=text,
+        user_gesture=user_gesture,
+    )
+
+
+@mcp.tool(
+    name="rental_browser_close",
+    title="Close rental remote browser",
+    description="Close one remote browser page/session while preserving the persistent browser profile and cookies.",
+    annotations=WRITE_IDEMPOTENT,
+    structured_output=True,
+)
+def rental_browser_close(session_id: str) -> dict[str, object]:
+    return _service().browser_close(session_id)
+
+
 
 @mcp.tool(
     name="rental_contacts",

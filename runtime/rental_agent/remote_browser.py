@@ -403,9 +403,20 @@ class RemoteBrowserController:
         return self._submit("close", session_id=session_id)
 
     def status(self) -> dict[str, object]:
+        thread = self._thread
         if self._closed:
             return {
                 "available": False,
+                "backend": "playwright-thread",
+                "profile_dir": str(self.profile_dir),
+                "viewport": dict(self.viewport),
+                "active_sessions": 0,
+                "sources": sorted(HANDOFF_SOURCES),
+                "thread_alive": False,
+            }
+        if thread is None or not thread.is_alive():
+            return {
+                "available": True,
                 "backend": "playwright-thread",
                 "profile_dir": str(self.profile_dir),
                 "viewport": dict(self.viewport),

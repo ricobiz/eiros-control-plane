@@ -12,6 +12,7 @@ from runtime.rental_agent.normalize import normalize_listing
 from runtime.rental_agent.outreach import OutreachPlanner
 from runtime.rental_agent.policy import RentalPolicy
 from runtime.rental_agent.ranking import rank_listing
+from runtime.rental_agent.remote_browser import RemoteBrowserController
 from runtime.rental_agent.scout.service import ScoutService
 
 
@@ -24,12 +25,14 @@ class RentalService:
         scout_adapters: Iterable[Any] | None = None,
         browser_profile_dir: Path | None = None,
         browser_worker: BrowserWorker | None = None,
+        remote_browser_controller: Any | None = None,
     ) -> None:
         self.database = database
         self.policy_engine = policy or RentalPolicy()
         self.database.initialize()
         profile_dir = Path(browser_profile_dir) if browser_profile_dir is not None else DEFAULT_DATA_DIR / "browser" / "search"
-        worker = browser_worker or BrowserWorker(profile_dir=profile_dir)
+        self.remote_browser = remote_browser_controller or RemoteBrowserController(profile_dir=profile_dir)
+        worker = browser_worker or BrowserWorker(profile_dir=profile_dir, loader=self.remote_browser.load_page)
         self.scout_engine = ScoutService(database, adapters=scout_adapters, browser_worker=worker)
         self.outreach_engine = OutreachPlanner(database, self.policy_engine)
 
@@ -103,20 +106,32 @@ class RentalService:
         return self.scout_engine.refresh_property(property_id)
 
     def browser_status(self) -> dict[str, object]:
-        worker = self.scout_engine.browser_worker
-        return {"available": False, "sources": []} if worker is None else worker.handoff_status()
+        return self.remote_browser.status()
+
+    def browser_open(self, source: str) -> dict[str, object]:
+        return self.remote_browser.open_source(source)
+
+    def browser_frame(self, session_id: str, after_seq: int = 0) -> dict[str, object]:
+        return self.remote_browser.frame(session_id, after_seq=after_seq)
+
+    def browser_input(self, session_id: str, event_type: str, **kwargs: object) -> dict[str, object]:
+        return self.remote_browser.input(session_id, event_type, **kwargs)
+
+    def browser_close(self, session_id: str) -> dict[str, object]:
+        return self.remote_browser.close(session_id)
 
     def browser_snapshot(self, source: str) -> dict[str, object]:
-        worker = self.scout_engine.browser_worker
-        if worker is None:
-            return {"status": "needs_browser_runtime", "source": source, "error": "browser worker unavailable"}
-        return worker.handoff_snapshot(source)
+        return self.browser_open(source)
 
     def browser_click(self, source: str, x: float, y: float) -> dict[str, object]:
-        worker = self.scout_engine.browser_worker
-        if worker is None:
-            return {"status": "needs_browser_runtime", "source": source, "error": "browser worker unavailable"}
-        return worker.handoff_click(source, x, y)
+        opened = self.browser_open(source)
+        return self.browser_input(
+            str(opened["session_id"]),
+            "pointer",
+            x=float(x),
+            y=float(y),
+            user_gesture=True,
+        )
 
     def contacts(self, property_id: str) -> list[dict[str, Any]]:
         return self.database.list_contacts(property_id)
