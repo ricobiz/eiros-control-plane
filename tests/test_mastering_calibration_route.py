@@ -51,6 +51,8 @@ def test_mic_loop_page_contract():
         "BASELINE B",
         "STRESS",
         "SEAL",
+        "BASS CONFIDENCE",
+        "bass_confidence",
         "background",
         "baseline_a",
         "baseline_b",

@@ -101,3 +101,21 @@ def test_analyze_mic_loop_recordings_decodes_uploaded_audio():
     assert result['mode'] == 'stress'
     assert result['report']['seal_check']['stable'] is True
     assert result['report']['artifact_detected'] is False
+
+
+def test_mic_loop_seal_repeatability_is_separate_from_bass_snr_confidence():
+    sr = 48000
+    seconds = 2.0
+    # Deliberately poor bass SNR: the room/background already contains almost
+    # as much 63 Hz energy as the playback. A/B placement is nevertheless
+    # highly repeatable, so SEAL must be stable while bass confidence is low.
+    background = _stereo_tone(63.0, 0.045, seconds, sr)
+    baseline_a = _stereo_tone(63.0, 0.050, seconds, sr)
+    baseline_b = _stereo_tone(63.0, 0.0495, seconds, sr)
+
+    result = mastering._mic_loop_baseline_analysis(background, baseline_a, baseline_b, sr)
+
+    assert result["seal_check"]["bass_delta_db"] < 2.5
+    assert result["seal_check"]["stable"] is True
+    assert result["seal_check"]["bass_confidence"] == "LOW"
+    assert result["seal_check"]["trusted_bass_bands"] == 0

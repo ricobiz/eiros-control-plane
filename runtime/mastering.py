@@ -473,7 +473,11 @@ def _mic_loop_baseline_analysis(
             bass_deltas.append(delta)
             trusted_bass += int(trusted)
     bass_delta = max(bass_deltas) if bass_deltas else 99.0
-    seal_stable = bass_delta <= 2.5 and trusted_bass >= 1
+    # Seal repeatability and bass signal confidence are independent. A/B can
+    # repeat closely even when the phone microphone sees bass too near the
+    # captured background floor to trust it for artifact detection.
+    seal_stable = bass_delta <= 2.5
+    bass_confidence = "HIGH" if trusted_bass >= 1 else "LOW"
     return {
         "background": noise,
         "baseline_a": a,
@@ -484,6 +488,7 @@ def _mic_loop_baseline_analysis(
             "stable": seal_stable,
             "bass_delta_db": round(bass_delta, 3),
             "trusted_bass_bands": trusted_bass,
+            "bass_confidence": bass_confidence,
             "status": "STABLE" if seal_stable else "UNSTABLE",
         },
     }
