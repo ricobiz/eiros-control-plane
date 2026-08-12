@@ -695,23 +695,79 @@ def get_director_plan(asset_id: str, plan_id: str) -> dict[str, Any]:
     raise KeyError(f"director plan not found: {plan_id}")
 
 
-def render(asset_id: str, profile: str = "adaptive", target_lufs: float = -14.0, true_peak_dbtp: float = -1.0, label: str = "spotify") -> dict[str, Any]:
-    target_lufs = float(target_lufs)
-    true_peak_dbtp = float(true_peak_dbtp)
-    profile_key = str(profile or "adaptive").strip().lower()
-    if not (-18.0 <= target_lufs <= -7.0):
-        raise ValueError("target_lufs must be between -18 and -7")
-    if not (-3.0 <= true_peak_dbtp <= -0.1):
-        raise ValueError("true_peak_dbtp must be between -3.0 and -0.1")
+def render(
+    asset_id: str,
+    profile: str = "director",
+    target_lufs: float | None = None,
+    true_peak_dbtp: float | None = None,
+    label: str = "master",
+    director_plan_id: str | None = None,
+) -> dict[str, Any]:
+    profile_key = str(profile or "director").strip().lower()
     meta = _read_meta(asset_id)
     input_path = _input_path(meta)
-    filters, description = _profile_filters(profile_key)
     output_id = uuid.uuid4().hex
     out_dir = OUTPUT_ROOT / _validate_id(meta["asset_id"])
     out_dir.mkdir(parents=True, exist_ok=True)
     safe_label = re.sub(r"[^A-Za-z0-9_-]+", "-", str(label or "master")).strip("-")[:40] or "master"
     output_name = f"{Path(meta['filename']).stem}-{safe_label}-{output_id[:8]}.wav"
     output_path = out_dir / output_name
+
+    if profile_key == "director":
+        from runtime.mastering_dsp import DIRECTOR_DSP_VERSION, render_from_plan
+        if not director_plan_id:
+            raise ValueError("director_plan_id is required for director profile")
+        plan = get_director_plan(asset_id, director_plan_id)
+        dsp_report = render_from_plan(input_path, plan, output_path)
+        plan_target = dict(plan.get("target") or {})
+        output_report = {
+            "analysis_version": ANALYSIS_VERSION,
+            "engine_version": DIRECTOR_DSP_VERSION,
+            "probe": probe(output_path),
+            "loudness": loudness(output_path),
+            "technical": _technical_stats(output_path),
+            "timeline": _timeline_stats(output_path),
+        }
+        item = {
+            "output_id": output_id,
+            "filename": output_name,
+            "path": str(output_path),
+            "profile": "director",
+            "profile_description": "Director-guided deterministic DSP; no autonomous artistic corrections.",
+            "target_lufs": plan_target.get("lufs") if target_lufs is None else float(target_lufs),
+            "true_peak_target_dbtp": plan_target.get("true_peak_dbtp") if true_peak_dbtp is None else float(true_peak_dbtp),
+            "created_at": int(time.time()),
+            "state": "RENDERED",
+            "plan_id": plan["plan_id"],
+            "plan_fingerprint": plan["fingerprint"],
+            "engine_version": DIRECTOR_DSP_VERSION,
+            "execution_log": dsp_report["execution_log"],
+            "clean_export": {
+                "version": CLEAN_EXPORT_VERSION,
+                "container_metadata": "stripped",
+                "chapters": "stripped",
+                "deterministic_muxing": True,
+                "proprietary_audio_watermark": "not claimed removed",
+            },
+            "report": output_report,
+        }
+        outputs = list(meta.get("outputs") or [])
+        outputs.append(item)
+        meta["outputs"] = outputs[-50:]
+        _write_meta(meta)
+        return {"ok": True, "asset_id": meta["asset_id"], "output": _safe_output_item(item)}
+
+    if target_lufs is None:
+        target_lufs = -14.0
+    if true_peak_dbtp is None:
+        true_peak_dbtp = -1.0
+    target_lufs = float(target_lufs)
+    true_peak_dbtp = float(true_peak_dbtp)
+    if not (-18.0 <= target_lufs <= -7.0):
+        raise ValueError("target_lufs must be between -18 and -7")
+    if not (-3.0 <= true_peak_dbtp <= -0.1):
+        raise ValueError("true_peak_dbtp must be between -3.0 and -0.1")
+    filters, description = _profile_filters(profile_key)
     adaptive_path = out_dir / f".{output_id}.adaptive.wav"
     render_input = input_path
     source_timeline: dict[str, Any] | None = None
