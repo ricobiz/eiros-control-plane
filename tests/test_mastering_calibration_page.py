@@ -17,6 +17,7 @@ def test_calibration_page_contract():
         "frequencyMap",
         "rampDbPerSecond",
         "safeCeilingDb",
+        "safeCeilingDb: 0",
         "requestAnimationFrame",
         "exponentialRampToValueAtTime",
     ]:
