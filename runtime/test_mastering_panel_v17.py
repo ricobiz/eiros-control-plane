@@ -18,7 +18,7 @@ def test_v17_panel_is_responsive_and_not_card_grid_first():
 
 def test_mcp_resource_points_to_v17_and_keeps_v16_legacy():
     import runtime.mastering_mcp_server as s
-    assert s.PANEL_URI.endswith('mastering-panel-v17-1.html')
+    assert s.PANEL_URI.endswith('mastering-panel-v17-2.html')
     assert s.LEGACY_PANEL_URI.endswith('mastering-panel-v16.html')
     rendered=s.mastering_panel_resource()
     assert '__PUBLIC_BASE__' not in rendered
@@ -55,14 +55,14 @@ def test_v17_ios_safe_controls_and_reload_recovery_contract():
     assert 'overflow-x:hidden' in html.replace(' ','')
 
 
-def test_v17_uses_dedicated_widget_origin_without_unneeded_frames():
+def test_v17_preview_reuses_known_good_eirosmaster_origin_and_csp_contract():
     import runtime.mastering_mcp_server as s
-    assert s.PUBLIC_ORIGIN == 'https://eirosmaster.178-105-43-79.sslip.io'
+    assert s.PUBLIC_ORIGIN == 'https://178-105-43-79.sslip.io'
     meta=s.PANEL_META
     assert meta['ui']['domain'] == s.PUBLIC_ORIGIN
     assert meta['openai/widgetDomain'] == s.PUBLIC_ORIGIN
-    assert 'frameDomains' not in meta['ui']['csp']
-    assert 'frame_domains' not in meta['openai/widgetCSP']
+    assert meta['ui']['csp']['connectDomains'] == [s.PUBLIC_ORIGIN]
+    assert meta['ui']['csp']['resourceDomains'] == [s.PUBLIC_ORIGIN]
 
 
 def test_minimal_diagnostic_widget_contract():
