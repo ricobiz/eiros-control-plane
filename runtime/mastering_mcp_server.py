@@ -21,9 +21,9 @@ PUBLIC_ORIGIN = "https://178-105-43-79.sslip.io"
 PUBLIC_PREFIX = "/mastering-85949c2f6885e19e8e815fd0faa0c3e097e88c7fc84a18d3"
 PUBLIC_BASE = PUBLIC_ORIGIN + PUBLIC_PREFIX
 PUBLIC_SHARE_BASE = PUBLIC_ORIGIN + "/s"
-PANEL_URI = "ui://eiros/mastering-panel-v16.html"
-LEGACY_PANEL_URI = "ui://eiros/mastering-panel-v15.html"
-LEGACY_PANEL_URI_V2 = "ui://eiros/mastering-panel-v14.html"
+PANEL_URI = "ui://eiros/mastering-panel-v17.html"
+LEGACY_PANEL_URI = "ui://eiros/mastering-panel-v16.html"
+LEGACY_PANEL_URI_V2 = "ui://eiros/mastering-panel-v15.html"
 
 mcp = FastMCP(
     "EIROS Mastering",
@@ -925,6 +925,13 @@ button.armed{border-color:#d87a36!important;background:#24170e!important;color:#
     return template.replace("__PUBLIC_BASE__", PUBLIC_BASE).replace("__PUBLIC_SHARE_BASE__", PUBLIC_SHARE_BASE)
 
 
+_legacy_panel_html = _panel_html
+
+def _panel_html() -> str:
+    template = (Path(__file__).with_name("mastering_panel_v17.html")).read_text(encoding="utf-8")
+    return template.replace("__PUBLIC_BASE__", PUBLIC_BASE).replace("__PUBLIC_SHARE_BASE__", PUBLIC_SHARE_BASE)
+
+
 @mcp.resource(
     PANEL_URI,
     name="EIROS Mastering Panel",
@@ -946,7 +953,7 @@ def mastering_panel_resource() -> str:
     meta=PANEL_META,
 )
 def mastering_panel_resource_legacy() -> str:
-    return _panel_html()
+    return _legacy_panel_html()
 
 
 @mcp.resource(
@@ -958,7 +965,7 @@ def mastering_panel_resource_legacy() -> str:
     meta=PANEL_META,
 )
 def mastering_panel_resource_legacy_v2() -> str:
-    return _panel_html()
+    return _legacy_panel_html()
 
 
 @mcp.tool(
