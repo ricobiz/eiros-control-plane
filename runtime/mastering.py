@@ -1326,6 +1326,64 @@ def ab_comparison(asset_id: str, output_id: str) -> dict[str, Any]:
     }
 
 
+def timeline_payload(asset_id: str, output_id: str | None = None, points: int = 384) -> dict[str, Any]:
+    """Return one compact, measured timebase for workstation waveform/actions/QA."""
+    meta = _read_meta(asset_id)
+    source_path = _input_path(meta)
+    audio = _decode_float_audio(source_path, 48000)
+    mono = np.mean(audio.astype(np.float64), axis=1)
+    duration = len(mono) / 48000.0
+    count = max(8, min(int(points), 1024, max(8, len(mono))))
+    edges = np.linspace(0, len(mono), count + 1, dtype=int)
+    envelope = []
+    for i in range(count):
+        chunk = mono[edges[i]:edges[i + 1]]
+        if chunk.size == 0:
+            continue
+        t = ((edges[i] + edges[i + 1]) * 0.5) / 48000.0
+        envelope.append([round(t, 4), round(float(np.min(chunk)), 5), round(float(np.max(chunk)), 5)])
+
+    analysis = meta.get("analysis") or {}
+    sections = []
+    for sec in ((analysis.get("timeline") or {}).get("sections") or []):
+        sections.append({
+            "start": float(sec.get("start_seconds") or 0.0),
+            "end": float(sec.get("end_seconds") or 0.0),
+            "trajectory": sec.get("trajectory") or "stable",
+            "short_rms_dbfs": sec.get("short_rms_dbfs"),
+        })
+
+    actions: list[dict[str, Any]] = []
+    flags: list[dict[str, Any]] = []
+    limiter_lane: list[dict[str, Any]] = []
+    if output_id:
+        item = _find_output(meta, output_id)
+        for a in item.get("execution_log") or []:
+            actions.append({
+                "start": float(a.get("start_seconds") or 0.0),
+                "end": float(a.get("end_seconds") or 0.0),
+                "type": a.get("type"), "action_id": a.get("action_id"),
+                "reason": a.get("reason"), "requested": a.get("requested") or {},
+                "applied": a.get("applied") or {},
+            })
+            if a.get("type") == "limiter":
+                limiter_lane.append({"start": actions[-1]["start"], "end": actions[-1]["end"], "applied": a.get("applied") or {}})
+        verification = item.get("verification") or {}
+        for f in verification.get("flags") or []:
+            flags.append({
+                "start": float(f.get("start_seconds") or 0.0),
+                "end": float(f.get("end_seconds") or f.get("start_seconds") or 0.0),
+                "severity": f.get("severity") or "review", "code": f.get("code") or "qa_flag",
+                "value": f.get("value"), "limit": f.get("limit"),
+            })
+    return {
+        "asset_id": meta["asset_id"], "output_id": output_id,
+        "duration": round(duration, 4), "timebase": "seconds",
+        "waveform": envelope, "sections": sections, "actions": actions,
+        "flags": flags, "limiter_lane": limiter_lane,
+    }
+
+
 def ensure_delta_preview(asset_id: str, output_id: str) -> dict[str, Any]:
     """Create an internal MP3 monitor of the exact sample-domain master-source difference."""
     meta = _read_meta(asset_id)
