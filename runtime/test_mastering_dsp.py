@@ -105,3 +105,83 @@ def test_director_render_requires_plan_and_records_provenance(tmp_path, monkeypa
     assert out['engine_version'] == '0.4.0-director'
     assert out['execution_log'] == []
     assert out['profile'] == 'director'
+
+
+def _read_f32(path: Path, sr: int=48000):
+    import subprocess
+    raw=subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-map','0:a:0','-ac','2','-ar',str(sr),'-f','f32le','-'])
+    return np.frombuffer(raw,dtype='<f4').reshape(-1,2)
+
+def _tone_level(x, sr, hz):
+    mono=x.mean(axis=1); n=len(mono); w=np.hanning(n); spec=np.abs(np.fft.rfft(mono*w)); f=np.fft.rfftfreq(n,1/sr)
+    i=np.argmin(np.abs(f-hz)); return 20*np.log10(max(spec[i],1e-12))
+
+def test_eq_action_is_frequency_selective(tmp_path):
+    sr=48000; t=np.arange(sr,dtype=np.float64)/sr
+    x=.12*np.sin(2*np.pi*55*t)+.12*np.sin(2*np.pi*1000*t)
+    pcm=np.clip(x*32767,-32768,32767).astype('<i2'); src=tmp_path/'eq.wav'
+    with wave.open(str(src),'wb') as w:w.setnchannels(2);w.setsampwidth(2);w.setframerate(sr);w.writeframes(np.column_stack([pcm,pcm]).ravel().tobytes())
+    plan=validate_director_plan({'intent':'eq','target':{},'sections':[{'start':0,'end':1,'actions':[{'type':'eq','reason':'remove 1k resonance','frequency_hz':1000,'gain_db':-6,'q':1.2}]}]},1)
+    out=tmp_path/'eq-out.wav'; render_from_plan(src,plan,out); y=_read_f32(out)
+    assert (_tone_level(y,sr,1000)-_tone_level(y,sr,55)) < -4.0
+
+def test_stereo_width_zero_collapses_to_mono(tmp_path):
+    sr=48000;t=np.arange(sr,dtype=np.float64)/sr;l=.15*np.sin(2*np.pi*220*t);r=.15*np.sin(2*np.pi*330*t)
+    pcm=np.clip(np.column_stack([l,r])*32767,-32768,32767).astype('<i2');src=tmp_path/'st.wav'
+    with wave.open(str(src),'wb') as w:w.setnchannels(2);w.setsampwidth(2);w.setframerate(sr);w.writeframes(pcm.ravel().tobytes())
+    plan=validate_director_plan({'intent':'mono','target':{},'sections':[{'start':0,'end':1,'actions':[{'type':'stereo_width','reason':'mono compatibility','width':0.0}]}]},1)
+    out=tmp_path/'st-out.wav';render_from_plan(src,plan,out);y=_read_f32(out)
+    # Ignore the intentional 25 ms dry/wet boundary ramps; the body of the section must be mono.
+    edge=int(sr*.04)
+    assert np.max(np.abs(y[edge:-edge,0]-y[edge:-edge,1])) < 2e-4
+
+def test_compressor_reduces_crest(tmp_path):
+    sr=48000;x=np.full(sr,.04);x[::2400]=.8;pcm=np.clip(x*32767,-32768,32767).astype('<i2');src=tmp_path/'c.wav'
+    with wave.open(str(src),'wb') as w:w.setnchannels(2);w.setsampwidth(2);w.setframerate(sr);w.writeframes(np.column_stack([pcm,pcm]).ravel().tobytes())
+    plan=validate_director_plan({'intent':'compress','target':{},'sections':[{'start':0,'end':1,'actions':[{'type':'compressor','reason':'control peaks','threshold_dbfs':-18,'ratio':4,'attack_ms':2,'release_ms':80,'makeup_db':0,'bounds':{'max_gain_reduction_db':12}}]}]},1)
+    out=tmp_path/'c-out.wav';render_from_plan(src,plan,out);y=_read_f32(out)[:,0]
+    def crest(a):return 20*np.log10(np.max(np.abs(a))/np.sqrt(np.mean(a*a)))
+    edge=int(sr*.1)
+    assert crest(y[edge:-edge]) < crest(x[edge:-edge])-2
+
+def test_limiter_respects_ceiling(tmp_path):
+    src=tmp_path/'lim.wav';_wav(src,seconds=1)
+    plan=validate_director_plan({'intent':'limit','target':{},'sections':[{'start':0,'end':1,'actions':[{'type':'limiter','reason':'safety ceiling','ceiling_dbtp':-6,'release_ms':80,'bounds':{'max_gain_reduction_db':12}}]}]},1)
+    out=tmp_path/'lim-out.wav';render_from_plan(src,plan,out);y=_read_f32(out)
+    peak=20*np.log10(np.max(np.abs(y)))
+    assert peak <= -5.8
+
+def test_dynamic_eq_reduces_hot_band_but_preserves_sub(tmp_path):
+    sr=48000;t=np.arange(sr,dtype=np.float64)/sr;x=.15*np.sin(2*np.pi*55*t)+.25*np.sin(2*np.pi*900*t);pcm=np.clip(x*32767,-32768,32767).astype('<i2');src=tmp_path/'deq.wav'
+    with wave.open(str(src),'wb') as w:w.setnchannels(2);w.setsampwidth(2);w.setframerate(sr);w.writeframes(np.column_stack([pcm,pcm]).ravel().tobytes())
+    plan=validate_director_plan({'intent':'deq','target':{},'sections':[{'start':0,'end':1,'actions':[{'type':'dynamic_eq','reason':'control hot 900','frequency_hz':900,'q':1.5,'threshold_dbfs':-24,'ratio':3,'max_reduction_db':6}]}]},1)
+    out=tmp_path/'deq-out.wav';render_from_plan(src,plan,out);y=_read_f32(out)
+    assert (_tone_level(y,sr,900)-_tone_level(y,sr,55)) < (_tone_level(_read_f32(src),sr,900)-_tone_level(_read_f32(src),sr,55))-1.5
+
+
+def test_transient_action_changes_crest_in_requested_direction(tmp_path):
+    sr=48000;x=np.full(sr,.04);x[::2400]=.7;pcm=np.clip(x*32767,-32768,32767).astype('<i2');src=tmp_path/'tr.wav'
+    with wave.open(str(src),'wb') as w:w.setnchannels(2);w.setsampwidth(2);w.setframerate(sr);w.writeframes(np.column_stack([pcm,pcm]).ravel().tobytes())
+    plan=validate_director_plan({'intent':'soften transients','target':{},'sections':[{'start':0,'end':1,'actions':[{'type':'transient','reason':'soften clicks','amount_db':-4}]}]},1)
+    out=tmp_path/'tr-out.wav';render_from_plan(src,plan,out);y=_read_f32(out)[:,0];edge=int(sr*.1)
+    def crest(a):return 20*np.log10(np.max(np.abs(a))/np.sqrt(np.mean(a*a)))
+    assert crest(y[edge:-edge]) < crest(x[edge:-edge])
+
+def test_declipping_repairs_full_scale_plateau(tmp_path):
+    sr=48000;t=np.arange(sr)/sr;x=.2*np.sin(2*np.pi*220*t);x[20000:20020]=1.0;pcm=np.clip(x*32767,-32768,32767).astype('<i2');src=tmp_path/'dc.wav'
+    with wave.open(str(src),'wb') as w:w.setnchannels(2);w.setsampwidth(2);w.setframerate(sr);w.writeframes(np.column_stack([pcm,pcm]).ravel().tobytes())
+    plan=validate_director_plan({'intent':'repair','target':{},'sections':[{'start':0,'end':1,'actions':[{'type':'declipping','reason':'repair known clipped plateau','threshold':.995}]}]},1)
+    out=tmp_path/'dc-out.wav';rep=render_from_plan(src,plan,out);y=_read_f32(out)
+    assert rep['execution_log'][0]['applied']['repaired_samples'] >= 20
+    assert np.max(np.abs(y[20000:20020])) < .95
+
+def test_director_target_loudness_is_actually_rendered(tmp_path, monkeypatch):
+    from runtime import mastering
+    _configure_roots(tmp_path, monkeypatch)
+    src=tmp_path/'target.wav';_wav(src,seconds=2.0)
+    stored=mastering.store_upload('target.wav',src.read_bytes())
+    plan=mastering.save_director_plan(stored['asset_id'],{'intent':'target','target':{'lufs':-16.0,'true_peak_dbtp':-2.0},'sections':[{'start':0,'end':2,'actions':[]}]})
+    out=mastering.render(stored['asset_id'],profile='director',director_plan_id=plan['plan_id'])['output']
+    assert abs(out['report']['loudness']['integrated_lufs']-(-16.0)) <= .5
+    assert out['report']['loudness']['true_peak_dbtp'] <= -1.8
+    assert any(a['type']=='target_loudness' for a in out['execution_log'])

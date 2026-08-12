@@ -741,6 +741,49 @@ def render(
         plan = get_director_plan(asset_id, director_plan_id)
         dsp_report = render_from_plan(input_path, plan, output_path)
         plan_target = dict(plan.get("target") or {})
+        target_i = plan_target.get("lufs") if target_lufs is None else float(target_lufs)
+        target_tp = plan_target.get("true_peak_dbtp") if true_peak_dbtp is None else float(true_peak_dbtp)
+        if target_i is not None:
+            target_i = float(target_i)
+            target_tp = -1.0 if target_tp is None else float(target_tp)
+            measured = loudness(output_path, "", target_i, target_tp, 11.0)
+            normalized_path = out_dir / f".{output_id}.director-target.wav"
+            chain = (
+                "loudnorm="
+                f"I={target_i}:TP={target_tp}:LRA=11:"
+                f"measured_I={measured['integrated_lufs']}:"
+                f"measured_TP={measured['true_peak_dbtp']}:"
+                f"measured_LRA={measured['loudness_range_lu']}:"
+                f"measured_thresh={measured['threshold_lufs']}:"
+                f"offset={measured['target_offset_lu']}:linear=true:print_format=summary"
+            )
+            proc = _run([
+                "ffmpeg","-y","-hide_banner","-nostats","-i",str(output_path),
+                "-map","0:a:0","-map_metadata","-1","-map_chapters","-1",
+                "-fflags","+bitexact","-flags:a","+bitexact","-af",chain,
+                "-ar","48000","-c:a","pcm_s24le",str(normalized_path),
+            ], timeout=1200)
+            if proc.returncode != 0:
+                normalized_path.unlink(missing_ok=True)
+                raise RuntimeError(f"Director target render failed: {(proc.stderr or proc.stdout)[-2400:]}")
+            normalized_path.replace(output_path)
+            dsp_report["execution_log"].append({
+                "action_id": f"target-{output_id[:12]}", "type": "target_loudness",
+                "requested": {"lufs": target_i, "true_peak_dbtp": target_tp},
+                "applied": {"method": "two_pass_linear_loudnorm", "measured_before": measured},
+                "start_seconds": 0.0, "end_seconds": float(probe(output_path).get("duration_seconds") or 0.0),
+                "reason": "Director plan loudness and true-peak target",
+            })
+        elif target_tp is not None:
+            target_tp = float(target_tp)
+            before = loudness(output_path)
+            if float(before.get("true_peak_dbtp") or -120.0) > target_tp:
+                trim = target_tp - float(before["true_peak_dbtp"])
+                trimmed_path = out_dir / f".{output_id}.director-peak.wav"
+                proc = _run(["ffmpeg","-y","-v","error","-i",str(output_path),"-map","0:a:0","-map_metadata","-1","-af",f"volume={trim}dB","-ar","48000","-c:a","pcm_s24le",str(trimmed_path)], timeout=1200)
+                if proc.returncode != 0: raise RuntimeError("Director true-peak trim failed")
+                trimmed_path.replace(output_path)
+                dsp_report["execution_log"].append({"action_id":f"peak-{output_id[:12]}","type":"target_true_peak","requested":{"true_peak_dbtp":target_tp},"applied":{"gain_db":trim},"start_seconds":0.0,"end_seconds":float(probe(output_path).get("duration_seconds") or 0.0),"reason":"Director plan true-peak ceiling"})
         output_report = {
             "analysis_version": ANALYSIS_VERSION,
             "engine_version": DIRECTOR_DSP_VERSION,
@@ -755,8 +798,8 @@ def render(
             "path": str(output_path),
             "profile": "director",
             "profile_description": "Director-guided deterministic DSP; no autonomous artistic corrections.",
-            "target_lufs": plan_target.get("lufs") if target_lufs is None else float(target_lufs),
-            "true_peak_target_dbtp": plan_target.get("true_peak_dbtp") if true_peak_dbtp is None else float(true_peak_dbtp),
+            "target_lufs": target_i,
+            "true_peak_target_dbtp": target_tp,
             "created_at": int(time.time()),
             "state": "RENDERED",
             "plan_id": plan["plan_id"],
