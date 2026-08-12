@@ -37,8 +37,38 @@
 ```python
 from pathlib import Path
 import hashlib
+import io
+import wave
+import numpy as np
 
 from runtime import mastering
+
+
+def wav_bytes(seconds: float = 1.0, sr: int = 48000) -> bytes:
+    t = np.arange(int(seconds * sr)) / sr
+    x = (0.2 * np.sin(2 * np.pi * 55 * t)).astype(np.float32)
+    pcm = np.clip(x * 32767.0, -32768, 32767).astype('<i2')
+    stereo = np.column_stack([pcm, pcm]).ravel().tobytes()
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(stereo)
+    return buf.getvalue()
+
+
+def configure_roots(tmp_path, monkeypatch):
+    upload = tmp_path / 'uploads'
+    output = tmp_path / 'outputs'
+    meta = tmp_path / 'meta'
+    shares = tmp_path / 'shares'
+    for path in (upload, output, meta, shares):
+        path.mkdir()
+    monkeypatch.setattr(mastering, 'UPLOAD_ROOT', upload)
+    monkeypatch.setattr(mastering, 'OUTPUT_ROOT', output)
+    monkeypatch.setattr(mastering, 'META_ROOT', meta)
+    monkeypatch.setattr(mastering, 'SHARE_ROOT', shares)
 
 
 def sha256(path: Path) -> str:
@@ -46,16 +76,22 @@ def sha256(path: Path) -> str:
 
 
 def test_render_never_mutates_uploaded_source(tmp_path, monkeypatch):
-    # Use a generated WAV fixture and monkeypatch mastering roots to tmp_path.
-    # Store source, hash it, render, assert exact hash unchanged.
-    ...
+    configure_roots(tmp_path, monkeypatch)
+    stored = mastering.store_upload('fixture.wav', wav_bytes())
+    meta = mastering._read_meta(stored['asset_id'])
+    source = mastering._input_path(meta)
+    before = sha256(source)
+    mastering.render(stored['asset_id'], profile='adaptive', target_lufs=-14.0)
+    assert sha256(source) == before
 
 
 def test_each_render_has_unique_output_id(tmp_path, monkeypatch):
-    ...
+    configure_roots(tmp_path, monkeypatch)
+    stored = mastering.store_upload('fixture.wav', wav_bytes())
+    first = mastering.render(stored['asset_id'], profile='adaptive', target_lufs=-14.0)
+    second = mastering.render(stored['asset_id'], profile='adaptive', target_lufs=-14.0)
+    assert first['output_id'] != second['output_id']
 ```
-
-Replace the ellipses in the actual test with the repository's concrete temporary-root setup and generated WAV helper; do not use checked-in binary fixtures.
 
 - [ ] **Step 2: Write the Ayibobo-class regression test**
 
@@ -191,7 +227,10 @@ def render(
     label: str = "master",
     director_plan_id: str | None = None,
 ) -> dict:
-    ...
+    if profile == "director" and not director_plan_id:
+        raise ValueError("director_plan_id is required for director profile")
+    # Existing legacy adaptive branch remains below this guard.
+    # Director branch resolves the persisted plan and calls render_from_plan().
 ```
 
 Keep legacy `profile="adaptive"` available but mark it legacy in returned metadata. New UI must default to `director`.
@@ -237,15 +276,15 @@ Reuse existing timeline segmentation where possible, but calculate source and ma
 
 ```python
 {
-    "global": {...},
+    "global": {"lufs_delta": 2.8, "true_peak_delta": 1.1, "crest_delta": -0.6},
     "sections": [
         {
             "start": 57.5,
             "end": 74.5,
-            "source": {...},
-            "master": {...},
-            "delta": {...},
-            "flags": [...],
+            "source": {"crest_db": 10.0, "sub_percent": 52.4, "stereo_correlation": 0.92},
+            "master": {"crest_db": 9.6, "sub_percent": 51.9, "stereo_correlation": 0.91},
+            "delta": {"crest_db": -0.4, "sub_percent": -0.5, "stereo_correlation": -0.01},
+            "flags": [],
         }
     ],
 }
@@ -360,7 +399,7 @@ Return both score and reasons, for example:
 {
     "score": 0.87,
     "reasons": ["sub-dominant", "cinematic crescendo", "protected sub_mass"],
-    "prior_decision": {...},
+    "prior_decision": {"protected_traits": ["sub_mass"], "target_lufs": -10.8},
     "verification": "PASS",
     "rico_feedback": "approved",
 }
