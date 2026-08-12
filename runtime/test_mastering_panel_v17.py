@@ -22,7 +22,7 @@ def test_mcp_resource_points_to_v17_and_keeps_v16_legacy():
     assert s.LEGACY_PANEL_URI.endswith('mastering-panel-v16.html')
     rendered=s.mastering_panel_resource()
     assert '__PUBLIC_BASE__' not in rendered
-    assert 'id="workstation"' in rendered
+    assert 'in-chat panel is temporarily disabled' in rendered
 
 
 def test_v17_director_workflow_shows_reasons_bounds_and_revision_controls():
@@ -72,3 +72,19 @@ def test_minimal_diagnostic_widget_contract():
     assert 'notifyIntrinsicHeight' in src
     assert 'ui/notifications/tool-result' in src
     assert 'EIROS WIDGET OK' in src
+
+def test_primary_open_tool_is_data_only_while_panel_disabled():
+    import runtime.mastering_mcp_server as s
+    t=s.mcp._tool_manager._tools['open_mastering_panel']
+    assert t.meta is None
+    result=s.open_mastering_panel()
+    assert result['panel_enabled'] is False
+    assert 'resource_uri' not in result
+
+
+def test_open_panel_tools_have_no_ui_binding_when_cards_disabled():
+    import runtime.mastering_mcp_server as s
+    for name in ('open_mastering_panel','eirosmaster.open_mastering_panel'):
+        t=s.mcp._tool_manager._tools[name]
+        assert t.meta is None
+

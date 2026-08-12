@@ -977,14 +977,14 @@ def mastering_diagnostic_resource() -> str:
 
 @mcp.resource(
     PANEL_URI,
-    name="EIROS Mastering Panel",
+    name="EIROS Mastering Panel Disabled",
     title="EIROS Mastering",
-    description="Interactive upload, analysis, mastering and download panel.",
+    description="Safe placeholder while the in-chat mastering workstation is disabled.",
     mime_type="text/html;profile=mcp-app",
-    meta=PANEL_META,
+    meta={"ui": {"prefersBorder": True}},
 )
 def mastering_panel_resource() -> str:
-    return _panel_v17_html()
+    return """<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>html,body{margin:0;background:#0b0e12;color:#89929d;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif}.box{padding:12px;font-size:13px}</style></head><body><div class=\"box\">EIROS Mastering in-chat panel is temporarily disabled.</div></body></html>"""
 
 
 @mcp.resource(
@@ -1030,23 +1030,18 @@ def open_mastering_diagnostic() -> dict[str, Any]:
 
 @mcp.tool(
     name="open_mastering_panel",
-    title="Open EIROS Mastering",
-    description="Open the interactive EIROS audio mastering panel with browser file upload and WAV download.",
+    title="EIROS Mastering status",
+    description="Return EIROS Mastering status without opening an in-chat UI. The visual panel is temporarily disabled for client stability.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
-    meta={
-        "ui": {"resourceUri": PANEL_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": PANEL_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Mastering…",
-        "openai/toolInvocation/invoked": "EIROS Mastering opened.",
-    },
     structured_output=True,
 )
 def open_mastering_panel() -> dict[str, Any]:
     return {
         "ok": True,
-        "resource_uri": PANEL_URI,
+        "panel_enabled": False,
+        "reason": "in-chat mastering panel temporarily disabled for client stability",
         "panel_version": "2.8.0",
-        "upload_mode": "browser_https",
+        "upload_mode": "connector_binary_or_external_browser",
         "max_upload_mb": mastering_engine.MAX_UPLOAD_BYTES // (1024 * 1024),
     }
 
@@ -1055,15 +1050,9 @@ def open_mastering_panel() -> dict[str, Any]:
 # Keep this alias alongside the canonical MCP tool so reconnects remain compatible.
 @mcp.tool(
     name="eirosmaster.open_mastering_panel",
-    title="Open EIROS Mastering",
-    description="Compatibility alias for the ChatGPT connector namespace.",
+    title="EIROS Mastering status",
+    description="Compatibility alias. Returns status only; the in-chat UI is temporarily disabled.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
-    meta={
-        "ui": {"resourceUri": PANEL_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": PANEL_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS Mastering…",
-        "openai/toolInvocation/invoked": "EIROS Mastering opened.",
-    },
     structured_output=True,
 )
 def open_mastering_panel_connector_alias() -> dict[str, Any]:
