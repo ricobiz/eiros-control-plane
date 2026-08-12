@@ -19,10 +19,12 @@ UPLOAD_ROOT = MASTER_ROOT / "uploads"
 OUTPUT_ROOT = MASTER_ROOT / "outputs"
 META_ROOT = MASTER_ROOT / "meta"
 SHARE_ROOT = MASTER_ROOT / "shares"
+CALIBRATION_ROOT = MASTER_ROOT / "calibration_profiles"
 MAX_UPLOAD_BYTES = 300 * 1024 * 1024
 ALLOWED_SUFFIXES = {".wav", ".wave", ".flac", ".mp3", ".m4a", ".aac", ".aif", ".aiff", ".ogg", ".opus"}
 ID_RE = re.compile(r"^[a-f0-9]{32}$")
 SHARE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{24,80}$")
+CALIBRATION_CODE_RE = re.compile(r"^CAL-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$")
 ANALYSIS_VERSION = 2
 ADAPTIVE_ENGINE_VERSION = "0.3.0-section-aware"
 DIRECTOR_ENGINE_VERSION = "0.4.0-director"
@@ -46,7 +48,7 @@ BAND_CENTERS = {
     "high_6000_12000": 8500.0,
 }
 
-for _path in (UPLOAD_ROOT, OUTPUT_ROOT, META_ROOT, SHARE_ROOT):
+for _path in (UPLOAD_ROOT, OUTPUT_ROOT, META_ROOT, SHARE_ROOT, CALIBRATION_ROOT):
     _path.mkdir(parents=True, exist_ok=True)
 
 
@@ -87,6 +89,66 @@ def _write_meta(data: dict[str, Any]) -> None:
     temp = path.with_suffix(".json.tmp")
     temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temp, path)
+
+
+def _normalize_calibration_code(value: str) -> str:
+    code = str(value or "").strip().upper()
+    if not CALIBRATION_CODE_RE.fullmatch(code):
+        raise ValueError("Invalid calibration profile code")
+    return code
+
+
+def _new_calibration_code() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    for _ in range(20):
+        raw = "".join(secrets.choice(alphabet) for _ in range(12))
+        code = f"CAL-{raw[:4]}-{raw[4:8]}-{raw[8:]}"
+        if not (CALIBRATION_ROOT / f"{code}.json").exists():
+            return code
+    raise RuntimeError("Unable to allocate calibration profile code")
+
+
+def save_calibration_profile(name: str, profile: dict[str, Any], code: str = "") -> dict[str, Any]:
+    if not isinstance(profile, dict):
+        raise ValueError("Calibration profile must be an object")
+    encoded = json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded.encode("utf-8")) > 128 * 1024:
+        raise ValueError("Calibration profile is too large")
+    normalized_name = str(name or "Calibration profile").strip()[:120] or "Calibration profile"
+    profile_code = _normalize_calibration_code(code) if str(code or "").strip() else _new_calibration_code()
+    now = int(time.time())
+    path = CALIBRATION_ROOT / f"{profile_code}.json"
+    created_at = now
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            created_at = int(existing.get("created_at") or now) if isinstance(existing, dict) else now
+        except Exception:
+            created_at = now
+    record = {
+        "schema_version": 1,
+        "code": profile_code,
+        "name": normalized_name,
+        "created_at": created_at,
+        "updated_at": now,
+        "profile": profile,
+    }
+    CALIBRATION_ROOT.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(temp, path)
+    return {"ok": True, **record}
+
+
+def load_calibration_profile(code: str) -> dict[str, Any]:
+    profile_code = _normalize_calibration_code(code)
+    path = CALIBRATION_ROOT / f"{profile_code}.json"
+    if not path.is_file():
+        raise FileNotFoundError("Calibration profile not found")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or not isinstance(record.get("profile"), dict):
+        raise ValueError("Calibration profile is invalid")
+    return {"ok": True, **record}
 
 
 def _input_path(meta: dict[str, Any]) -> Path:

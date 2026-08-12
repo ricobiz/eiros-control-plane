@@ -1533,6 +1533,38 @@ async def api_calibration(request: Request) -> Response:
     )
 
 
+@mcp.custom_route("/api/calibration/profile/save", methods=["POST", "OPTIONS"])
+async def api_calibration_profile_save(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        raw = await request.json()
+        if not isinstance(raw, dict):
+            raise ValueError("JSON object required")
+        name = str(raw.get("name") or "Calibration profile")
+        profile = raw.get("profile")
+        code = str(raw.get("code") or "")
+        return _cors(JSONResponse(mastering_engine.save_calibration_profile(name, profile, code)))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/calibration/profile/load", methods=["POST", "OPTIONS"])
+async def api_calibration_profile_load(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        raw = await request.json()
+        if not isinstance(raw, dict):
+            raise ValueError("JSON object required")
+        code = str(raw.get("code") or "")
+        return _cors(JSONResponse(mastering_engine.load_calibration_profile(code)))
+    except FileNotFoundError as exc:
+        return _json_error(exc, 404)
+    except Exception as exc:
+        return _json_error(exc)
+
+
 @mcp.custom_route("/api/health", methods=["GET", "OPTIONS"])
 async def api_health(request: Request) -> Response:
     if request.method == "OPTIONS":

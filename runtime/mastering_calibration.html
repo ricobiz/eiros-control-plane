@@ -1,252 +1,83 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#07090d">
 <title>E-MASTER CAL</title>
 <style>
-:root{color-scheme:dark;--bg:#07090d;--panel:#0d1118;--panel2:#111824;--text:#eef3f8;--muted:#7d8999;--line:#222c3a;--bad:#ff5d6c;--accent:#7aaaff;--ok:#54dda0}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;min-height:100%;background:radial-gradient(120% 82% at 50% -10%,#15223a 0%,var(--bg) 55%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
-body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 14px max(20px,env(safe-area-inset-bottom));overflow:hidden}
-.shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,25,37,.97),rgba(8,11,17,.97));border-radius:30px;padding:18px 16px 16px;box-shadow:0 24px 90px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.04)}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.brand{font-size:12px;letter-spacing:.18em;font-weight:800}.step{font-size:10px;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px;font-variant-numeric:tabular-nums}.safety{font-size:10px;line-height:1.4;text-align:center;color:#8793a4;margin:7px 10px 13px}
-.stage{position:relative;display:grid;place-items:center;min-height:225px;border-radius:24px;background:radial-gradient(circle at 50% 44%,rgba(81,132,218,.18),transparent 44%),rgba(3,6,10,.46);border:1px solid rgba(255,255,255,.05);overflow:hidden}.ring{position:absolute;width:166px;height:166px;border-radius:50%;border:1px solid rgba(122,170,255,.22);box-shadow:0 0 55px rgba(86,137,222,.08);opacity:.55;transform:scale(.94)}.ring.playing{animation:pulse 1.05s ease-in-out infinite;border-color:rgba(122,170,255,.52);box-shadow:0 0 72px rgba(86,137,222,.18)}@keyframes pulse{50%{transform:scale(1.04);opacity:1}}
-.readout{position:relative;text-align:center}.hz{font-size:54px;font-weight:680;letter-spacing:-.055em;line-height:.92;font-variant-numeric:tabular-nums}.unit{font-size:12px;color:#9ba8b9;margin-top:9px;letter-spacing:.14em}.db{font-size:20px;font-weight:650;margin-top:11px;font-variant-numeric:tabular-nums}.db small{font-size:10px;color:#687588;font-weight:650;letter-spacing:.08em}
-.progress{height:4px;background:#151d29;border-radius:999px;overflow:hidden;margin:12px 5px 0}.fill{height:100%;width:0;background:linear-gradient(90deg,#648ccf,#9ebfff);border-radius:inherit;transition:width .08s linear}.hint{height:28px;display:grid;place-items:center;text-align:center;color:#8c98a8;font-size:10px;margin:5px 0 2px}
-.limit{width:100%;height:82px;border:0;border-radius:22px;background:linear-gradient(180deg,#ff7581,#ef4a5a);box-shadow:0 12px 34px rgba(239,74,90,.16);color:#1a0608;font-size:18px;font-weight:900;letter-spacing:.12em;touch-action:manipulation}.limit:disabled{opacity:.25}.limit:active{transform:scale(.986)}
-.controls{display:grid;grid-template-columns:1.2fr 1fr;gap:9px;margin-top:10px}.ctrl{height:43px;border-radius:14px;border:1px solid var(--line);background:#121925;color:#dce5ef;font-size:12px;font-weight:700}.ctrl.primary{background:#e8eef7;color:#111720;border-color:#e8eef7}.ctrl:active{transform:scale(.985)}
-.results{display:none;margin-top:11px;padding:10px;border:1px solid rgba(84,221,160,.18);background:rgba(84,221,160,.05);border-radius:16px}.results.show{display:block}.resultsTitle{font-size:10px;color:#9fe7c4;margin-bottom:7px;letter-spacing:.08em}.map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.cell{display:flex;justify-content:space-between;gap:7px;padding:5px 7px;border-radius:9px;background:rgba(255,255,255,.035);font-size:9px;color:#8794a5;font-variant-numeric:tabular-nums}.cell b{color:#dfe8f1;font-weight:700}.debug{text-align:center;color:#465163;font-size:9px;margin-top:7px;min-height:11px}
+:root{color-scheme:dark;--bg:#07090d;--panel:#0e141d;--text:#eef4fb;--muted:#7f8b9c;--line:#263244;--accent:#77aaff;--green:#50df9c;--amber:#ffbc57;--red:#ff6170}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;min-height:100%;background:radial-gradient(120% 85% at 50% -12%,#17253d 0,var(--bg) 56%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}body{min-height:100dvh;display:grid;place-items:center;padding:max(14px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom));overflow:auto}.shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,26,39,.98),rgba(8,11,17,.98));border-radius:28px;padding:16px;box-shadow:0 24px 90px rgba(0,0,0,.5)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{font-size:12px;font-weight:850;letter-spacing:.18em}.step{font-size:10px;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px}.safety{text-align:center;color:#9ba8b8;font-size:10px;line-height:1.45;margin:9px 8px 9px}.safety b{color:#f1f5fa}.guide{margin:0 0 10px;border:1px solid var(--line);border-radius:13px;background:#0c121b}.guide summary{cursor:pointer;padding:9px 11px;color:#9da9b8;font-size:9px;font-weight:850;letter-spacing:.1em}.guideBody{padding:0 11px 10px;color:#7f8c9d;font-size:9px;line-height:1.5}.guideBody b{color:#dfe7ef}
+.stage{display:grid;place-items:center;min-height:180px;border:1px solid rgba(255,255,255,.05);border-radius:22px;background:radial-gradient(circle at 50% 44%,rgba(91,142,232,.16),transparent 45%),rgba(3,6,10,.45)}.hz{font-size:58px;line-height:.9;font-weight:700;letter-spacing:-.055em;font-variant-numeric:tabular-nums}.unit{text-align:center;color:#94a2b4;font-size:12px;letter-spacing:.14em;margin-top:10px}.db{text-align:center;font-size:23px;font-weight:700;margin-top:12px;font-variant-numeric:tabular-nums}.db small{font-size:10px;color:#697689}.compare{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.ab{height:48px;border-radius:15px;border:1px solid var(--line);background:#101824;color:#7e8b9d;font-size:13px;font-weight:850;letter-spacing:.08em}.ab.active{color:#f4f8ff;border-color:#4a6a97;background:#17243a;box-shadow:inset 0 0 24px rgba(119,170,255,.1)}.sliderBox{padding:12px 3px 4px}.sliderLabels{display:flex;justify-content:space-between;color:#667487;font-size:9px;margin:0 3px 5px}input[type=range]{width:100%;height:34px;accent-color:#8db7ff}.fine{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:5px}.fine button,.nav button,.transport button,.profileButtons button{height:39px;border:1px solid var(--line);border-radius:13px;background:#121a26;color:#dce5ef;font-size:11px;font-weight:750}.limits{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.limitBtn{height:58px;border:0;border-radius:17px;font-size:11px;font-weight:900;letter-spacing:.06em}.clean{background:linear-gradient(180deg,#ffd17b,#efa83b);color:#1d1203}.distort{background:linear-gradient(180deg,#ff7b87,#ef5362);color:#190608}.marks{min-height:24px;text-align:center;font-size:10px;color:#8996a6;display:grid;place-items:center;margin-top:6px}.nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:5px}.transport{display:grid;grid-template-columns:1.25fr 1fr;gap:8px;margin-top:8px}.transport .primary{background:#e9eff7;color:#101720;border-color:#e9eff7}
+.profile{margin-top:11px;border:1px solid var(--line);border-radius:15px;padding:9px;background:#0b1119}.profileTitle{font-size:9px;color:#8e9bab;letter-spacing:.12em;font-weight:800;margin:0 0 7px}.profileGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.profile input{width:100%;height:36px;border:1px solid var(--line);border-radius:10px;background:#080d14;color:#e8eef6;padding:0 9px;font-size:10px}.profileButtons{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}.profileStatus{min-height:16px;margin-top:6px;text-align:center;color:#6f7d8e;font-size:9px;line-height:1.35;word-break:break-word}.results{margin-top:11px;border:1px solid rgba(80,223,156,.16);background:rgba(80,223,156,.045);border-radius:16px;padding:9px}.title{color:#98e7c2;font-size:9px;letter-spacing:.12em;margin-bottom:7px}.map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.cell{background:rgba(255,255,255,.035);border-radius:9px;padding:6px 7px;font-size:9px;color:#8491a2}.cell .f{display:flex;justify-content:space-between;gap:6px}.cell b{color:#dfe7f0}.cell .sub{margin-top:3px;color:#667486}.debug{text-align:center;color:#485466;font-size:9px;margin-top:7px}
 </style>
 </head>
 <body>
-<main class="shell" aria-label="E-MASTER calibration">
-  <div class="top"><div class="brand">E-MASTER CAL</div><div class="step" id="step">READY</div></div>
-  <div class="safety">Fixed headphone volume. Each bass frequency rises from very low level. Tap LIMIT at the first audible choke/rattle. Stop immediately if uncomfortable.</div>
-  <section class="stage">
-    <div class="ring" id="ring"></div>
-    <div class="readout">
-      <div class="hz" id="hz">20</div><div class="unit">HZ</div>
-      <div class="db" id="db">−50.0 <small>dBFS</small></div>
-    </div>
-  </section>
-  <div class="progress"><div class="fill" id="fill"></div></div>
-  <div class="hint" id="hint">Press START. The level will rise automatically.</div>
-  <button class="limit" id="limit" disabled>LIMIT</button>
-  <div class="controls"><button class="ctrl primary" id="start">START</button><button class="ctrl" id="reset">RESET</button></div>
-  <div class="results" id="results"><div class="resultsTitle">CLEAN OUTPUT MAP</div><div class="map" id="map"></div></div>
+<main class="shell">
+  <div class="top"><div class="brand">E-MASTER CAL</div><div class="step" id="step">1/11</div></div>
+  <div class="safety"><b>Громкость устройства: MAX</b> для этого профиля. После начала калибровки её не меняй. TEST начинаем с низкого цифрового уровня; если неприятно — сразу STOP.</div>
+  <details class="guide" open><summary>КАК ПРОХОДИТЬ</summary><div class="guideBody"><b>1.</b> Подключи нужные наушники и поставь громкость устройства MAX. <b>2.</b> Нажми START. <b>3.</b> Двигай TEST и мгновенно сравнивай с REF. REF — тот же тон на 6 dB тише. <b>4.</b> Если впервые стабильно появляется неоднородность — сохрани CLEAN LIMIT. <b>5.</b> Если появляется явный хрип/развал — DISTORT LIMIT. <b>6.</b> NEXT Hz и повтори.</div></details>
+
+  <section class="stage"><div><div class="hz" id="hz">20</div><div class="unit">HZ</div><div class="db"><span id="db">−18.0</span> <small>dBFS</small></div></div></section>
+  <div class="compare"><button class="ab" id="ref">REF</button><button class="ab active" id="test">TEST</button></div>
+  <div class="sliderBox"><div class="sliderLabels"><span>−40 dB</span><span>0 dBFS</span></div><input id="level" type="range" min="-40" max="0" step="0.1" value="-18" aria-label="Test level"></div>
+  <div class="fine"><button data-step="-1">−1 dB</button><button data-step="1">+1 dB</button><button data-step="-0.2">−0.2</button><button data-step="0.2">+0.2</button></div>
+  <div class="limits"><button class="limitBtn clean" id="clean-limit">CLEAN LIMIT</button><button class="limitBtn distort" id="distort-limit">DISTORT LIMIT</button></div>
+  <div class="marks" id="marks">Подведи TEST к границе, переключая REF ↔ TEST.</div>
+  <div class="nav"><button id="prev">◀ PREV Hz</button><button id="next">NEXT Hz ▶</button></div>
+  <div class="transport"><button class="primary" id="start">START</button><button id="reset">RESET</button></div>
+
+  <section class="profile"><div class="profileTitle">CALIBRATION PROFILE</div><div class="profileGrid"><input id="profile-name" placeholder="Название: AirPods / iPhone"><input id="profile-code" autocapitalize="characters" placeholder="CAL-XXXX-XXXX-XXXX"></div><div class="profileButtons"><button id="save-profile">SAVE PROFILE</button><button id="load-profile">LOAD PROFILE</button></div><div class="profileStatus" id="profile-status">Код позволяет восстановить эту калибровку в другой сессии.</div></section>
+
+  <section class="results"><div class="title">CALIBRATION MAP</div><div class="map" id="map"></div></section>
   <div class="debug" id="debug"></div>
 </main>
 <script>
 (() => {
   'use strict';
+  const testFrequencies=[20,25,31.5,40,50,63,80,100,125,160,200];
+  const cfg={minDb:-40,maxDb:0,startDb:-18,referenceOffsetDb:6,fadeSeconds:0.025};
+  const referenceOffsetDb=cfg.referenceOffsetDb;
+  const frequencyMap=Object.fromEntries(testFrequencies.map(hz=>[String(hz),{hz,cleanLimitDb:null,distortLimitDb:null}]));
+  const state={index:0,testDb:cfg.startDb,mode:'test',playing:false};
+  let audioCtx=null,oscillator=null,gainNode=null;
 
-  const testFrequencies = [20,25,31.5,40,50,63,80,100,125,160,200];
-  const cfg = {
-    startDb: -50,
-    safeCeilingDb: 0,
-    rampDbPerSecond: 3.0,
-    gapMs: 420,
-    fadeMs: 45
-  };
-  const rampDbPerSecond = cfg.rampDbPerSecond;
-  const safeCeilingDb = cfg.safeCeilingDb;
+  const $=id=>document.getElementById(id);
+  const hzEl=$('hz'),dbEl=$('db'),stepEl=$('step'),slider=$('level'),refBtn=$('ref'),testBtn=$('test');
+  const marksEl=$('marks'),mapEl=$('map'),debugEl=$('debug'),startBtn=$('start'),profileNameEl=$('profile-name'),profileCodeEl=$('profile-code'),profileStatusEl=$('profile-status');
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const dbToGain=db=>10**(db/20);
+  const fmtHz=hz=>Number.isInteger(hz)?String(hz):Number(hz).toFixed(1);
+  const fmtDb=db=>db==null?'—':`${Number(db).toFixed(1).replace('-','−')} dB`;
+  const currentHz=()=>testFrequencies[state.index];
+  const activeDb=()=>state.mode==='ref'?clamp(state.testDb-referenceOffsetDb,cfg.minDb,cfg.maxDb):state.testDb;
 
-  const freshState = () => ({
-    running:false,
-    completed:false,
-    index:0,
-    currentHz:testFrequencies[0],
-    currentDb:cfg.startDb,
-    tonePlaying:false,
-    frequencyMap:[],
-    startedAt:0,
-    message:'Press START. The level will rise automatically.'
-  });
+  function renderMap(){mapEl.innerHTML=testFrequencies.map(hz=>{const row=frequencyMap[String(hz)];return `<div class="cell"><div class="f"><span>${fmtHz(hz)} Hz</span><b>${row.cleanLimitDb==null&&row.distortLimitDb==null?'—':'saved'}</b></div><div class="sub">C ${fmtDb(row.cleanLimitDb)} · D ${fmtDb(row.distortLimitDb)}</div></div>`;}).join('');}
+  function render(){hzEl.textContent=fmtHz(currentHz());dbEl.textContent=Number(state.testDb).toFixed(1).replace('-','−');slider.value=String(state.testDb);stepEl.textContent=`${state.index+1}/${testFrequencies.length}`;refBtn.classList.toggle('active',state.mode==='ref');testBtn.classList.toggle('active',state.mode==='test');startBtn.textContent=state.playing?'STOP':'START';const row=frequencyMap[String(currentHz())];marksEl.textContent=`${fmtHz(currentHz())} Hz · CLEAN ${fmtDb(row.cleanLimitDb)} · DISTORT ${fmtDb(row.distortLimitDb)} · ${state.mode.toUpperCase()} ${fmtDb(activeDb())}`;debugEl.textContent=`REF = TEST − ${referenceOffsetDb} dB · full scale limit 0 dBFS`;renderMap();}
 
-  let state = freshState();
-  let audioCtx = null;
-  let oscillator = null;
-  let gainNode = null;
-  let rafId = 0;
-  let ceilingTimer = 0;
-  let nextTimer = 0;
-  let rampStartPerf = 0;
+  async function ensureAudio(){const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)throw new Error('AudioContext unavailable');if(!audioCtx||audioCtx.state==='closed')audioCtx=new Ctx({latencyHint:'interactive'});if(audioCtx.state==='suspended')await audioCtx.resume();}
+  function updateGain(){if(!gainNode||!audioCtx)return;const now=audioCtx.currentTime,target=dbToGain(activeDb());try{gainNode.gain.cancelScheduledValues(now);gainNode.gain.setTargetAtTime(target,now,0.018);}catch{}}
+  function updateFrequency(){if(!oscillator||!audioCtx)return;try{oscillator.frequency.setTargetAtTime(currentHz(),audioCtx.currentTime,0.018);}catch{}}
+  async function start(){if(state.playing){await stop(false);return;}await ensureAudio();const now=audioCtx.currentTime;oscillator=audioCtx.createOscillator();gainNode=audioCtx.createGain();oscillator.type='sine';oscillator.frequency.setValueAtTime(currentHz(),now);gainNode.gain.setValueAtTime(0.00001,now);gainNode.gain.exponentialRampToValueAtTime(Math.max(0.00001,dbToGain(activeDb())),now+cfg.fadeSeconds);oscillator.connect(gainNode);gainNode.connect(audioCtx.destination);oscillator.start(now);state.playing=true;render();}
+  async function stop(dispose=false){if(gainNode&&audioCtx){const now=audioCtx.currentTime;try{gainNode.gain.cancelScheduledValues(now);gainNode.gain.setTargetAtTime(0.00001,now,0.01);}catch{}}if(oscillator&&audioCtx){try{oscillator.stop(audioCtx.currentTime+0.06);}catch{}}oscillator=null;gainNode=null;state.playing=false;if(dispose&&audioCtx){try{await audioCtx.close();}catch{}audioCtx=null;}render();}
+  function setMode(mode){state.mode=mode==='ref'?'ref':'test';updateGain();render();}
+  function setTestLevel(db){state.testDb=clamp(Number(db),cfg.minDb,cfg.maxDb);updateGain();render();}
+  function saveCleanLimit(){frequencyMap[String(currentHz())].cleanLimitDb=state.testDb;render();}
+  function saveDistortLimit(){frequencyMap[String(currentHz())].distortLimitDb=state.testDb;render();}
+  function moveFrequency(delta){state.index=clamp(state.index+delta,0,testFrequencies.length-1);state.testDb=cfg.startDb;state.mode='test';updateFrequency();updateGain();render();}
+  async function reset(){await stop(true);for(const hz of testFrequencies){frequencyMap[String(hz)].cleanLimitDb=null;frequencyMap[String(hz)].distortLimitDb=null;}state.index=0;state.testDb=cfg.startDb;state.mode='test';render();}
 
-  const el = id => document.getElementById(id);
-  const hzEl=el('hz'),dbEl=el('db'),stepEl=el('step'),ringEl=el('ring'),fillEl=el('fill');
-  const hintEl=el('hint'),limitEl=el('limit'),startEl=el('start'),resetEl=el('reset');
-  const resultsEl=el('results'),mapEl=el('map'),debugEl=el('debug');
+  const profileSavePath='./calibration/profile/save';
+  const profileLoadPath='./calibration/profile/load';
+  function profilePayload(){return {schema_version:1,hardware_volume:'max',reference_offset_db:referenceOffsetDb,test_frequencies:[...testFrequencies],frequency_map:JSON.parse(JSON.stringify(frequencyMap)),method:'manual-ref-test-v1'};}
+  function profileUrl(action){return new URL(action==='save'?profileSavePath:profileLoadPath,window.location.href).toString();}
+  async function saveProfile(){profileStatusEl.textContent='Сохраняю…';const body={name:profileNameEl.value.trim()||'Calibration profile',code:profileCodeEl.value.trim(),profile:profilePayload()};const response=await fetch(profileUrl('save'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'Save failed');profileNameEl.value=data.name||body.name;profileCodeEl.value=data.code||'';profileStatusEl.textContent=`Сохранено: ${data.code}. Для применения выставь громкость устройства MAX.`;}
+  async function loadProfile(){const code=profileCodeEl.value.trim();if(!code)throw new Error('Введи код профиля');profileStatusEl.textContent='Загружаю…';const response=await fetch(profileUrl('load'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'Load failed');const profile=data.profile||{};const incoming=profile.frequency_map||{};const nullableNumber=value=>value===null||value===undefined||value===''?null:(Number.isFinite(Number(value))?Number(value):null);for(const hz of testFrequencies){const row=incoming[String(hz)]||{};frequencyMap[String(hz)].cleanLimitDb=nullableNumber(row.cleanLimitDb);frequencyMap[String(hz)].distortLimitDb=nullableNumber(row.distortLimitDb);}profileNameEl.value=data.name||'';profileCodeEl.value=data.code||code.toUpperCase();state.index=0;state.testDb=cfg.startDb;state.mode='test';updateFrequency();updateGain();render();profileStatusEl.textContent=`Профиль загружен. Условие: громкость устройства MAX. ${data.code}`;}
 
-  const dbToGain = db => 10 ** (db/20);
-  const fmtHz = hz => Number.isInteger(hz) ? String(hz) : Number(hz).toFixed(1);
-  const fmtDb = db => `${Number(db).toFixed(1).replace('-', '−')} dB`;
-  const rampDurationSeconds = () => (cfg.safeCeilingDb-cfg.startDb)/cfg.rampDbPerSecond;
+  slider.addEventListener('input',()=>setTestLevel(slider.value));document.querySelectorAll('[data-step]').forEach(btn=>btn.addEventListener('click',()=>setTestLevel(state.testDb+Number(btn.dataset.step))));refBtn.addEventListener('click',()=>setMode('ref'));testBtn.addEventListener('click',()=>setMode('test'));$('clean-limit').addEventListener('click',saveCleanLimit);$('distort-limit').addEventListener('click',saveDistortLimit);$('prev').addEventListener('click',()=>moveFrequency(-1));$('next').addEventListener('click',()=>moveFrequency(1));startBtn.addEventListener('click',()=>start().catch(err=>{marksEl.textContent=String(err&&err.message||err);}));$('reset').addEventListener('click',reset);$('save-profile').addEventListener('click',()=>saveProfile().catch(err=>{profileStatusEl.textContent=String(err&&err.message||err);}));$('load-profile').addEventListener('click',()=>loadProfile().catch(err=>{profileStatusEl.textContent=String(err&&err.message||err);}));document.addEventListener('visibilitychange',()=>{if(document.hidden)stop(true);});window.addEventListener('pagehide',()=>{stop(true);});
 
-  function currentDbFromClock(){
-    if(!state.tonePlaying || !rampStartPerf) return state.currentDb;
-    const elapsed = Math.max(0,(performance.now()-rampStartPerf)/1000);
-    return Math.min(cfg.safeCeilingDb,cfg.startDb + elapsed*cfg.rampDbPerSecond);
-  }
-
-  function renderMap(){
-    if(!state.frequencyMap.length){resultsEl.classList.remove('show');mapEl.innerHTML='';return;}
-    resultsEl.classList.add('show');
-    mapEl.innerHTML = state.frequencyMap.map(row => {
-      const value = row.status === 'limit' ? fmtDb(row.limitDb) : `≥ ${fmtDb(row.cleanThroughDb)}`;
-      return `<div class="cell"><span>${fmtHz(row.hz)} Hz</span><b>${value}</b></div>`;
-    }).join('');
-  }
-
-  function render(){
-    state.currentDb = currentDbFromClock();
-    hzEl.textContent=fmtHz(state.currentHz);
-    dbEl.innerHTML=`${Number(state.currentDb).toFixed(1).replace('-', '−')} <small>dBFS</small>`;
-    const p=Math.max(0,Math.min(1,(state.currentDb-cfg.startDb)/(cfg.safeCeilingDb-cfg.startDb)));
-    fillEl.style.width=`${(p*100).toFixed(1)}%`;
-    ringEl.classList.toggle('playing',state.tonePlaying);
-    limitEl.disabled=!state.running || !state.tonePlaying || state.completed;
-    startEl.textContent=state.running?'STOP':(state.completed?'DONE':'START');
-    stepEl.textContent=state.completed?'DONE':`${Math.min(state.index+1,testFrequencies.length)}/${testFrequencies.length}`;
-    hintEl.textContent=state.message;
-    debugEl.textContent=`${state.frequencyMap.length}/${testFrequencies.length} captured · ceiling ${safeCeilingDb} dBFS`;
-    renderMap();
-  }
-
-  function clearTimers(){
-    if(rafId){cancelAnimationFrame(rafId);rafId=0;}
-    if(ceilingTimer){clearTimeout(ceilingTimer);ceilingTimer=0;}
-    if(nextTimer){clearTimeout(nextTimer);nextTimer=0;}
-  }
-
-  function stopTone(){
-    if(rafId){cancelAnimationFrame(rafId);rafId=0;}
-    if(ceilingTimer){clearTimeout(ceilingTimer);ceilingTimer=0;}
-    if(gainNode && audioCtx){
-      const now=audioCtx.currentTime;
-      try{
-        gainNode.gain.cancelScheduledValues(now);
-        gainNode.gain.setValueAtTime(Math.max(gainNode.gain.value,0.00001),now);
-        gainNode.gain.exponentialRampToValueAtTime(0.00001,now+cfg.fadeMs/1000);
-      }catch{}
-    }
-    if(oscillator && audioCtx){try{oscillator.stop(audioCtx.currentTime+cfg.fadeMs/1000+0.01);}catch{}}
-    oscillator=null;gainNode=null;rampStartPerf=0;state.tonePlaying=false;
-  }
-
-  async function ensureAudio(){
-    const AudioContextCtor=window.AudioContext||window.webkitAudioContext;
-    if(!AudioContextCtor) throw new Error('AudioContext unavailable');
-    if(!audioCtx || audioCtx.state==='closed') audioCtx=new AudioContextCtor({latencyHint:'interactive'});
-    if(audioCtx.state==='suspended') await audioCtx.resume();
-  }
-
-  function animate(){
-    if(!state.tonePlaying) return;
-    state.currentDb=currentDbFromClock();
-    render();
-    rafId=requestAnimationFrame(animate);
-  }
-
-  async function playFrequency(){
-    if(!state.running || state.completed) return;
-    await ensureAudio();
-    stopTone();
-    state.currentHz=testFrequencies[state.index];
-    state.currentDb=cfg.startDb;
-    state.message='Level rising… tap LIMIT at the first audible degradation.';
-
-    const now=audioCtx.currentTime;
-    const duration=rampDurationSeconds();
-    const osc=audioCtx.createOscillator();
-    const gain=audioCtx.createGain();
-    osc.type='sine';
-    osc.frequency.setValueAtTime(state.currentHz,now);
-    gain.gain.setValueAtTime(dbToGain(cfg.startDb),now);
-    gain.gain.exponentialRampToValueAtTime(dbToGain(cfg.safeCeilingDb),now+duration);
-    osc.connect(gain);gain.connect(audioCtx.destination);
-    oscillator=osc;gainNode=gain;
-    state.tonePlaying=true;
-    rampStartPerf=performance.now();
-    render();
-    osc.start(now);
-    rafId=requestAnimationFrame(animate);
-    ceilingTimer=window.setTimeout(()=>captureCeiling(),Math.ceil(duration*1000)+60);
-  }
-
-  function captureCeiling(){
-    if(!state.running || !state.tonePlaying || state.completed) return;
-    state.currentDb=cfg.safeCeilingDb;
-    state.frequencyMap.push({hz:state.currentHz,status:'clean-ceiling',cleanThroughDb:cfg.safeCeilingDb,at:Date.now()});
-    stopTone();
-    state.message=`${fmtHz(state.currentHz)} Hz stayed clean through the safe ceiling.`;
-    advance();
-  }
-
-  function captureLimit(){
-    if(!state.running || !state.tonePlaying || state.completed) return;
-    state.currentDb=currentDbFromClock();
-    const captured=Math.max(cfg.startDb,Math.min(cfg.safeCeilingDb,state.currentDb));
-    state.frequencyMap.push({hz:state.currentHz,status:'limit',limitDb:captured,at:Date.now()});
-    stopTone();
-    state.message=`Limit captured: ${fmtHz(state.currentHz)} Hz @ ${fmtDb(captured)}.`;
-    advance();
-  }
-
-  function advance(){
-    state.index+=1;
-    if(state.index>=testFrequencies.length){
-      state.running=false;state.completed=true;state.tonePlaying=false;
-      state.message='Bass capability map complete.';
-      render();return;
-    }
-    state.currentHz=testFrequencies[state.index];
-    state.currentDb=cfg.startDb;
-    render();
-    nextTimer=window.setTimeout(()=>{nextTimer=0;playFrequency().catch(handleError);},cfg.gapMs);
-  }
-
-  function handleError(err){
-    stopTone();state.running=false;state.message=String(err&&err.message||err);render();
-  }
-
-  async function start(){
-    if(state.completed) return;
-    if(state.running){await stop(false);return;}
-    try{
-      await ensureAudio();
-      state.running=true;state.message='Starting…';render();
-      await playFrequency();
-    }catch(err){handleError(err);}
-  }
-
-  async function stop(dispose=false){
-    clearTimers();stopTone();state.running=false;state.message='Stopped.';
-    if(dispose && audioCtx){try{await audioCtx.close();}catch{}audioCtx=null;}
-    render();
-  }
-
-  async function reset(){
-    await stop(true);state=freshState();render();
-  }
-
-  startEl.addEventListener('click',start);
-  resetEl.addEventListener('click',reset);
-  limitEl.addEventListener('click',captureLimit);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden) stop(true);});
-  window.addEventListener('pagehide',()=>{stop(true);});
-
-  window.EMasterCalibration={
-    start,
-    stop,
-    reset,
-    captureLimit,
-    testFrequencies:[...testFrequencies],
-    snapshot:()=>JSON.parse(JSON.stringify(state))
-  };
-
-  render();
+  window.EMasterCalibration={start,stop,reset,setTestLevel,setMode,saveCleanLimit,saveDistortLimit,saveProfile,loadProfile,frequencyMap,testFrequencies:[...testFrequencies],snapshot:()=>JSON.parse(JSON.stringify({state,frequencyMap}))};render();
 })();
 </script>
 </body>
