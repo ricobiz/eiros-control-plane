@@ -66,3 +66,12 @@ def test_mic_loop_page_contract():
         "pagehide",
     ]:
         assert token in text
+
+
+def test_mic_loop_baseline_level_is_user_adjustable():
+    text = Path("runtime/mastering_mic_loop.html").read_text(encoding="utf-8")
+    assert 'id="baseline-level"' in text
+    assert 'id="baseline-db"' in text
+    assert 'value="-9"' in text
+    assert "Number(baselineLevel.value)" in text
+    assert "cfg.baselineDb" not in text

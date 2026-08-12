@@ -30,7 +30,9 @@
 
   <section class="card">
     <div class="title">3 · BACKGROUND + REPEATABILITY</div>
-    <div class="steps">
+    <div class="meter"><input id="baseline-level" type="range" min="-18" max="-3" step="0.5" value="-9"><div class="db"><span id="baseline-db">−9.0</span> dB</div></div>
+    <div class="small">BASELINE A и B всегда записываются на одном выбранном уровне. Выставь уверенно слышимый, но заведомо чистый уровень.</div>
+    <div class="steps" style="margin-top:8px">
       <button id="background">BACKGROUND 5s</button>
       <button id="baseline-a">BASELINE A</button>
       <button id="baseline-b">BASELINE B</button>
@@ -41,8 +43,8 @@
 
   <section class="card">
     <div class="title">4 · STRESS</div>
-    <div class="meter"><input id="stress-level" type="range" min="-18" max="0" step="0.5" value="-12"><div class="db"><span id="stress-db">−12.0</span> dB</div></div>
-    <div class="small">BASELINE всегда −18 dB. STRESS меняет только цифровой GainNode; сам master-файл не меняется.</div>
+    <div class="meter"><input id="stress-level" type="range" min="-18" max="0" step="0.5" value="-6"><div class="db"><span id="stress-db">−6.0</span> dB</div></div>
+    <div class="small">STRESS ставь выше BASELINE. Он меняет только цифровой GainNode; сам master-файл не меняется.</div>
     <div class="steps" style="margin-top:8px"><button class="wide primary" id="stress">RECORD STRESS 20s</button><button class="wide" id="analyze">ANALYZE MIC LOOP</button></div>
     <div class="status" id="stress-status">После STRESS движок выровняет общий уровень записи и будет искать изменение формы спектра сильнее собственного разброса BASELINE.</div>
   </section>
@@ -62,9 +64,9 @@
 (() => {
   'use strict';
   const API=location.pathname.split('/api/')[0]+'/api';
-  const cfg={clipStart:92.5,clipDuration:20,backgroundDuration:5,baselineDb:-18};
+  const cfg={clipStart:92.5,clipDuration:20,backgroundDuration:5};
   const $=id=>document.getElementById(id);
-  const masterEl=$('master'),micEl=$('mic'),audio=$('audio'),stressLevel=$('stress-level');
+  const masterEl=$('master'),micEl=$('mic'),audio=$('audio'),baselineLevel=$('baseline-level'),stressLevel=$('stress-level');
   const blobs={background:null,baseline_a:null,baseline_b:null,stress:null};
   let micStream=null,audioCtx=null,mediaSource=null,gainNode=null,busy=false;
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -98,7 +100,7 @@
   }
   async function countdown(id,label){for(let n=3;n>0;n--){setStatus(id,`${label}: ${n}…`,'warn');await sleep(1000);}}
   function recordFor(ms){return new Promise((resolve,reject)=>{if(!micStream) return reject(new Error('Сначала MIC'));const mime=chooseMime();let rec;try{rec=mime?new MediaRecorder(micStream,{mimeType:mime}):new MediaRecorder(micStream);}catch(e){return reject(e);}const chunks=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};rec.onerror=e=>reject(e.error||e);rec.onstop=()=>resolve(new Blob(chunks,{type:rec.mimeType||mime||'application/octet-stream'}));rec.start(250);setTimeout(()=>{if(rec.state!=='inactive')rec.stop();},ms);});}
-  async function capture(kind,withMusic=false,db=cfg.baselineDb){
+  async function capture(kind,withMusic=false,db=-9){
     if(busy)return;setBusy(true);const statusId=kind==='stress'?'stress-status':'base-status';try{await ensureMic(micEl.value||'');await countdown(statusId,kind.toUpperCase());let recording;if(withMusic){const p=recordFor(cfg.clipDuration*1000+450);await sleep(200);await playExcerpt(db);recording=await p;stopPlayback();}else{recording=await recordFor(cfg.backgroundDuration*1000);}blobs[kind]=recording;setStatus(statusId,`${kind.toUpperCase()} записан · ${(recording.size/1024).toFixed(0)} KB`,'good');}catch(e){stopPlayback();setStatus(statusId,String(e?.message||e),'bad');}finally{setBusy(false);}}
   function addBlob(fd,key,blob){if(!blob)throw new Error('Нет записи '+key);const ext=recordingExt(blob.type);fd.append(key,blob,key+'.'+ext);}
   async function sendAnalysis(includeStress){const fd=new FormData();addBlob(fd,'background',blobs.background);addBlob(fd,'baseline_a',blobs.baseline_a);addBlob(fd,'baseline_b',blobs.baseline_b);if(includeStress)addBlob(fd,'stress',blobs.stress);const r=await fetch(API+'/calibration/mic-loop/analyze',{method:'POST',body:fd});const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'analysis failed');return data.report;}
@@ -108,8 +110,8 @@
   async function dispose(){stopPlayback();if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}if(audioCtx){try{await audioCtx.close();}catch{}audioCtx=null;mediaSource=null;gainNode=null;}}
   $('reload').addEventListener('click',()=>loadMasters().catch(e=>setStatus('base-status',String(e),'bad')));masterEl.addEventListener('change',()=>loadAudio().catch(()=>{}));
   $('mic-permission').addEventListener('click',()=>ensureMic(micEl.value||'').catch(e=>setStatus('mic-status',String(e?.message||e),'bad')));micEl.addEventListener('change',()=>ensureMic(micEl.value).catch(e=>setStatus('mic-status',String(e?.message||e),'bad')));
-  $('background').addEventListener('click',()=>capture('background',false));$('baseline-a').addEventListener('click',()=>capture('baseline_a',true,cfg.baselineDb));$('baseline-b').addEventListener('click',()=>capture('baseline_b',true,cfg.baselineDb));$('seal').addEventListener('click',checkSeal);$('stress').addEventListener('click',()=>capture('stress',true,Number(stressLevel.value)));$('analyze').addEventListener('click',analyze);
-  stressLevel.addEventListener('input',()=>{$('stress-db').textContent=fmtDb(stressLevel.value);});
+  $('background').addEventListener('click',()=>capture('background',false));$('baseline-a').addEventListener('click',()=>capture('baseline_a',true,Number(baselineLevel.value)));$('baseline-b').addEventListener('click',()=>capture('baseline_b',true,Number(baselineLevel.value)));$('seal').addEventListener('click',checkSeal);$('stress').addEventListener('click',()=>capture('stress',true,Number(stressLevel.value)));$('analyze').addEventListener('click',analyze);
+  baselineLevel.addEventListener('input',()=>{$('baseline-db').textContent=fmtDb(baselineLevel.value);});stressLevel.addEventListener('input',()=>{$('stress-db').textContent=fmtDb(stressLevel.value);});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)dispose();});window.addEventListener('pagehide',dispose);
   loadMasters().catch(e=>setStatus('base-status',String(e?.message||e),'bad'));
 })();
