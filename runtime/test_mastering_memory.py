@@ -84,3 +84,27 @@ def test_mastering_wrapper_returns_advisory_hits_without_rendering(tmp_path, mon
     hits=mastering.experience_similar(asset,['ritual','cinematic'],['sub_mass'],3)
     assert hits['matches'][0]['score']>0.8
     assert meta['outputs']==[]
+
+
+def test_record_feedback_persists_contextual_experience(tmp_path, monkeypatch):
+    from runtime import mastering
+    import wave, io, numpy as np
+    for name in ('uploads','outputs','meta','shares'):
+        (tmp_path/name).mkdir(exist_ok=True)
+    monkeypatch.setattr(mastering,'UPLOAD_ROOT',tmp_path/'uploads')
+    monkeypatch.setattr(mastering,'OUTPUT_ROOT',tmp_path/'outputs')
+    monkeypatch.setattr(mastering,'META_ROOT',tmp_path/'meta')
+    monkeypatch.setattr(mastering,'SHARE_ROOT',tmp_path/'shares')
+    monkeypatch.setattr(mm,'MEMORY_PATH',tmp_path/'memory.jsonl')
+    sr=48000; t=np.arange(sr//4)/sr; x=(.2*np.sin(2*np.pi*48*t)*32767).astype('<i2')
+    buf=io.BytesIO()
+    with wave.open(buf,'wb') as wf:
+        wf.setnchannels(2); wf.setsampwidth(2); wf.setframerate(sr); wf.writeframes(np.column_stack([x,x]).ravel().tobytes())
+    stored=mastering.store_upload('x.wav',buf.getvalue())
+    mastering.analyze(stored['asset_id'])
+    plan=mastering.save_director_plan(stored['asset_id'],{'intent':'ritual cinematic','protected_traits':['sub_mass'],'target':{},'sections':[{'start':0.0,'end':.25,'actions':[]}]})
+    out=mastering.render(stored['asset_id'],profile='director',director_plan_id=plan['plan_id'])['output']
+    mastering.verify_output(stored['asset_id'],out['output_id'])
+    rec=mastering.record_feedback(stored['asset_id'],out['output_id'],'approved',['ritual','cinematic'])
+    assert rec['experience']['rico_feedback']=='approved'
+    assert rec['experience']['fingerprint']['protected_traits']==['sub_mass']

@@ -13,3 +13,5 @@ asyncio
 structlog
 prometheus-client
 playwright
+
+mcp==1.28.1

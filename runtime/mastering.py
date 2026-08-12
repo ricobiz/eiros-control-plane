@@ -25,6 +25,7 @@ ID_RE = re.compile(r"^[a-f0-9]{32}$")
 SHARE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{24,80}$")
 ANALYSIS_VERSION = 2
 ADAPTIVE_ENGINE_VERSION = "0.3.0-section-aware"
+DIRECTOR_ENGINE_VERSION = "0.4.0-director"
 CLEAN_EXPORT_VERSION = 2
 PREVIEW_EXPORT_VERSION = 1
 TIMELINE_HOP_SECONDS = 1.0
@@ -914,6 +915,39 @@ def approve_output(asset_id: str, output_id: str) -> dict[str, Any]:
     item["approved_at"] = int(time.time())
     _write_meta(meta)
     return {"ok": True, "asset_id": meta["asset_id"], "output": _safe_output_item(item)}
+
+
+def record_feedback(asset_id: str, output_id: str, rico_feedback: str, intent_tags: list[str] | None = None) -> dict[str, Any]:
+    from runtime.mastering_memory import build_experience_fingerprint, record_experience
+    meta = _read_meta(asset_id)
+    item = _find_output(meta, output_id)
+    plan_id = str(item.get("plan_id") or "")
+    if not plan_id:
+        raise ValueError("feedback requires a Director-plan render")
+    plan = get_director_plan(asset_id, plan_id)
+    analysis = meta.get("analysis")
+    if not isinstance(analysis, dict):
+        analysis = analyze(asset_id)["analysis"]
+    fingerprint = build_experience_fingerprint(analysis, intent_tags, plan.get("protected_traits") or [])
+    experience = record_experience({
+        "asset_id": meta["asset_id"],
+        "output_id": item["output_id"],
+        "fingerprint": fingerprint,
+        "artistic_intent": plan.get("intent"),
+        "plan_summary": {
+            "plan_id": plan.get("plan_id"),
+            "protected_traits": plan.get("protected_traits") or [],
+            "target": plan.get("target") or {},
+            "action_types": [a.get("type") for sec in plan.get("sections") or [] for a in sec.get("actions") or []],
+        },
+        "verification": (item.get("verification") or {}).get("status"),
+        "rico_feedback": str(rico_feedback),
+        "approval_state": item.get("state"),
+    })
+    item["rico_feedback"] = str(rico_feedback)
+    item["experience_record_id"] = experience["record_id"]
+    _write_meta(meta)
+    return {"ok": True, "asset_id": meta["asset_id"], "output_id": item["output_id"], "experience": experience}
 
 def _safe_share(entry: dict[str, Any]) -> dict[str, Any]:
     return {

@@ -1016,6 +1016,8 @@ def mastering_health() -> dict[str, Any]:
         "service": "eiros-mastering-mcp",
         "server_version": __version__,
         "engine_version": mastering_engine.ADAPTIVE_ENGINE_VERSION,
+        "director_engine_version": mastering_engine.DIRECTOR_ENGINE_VERSION,
+        "verification_schema_version": 1,
         "analysis_version": mastering_engine.ANALYSIS_VERSION,
         "clean_export_version": mastering_engine.CLEAN_EXPORT_VERSION,
         "preview_export_version": mastering_engine.PREVIEW_EXPORT_VERSION,
@@ -1064,6 +1066,94 @@ def mastering_render(
     label: str = "spotify",
 ) -> dict[str, Any]:
     return mastering_engine.render(asset_id, profile, target_lufs, true_peak_dbtp, label)
+
+
+@mcp.tool(
+    name="mastering_plan_create",
+    title="Create Director mastering plan",
+    description="Persist a Director-authored mastering plan. The plan is authoritative; the DSP engine may not invent artistic corrections.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    structured_output=True,
+)
+def mastering_plan_create(asset_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+    return {"ok": True, "asset_id": asset_id, "plan": mastering_engine.save_director_plan(asset_id, plan)}
+
+
+@mcp.tool(
+    name="mastering_plan_get",
+    title="Get Director mastering plan",
+    description="Read one persisted Director mastering plan without changing audio.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_plan_get(asset_id: str, plan_id: str) -> dict[str, Any]:
+    return {"ok": True, "asset_id": asset_id, "plan": mastering_engine.get_director_plan(asset_id, plan_id)}
+
+
+@mcp.tool(
+    name="mastering_render_directed",
+    title="Render Director master",
+    description="Execute only the supplied Director plan using deterministic DSP. Verification is mandatory before approval.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    structured_output=True,
+)
+def mastering_render_directed(asset_id: str, plan_id: str, label: str = "master") -> dict[str, Any]:
+    return mastering_engine.render(asset_id, profile="director", label=label, director_plan_id=plan_id)
+
+
+@mcp.tool(
+    name="mastering_verify",
+    title="Verify rendered master",
+    description="Run mandatory source/master delta analysis and post-master QA before approval.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_verify(asset_id: str, output_id: str) -> dict[str, Any]:
+    return mastering_engine.verify_output(asset_id, output_id)
+
+
+@mcp.tool(
+    name="mastering_approve",
+    title="Approve verified master",
+    description="Mark a master APPROVED only when its latest verification status is PASS.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_approve(asset_id: str, output_id: str) -> dict[str, Any]:
+    return mastering_engine.approve_output(asset_id, output_id)
+
+
+@mcp.tool(
+    name="mastering_metadata_audit",
+    title="Audit audio metadata",
+    description="Inspect structural metadata, optional tags, embedded art, chapters and encoder-identifying fields without changing audio.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_metadata_audit(asset_id: str) -> dict[str, Any]:
+    return mastering_engine.audit_asset_metadata(asset_id)
+
+
+@mcp.tool(
+    name="mastering_experience_similar",
+    title="Find similar mastering experience",
+    description="Return advisory prior mastering experiences. Memory never executes DSP or mutates the Director plan.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_experience_similar(asset_id: str, intent_tags: list[str] | None = None, protected_traits: list[str] | None = None, limit: int = 5) -> dict[str, Any]:
+    return mastering_engine.experience_similar(asset_id, intent_tags, protected_traits, limit)
+
+
+@mcp.tool(
+    name="mastering_feedback_record",
+    title="Record mastering feedback",
+    description="Persist Rico feedback together with source features, Director decisions and verification outcome for future advisory retrieval.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    structured_output=True,
+)
+def mastering_feedback_record(asset_id: str, output_id: str, feedback: str, intent_tags: list[str] | None = None) -> dict[str, Any]:
+    return mastering_engine.record_feedback(asset_id, output_id, feedback, intent_tags)
 
 
 @mcp.tool(
@@ -1277,6 +1367,78 @@ def mastering_share_revoke_connector_alias(token: str) -> dict[str, Any]:
     return mastering_share_revoke(token)
 
 
+@mcp.tool(
+    name="eirosmaster.mastering_plan_create", title="Create Director mastering plan",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False), structured_output=True,
+)
+def mastering_plan_create_connector_alias(asset_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+    return mastering_plan_create(asset_id, plan)
+
+
+@mcp.tool(
+    name="eirosmaster.mastering_plan_get", title="Get Director mastering plan",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True), structured_output=True,
+)
+def mastering_plan_get_connector_alias(asset_id: str, plan_id: str) -> dict[str, Any]:
+    return mastering_plan_get(asset_id, plan_id)
+
+
+@mcp.tool(
+    name="eirosmaster.mastering_render_directed", title="Render Director master",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False), structured_output=True,
+)
+def mastering_render_directed_connector_alias(asset_id: str, plan_id: str, label: str = "master") -> dict[str, Any]:
+    return mastering_render_directed(asset_id, plan_id, label)
+
+
+@mcp.tool(
+    name="eirosmaster.mastering_verify", title="Verify rendered master",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True), structured_output=True,
+)
+def mastering_verify_connector_alias(asset_id: str, output_id: str) -> dict[str, Any]:
+    return mastering_verify(asset_id, output_id)
+
+
+@mcp.tool(
+    name="eirosmaster.mastering_approve", title="Approve verified master",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True), structured_output=True,
+)
+def mastering_approve_connector_alias(asset_id: str, output_id: str) -> dict[str, Any]:
+    return mastering_approve(asset_id, output_id)
+
+
+@mcp.tool(
+    name="eirosmaster.mastering_metadata_audit", title="Audit audio metadata",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True), structured_output=True,
+)
+def mastering_metadata_audit_connector_alias(asset_id: str) -> dict[str, Any]:
+    return mastering_metadata_audit(asset_id)
+
+
+@mcp.tool(
+    name="eirosmaster.mastering_experience_similar", title="Find similar mastering experience",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True), structured_output=True,
+)
+def mastering_experience_similar_connector_alias(asset_id: str, intent_tags: list[str] | None = None, protected_traits: list[str] | None = None, limit: int = 5) -> dict[str, Any]:
+    return mastering_experience_similar(asset_id, intent_tags, protected_traits, limit)
+
+
+@mcp.tool(
+    name="eirosmaster.mastering_feedback_record", title="Record mastering feedback",
+    description="Compatibility alias for the ChatGPT connector namespace.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False), structured_output=True,
+)
+def mastering_feedback_record_connector_alias(asset_id: str, output_id: str, feedback: str, intent_tags: list[str] | None = None) -> dict[str, Any]:
+    return mastering_feedback_record(asset_id, output_id, feedback, intent_tags)
+
+
 def _download_response(resolved: dict[str, Any], inline: bool = False) -> FileResponse:
     response = FileResponse(
         path=str(resolved["path"]),
@@ -1402,6 +1564,100 @@ async def api_render(request: Request) -> Response:
             str(body.get("label") or "spotify"),
         )
         return _cors(JSONResponse(result))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/plan/create", methods=["POST", "OPTIONS"])
+async def api_plan_create(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_plan_create(str(body.get("asset_id") or ""), dict(body.get("plan") or {}))))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/plan/get", methods=["POST", "OPTIONS"])
+async def api_plan_get(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_plan_get(str(body.get("asset_id") or ""), str(body.get("plan_id") or ""))))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/render-directed", methods=["POST", "OPTIONS"])
+async def api_render_directed(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_render_directed(str(body.get("asset_id") or ""), str(body.get("plan_id") or ""), str(body.get("label") or "master"))))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/verify", methods=["POST", "OPTIONS"])
+async def api_verify(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_verify(str(body.get("asset_id") or ""), str(body.get("output_id") or ""))))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/approve", methods=["POST", "OPTIONS"])
+async def api_approve(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_approve(str(body.get("asset_id") or ""), str(body.get("output_id") or ""))))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/metadata-audit", methods=["POST", "OPTIONS"])
+async def api_metadata_audit(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_metadata_audit(str(body.get("asset_id") or ""))))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/experience-similar", methods=["POST", "OPTIONS"])
+async def api_experience_similar(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_experience_similar(
+            str(body.get("asset_id") or ""), list(body.get("intent_tags") or []),
+            list(body.get("protected_traits") or []), int(body.get("limit", 5)),
+        )))
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@mcp.custom_route("/api/feedback", methods=["POST", "OPTIONS"])
+async def api_feedback_record(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        body = await _read_json(request)
+        return _cors(JSONResponse(mastering_feedback_record(
+            str(body.get("asset_id") or ""), str(body.get("output_id") or ""),
+            str(body.get("feedback") or ""), list(body.get("intent_tags") or []),
+        )))
     except Exception as exc:
         return _json_error(exc)
 
