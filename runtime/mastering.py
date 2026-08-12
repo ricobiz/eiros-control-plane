@@ -857,6 +857,44 @@ def _find_output(meta: dict[str, Any], output_id: str) -> dict[str, Any]:
     raise FileNotFoundError(f"Unknown output: {output_id}")
 
 
+def verify_output(asset_id: str, output_id: str) -> dict[str, Any]:
+    from runtime.mastering_verify import verify_master
+    meta = _read_meta(asset_id)
+    item = _find_output(meta, output_id)
+    plan_id = str(item.get("plan_id") or "")
+    if not plan_id:
+        raise ValueError("verification requires a Director-plan render")
+    plan = get_director_plan(asset_id, plan_id)
+    source = _input_path(meta)
+    master_path = Path(str(item.get("path") or ""))
+    if not master_path.is_file():
+        raise FileNotFoundError("rendered master is missing")
+    item["state"] = "VERIFYING"
+    _write_meta(meta)
+    verification = verify_master(source, master_path, plan)
+    item["verification"] = verification
+    item["verified_at"] = int(time.time())
+    if verification["status"] == "PASS":
+        item["state"] = "VERIFIED"
+    elif verification["status"] == "REVIEW":
+        item["state"] = "REVIEW"
+    else:
+        item["state"] = "REJECTED"
+    _write_meta(meta)
+    return {"ok": True, "asset_id": meta["asset_id"], "output_id": item["output_id"], "state": item["state"], "verification": verification}
+
+
+def approve_output(asset_id: str, output_id: str) -> dict[str, Any]:
+    meta = _read_meta(asset_id)
+    item = _find_output(meta, output_id)
+    verification = item.get("verification") or {}
+    if verification.get("status") != "PASS":
+        raise ValueError("output cannot be approved before verification PASS")
+    item["state"] = "APPROVED"
+    item["approved_at"] = int(time.time())
+    _write_meta(meta)
+    return {"ok": True, "asset_id": meta["asset_id"], "output": _safe_output_item(item)}
+
 def _safe_share(entry: dict[str, Any]) -> dict[str, Any]:
     return {
         "token": entry.get("token"),
