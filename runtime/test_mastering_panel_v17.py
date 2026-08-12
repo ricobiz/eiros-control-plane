@@ -38,3 +38,18 @@ def test_v17_verification_links_flags_to_timeline_and_server_gates_approval():
     assert 'data-qa-start' in html
     assert "v.status!=='PASS'" in html or 'v.status!==\'PASS\'' in html
     assert "post('/api/approve'" in html
+
+
+def test_v17_has_live_operation_state_and_explicit_error_surface():
+    html=Path('runtime/mastering_panel_v17.html').read_text(encoding='utf-8')
+    for token in ('id="operationState"','aria-live="polite"','id="errorSurface"','UPLOADING','ANALYZING','RENDERING','VERIFYING','APPROVED','FAILED'):
+        assert token in html, token
+
+
+def test_v17_ios_safe_controls_and_reload_recovery_contract():
+    html=Path('runtime/mastering_panel_v17.html').read_text(encoding='utf-8')
+    assert 'min-height:44px' in html
+    assert 'touch-action:none' in html
+    assert 'recoverSelection' in html
+    assert "a.play().catch" in html  # playback only follows explicit control action
+    assert 'overflow-x:hidden' in html.replace(' ','')
