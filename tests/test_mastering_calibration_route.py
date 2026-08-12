@@ -20,3 +20,47 @@ def test_calibration_profile_routes_are_http_only():
     assert "load_calibration_profile" in block
     assert "resourceUri" not in block
     assert "outputTemplate" not in block
+
+
+def test_mic_loop_routes_are_standalone_http_only():
+    text = Path("runtime/mastering_mcp_server.py").read_text(encoding="utf-8")
+    assert '@mcp.custom_route("/api/calibration/mic-loop", methods=["GET"])' in text
+    assert '@mcp.custom_route("/api/calibration/mic-loop/analyze", methods=["POST", "OPTIONS"])' in text
+    block = text[text.index('def api_calibration_mic_loop'):text.index('def api_health')]
+    assert 'mastering_mic_loop.html' in block
+    assert 'analyze_mic_loop_recordings' in block
+    assert 'resourceUri' not in block
+    assert 'outputTemplate' not in block
+
+
+def test_mic_loop_page_contract():
+    page = Path("runtime/mastering_mic_loop.html")
+    assert page.exists()
+    text = page.read_text(encoding="utf-8")
+    for token in [
+        "E-MASTER MIC LOOP",
+        "getUserMedia",
+        "enumerateDevices",
+        "MediaRecorder",
+        "echoCancellation:false",
+        "noiseSuppression:false",
+        "autoGainControl:false",
+        "createGain",
+        "BACKGROUND 5s",
+        "BASELINE A",
+        "BASELINE B",
+        "STRESS",
+        "SEAL",
+        "background",
+        "baseline_a",
+        "baseline_b",
+        "stress",
+        "API+'/list?limit=30'",
+        "API+'/download?asset_id='",
+        "API+'/calibration/mic-loop/analyze'",
+        "clipStart:92.5",
+        "clipDuration:20",
+        "visibilitychange",
+        "pagehide",
+    ]:
+        assert token in text

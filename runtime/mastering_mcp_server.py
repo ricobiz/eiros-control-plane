@@ -1565,6 +1565,40 @@ async def api_calibration_profile_load(request: Request) -> Response:
         return _json_error(exc)
 
 
+@mcp.custom_route("/api/calibration/mic-loop", methods=["GET"])
+async def api_calibration_mic_loop(request: Request) -> Response:
+    html_text = Path(__file__).with_name("mastering_mic_loop.html").read_text(encoding="utf-8")
+    return HTMLResponse(
+        html_text,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
+
+
+@mcp.custom_route("/api/calibration/mic-loop/analyze", methods=["POST", "OPTIONS"])
+async def api_calibration_mic_loop_analyze(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        recordings: dict[str, tuple[str, bytes]] = {}
+        async with request.form(max_files=4, max_fields=8, max_part_size=32 * 1024 * 1024) as form:
+            for key in ("background", "baseline_a", "baseline_b", "stress"):
+                upload = form.get(key)
+                if upload is None:
+                    continue
+                if not hasattr(upload, "read"):
+                    raise ValueError(f"multipart field '{key}' must be a file")
+                data = await upload.read()
+                filename = str(getattr(upload, "filename", "") or f"{key}.bin")
+                recordings[key] = (filename, data)
+        return _cors(JSONResponse(mastering_engine.analyze_mic_loop_recordings(recordings)))
+    except Exception as exc:
+        return _json_error(exc)
+
+
 @mcp.custom_route("/api/health", methods=["GET", "OPTIONS"])
 async def api_health(request: Request) -> Response:
     if request.method == "OPTIONS":

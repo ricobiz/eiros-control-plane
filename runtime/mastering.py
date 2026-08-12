@@ -7,6 +7,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -278,6 +279,314 @@ def _technical_stats(path: Path, max_seconds: int = 600) -> dict[str, Any]:
     }
 
 
+
+
+def _stress_band_profile(audio: np.ndarray, sample_rate: int = 48000) -> dict[str, Any]:
+    """Return robust, persistence-weighted spectral peaks for stress calibration.
+
+    This deliberately favors energy that persists across short windows over a
+    single isolated transient. Values are digital-domain estimates only.
+    """
+    data = np.asarray(audio, dtype=np.float64)
+    if data.ndim != 2 or data.shape[1] != 2:
+        raise ValueError("Stress band analysis expects stereo audio")
+    if data.shape[0] < 32:
+        raise ValueError("Stress band analysis audio is too short")
+    sr = int(sample_rate)
+    if sr < 8000:
+        raise ValueError("Stress band analysis sample rate is too low")
+
+    mono = np.mean(data, axis=1)
+    frame_len = max(2048, int(round(sr * 0.050)))
+    hop = max(512, frame_len // 2)
+    nfft = max(16384, 1 << int(math.ceil(math.log2(frame_len))))
+    window = np.hanning(frame_len)
+    window_energy = max(float(np.sum(window * window)), 1e-12)
+    freqs = np.fft.rfftfreq(nfft, d=1.0 / sr)
+    max_hz = min(20000.0, sr * 0.49)
+
+    centers: list[float] = []
+    step = 0
+    while True:
+        center = 20.0 * (2.0 ** (step / 3.0))
+        if center > max_hz:
+            break
+        centers.append(center)
+        step += 1
+    edge_ratio = 2.0 ** (1.0 / 6.0)
+    masks = []
+    for center in centers:
+        low = max(20.0, center / edge_ratio)
+        high = min(max_hz, center * edge_ratio)
+        mask = (freqs >= low) & (freqs < high)
+        masks.append((low, high, mask))
+
+    starts = list(range(0, max(1, len(mono) - frame_len + 1), hop))
+    if not starts or starts[-1] + frame_len < len(mono):
+        starts.append(max(0, len(mono) - frame_len))
+
+    band_db_rows: list[list[float]] = []
+    spectra: list[np.ndarray] = []
+    for start in starts:
+        frame = mono[start:start + frame_len]
+        if len(frame) < frame_len:
+            frame = np.pad(frame, (0, frame_len - len(frame)))
+        frame = frame - float(np.mean(frame))
+        spectrum = np.fft.rfft(frame * window, n=nfft)
+        power = np.square(np.abs(spectrum))
+        spectra.append(power)
+        row: list[float] = []
+        for _, _, mask in masks:
+            if not np.any(mask):
+                row.append(-180.0)
+                continue
+            # Parseval with a one-sided spectrum. Interior positive-frequency
+            # bins represent matching negative-frequency energy, hence x2.
+            mean_square = 2.0 * float(np.sum(power[mask])) / (nfft * window_energy)
+            row.append(10.0 * math.log10(max(mean_square, 1e-18)))
+        band_db_rows.append(row)
+
+    band_matrix = np.asarray(band_db_rows, dtype=np.float64)
+    robust_spectrum = np.percentile(np.stack(spectra, axis=0), 70.0, axis=0)
+    rows: list[dict[str, Any]] = []
+    for idx, center in enumerate(centers):
+        low, high, mask = masks[idx]
+        values = band_matrix[:, idx]
+        robust_peak = float(np.percentile(values, 95.0))
+        persistent = float(np.percentile(values, 70.0))
+        threshold = robust_peak - 12.0
+        activity = float(np.mean(values >= threshold))
+        indices = np.flatnonzero(mask)
+        if indices.size:
+            local = robust_spectrum[indices]
+            peak_index = int(indices[int(np.argmax(local))])
+            peak_hz = float(freqs[peak_index])
+        else:
+            peak_hz = float(center)
+        # Persistence is intentionally stronger than isolated peak magnitude.
+        score = persistent + 8.0 * activity + 0.20 * robust_peak
+        rows.append({
+            "center_hz": round(float(center), 2),
+            "peak_hz": round(peak_hz, 2),
+            "low_hz": round(float(low), 2),
+            "high_hz": round(float(high), 2),
+            "robust_peak_dbfs": round(robust_peak, 3),
+            "persistent_energy_db": round(persistent, 3),
+            "activity_ratio": round(activity, 4),
+            "score": round(float(score), 4),
+        })
+
+    rows.sort(key=lambda row: float(row["score"]), reverse=True)
+    for rank, row in enumerate(rows, start=1):
+        row["rank"] = rank
+    return {
+        "window_ms": round(1000.0 * frame_len / sr, 2),
+        "hop_ms": round(1000.0 * hop / sr, 2),
+        "band_count": len(rows),
+        "bands": rows,
+        "suspect_bands": rows[: min(10, len(rows))],
+    }
+
+
+MIC_LOOP_BANDS = {
+    "sub_20_60": (20.0, 60.0),
+    "bass_60_120": (60.0, 120.0),
+    "low_mid_120_500": (120.0, 500.0),
+    "presence_500_2000": (500.0, 2000.0),
+    "high_2000_12000": (2000.0, 12000.0),
+}
+
+
+def _mic_measurement_levels(audio: np.ndarray, sample_rate: int = 48000) -> dict[str, Any]:
+    data = np.asarray(audio, dtype=np.float64)
+    if data.ndim == 1:
+        mono = data
+    elif data.ndim == 2 and data.shape[1] >= 1:
+        mono = np.mean(data, axis=1)
+    else:
+        raise ValueError("Mic-loop audio must be mono or stereo")
+    if mono.size < 1024:
+        raise ValueError("Mic-loop audio is too short")
+    sr = int(sample_rate)
+    frame_len = min(len(mono), max(4096, int(round(sr * 0.10))))
+    hop = max(1024, frame_len // 2)
+    nfft = max(16384, 1 << int(math.ceil(math.log2(frame_len))))
+    window = np.hanning(frame_len)
+    window_energy = max(float(np.sum(window * window)), 1e-12)
+    freqs = np.fft.rfftfreq(nfft, d=1.0 / sr)
+    masks = {
+        name: (freqs >= low) & (freqs < min(high, sr * 0.49))
+        for name, (low, high) in MIC_LOOP_BANDS.items()
+    }
+    starts = list(range(0, max(1, len(mono) - frame_len + 1), hop))
+    if not starts or starts[-1] + frame_len < len(mono):
+        starts.append(max(0, len(mono) - frame_len))
+    rows = {name: [] for name in masks}
+    for start in starts:
+        frame = mono[start:start + frame_len]
+        if len(frame) < frame_len:
+            frame = np.pad(frame, (0, frame_len - len(frame)))
+        frame = frame - float(np.mean(frame))
+        power = np.square(np.abs(np.fft.rfft(frame * window, n=nfft)))
+        for name, mask in masks.items():
+            mean_square = 2.0 * float(np.sum(power[mask])) / (nfft * window_energy) if np.any(mask) else 0.0
+            rows[name].append(10.0 * math.log10(max(mean_square, 1e-18)))
+    levels = {name: float(np.percentile(values, 70.0)) for name, values in rows.items()}
+    rms = float(np.sqrt(np.mean(np.square(mono))))
+    peak = float(np.max(np.abs(mono)))
+    return {
+        "bands_dbfs": {name: round(value, 3) for name, value in levels.items()},
+        "rms_dbfs": round(20.0 * math.log10(max(rms, 1e-12)), 3),
+        "peak_dbfs": round(20.0 * math.log10(max(peak, 1e-12)), 3),
+    }
+
+
+def _mic_loop_baseline_analysis(
+    background: np.ndarray,
+    baseline_a: np.ndarray,
+    baseline_b: np.ndarray,
+    sample_rate: int = 48000,
+) -> dict[str, Any]:
+    noise = _mic_measurement_levels(background, sample_rate)
+    a = _mic_measurement_levels(baseline_a, sample_rate)
+    b = _mic_measurement_levels(baseline_b, sample_rate)
+    mask: dict[str, Any] = {}
+    repeatability: dict[str, Any] = {}
+    bass_deltas: list[float] = []
+    trusted_bass = 0
+    for name in MIC_LOOP_BANDS:
+        av = float(a["bands_dbfs"][name])
+        bv = float(b["bands_dbfs"][name])
+        nv = float(noise["bands_dbfs"][name])
+        baseline = (av + bv) / 2.0
+        snr = baseline - nv
+        trusted = snr >= 10.0
+        delta = abs(av - bv)
+        mask[name] = {
+            "noise_dbfs": round(nv, 3),
+            "baseline_dbfs": round(baseline, 3),
+            "snr_db": round(snr, 3),
+            "trusted": trusted,
+        }
+        repeatability[name] = {"delta_db": round(delta, 3), "stable": delta <= 2.5}
+        if name in {"sub_20_60", "bass_60_120"}:
+            bass_deltas.append(delta)
+            trusted_bass += int(trusted)
+    bass_delta = max(bass_deltas) if bass_deltas else 99.0
+    seal_stable = bass_delta <= 2.5 and trusted_bass >= 1
+    return {
+        "background": noise,
+        "baseline_a": a,
+        "baseline_b": b,
+        "background_mask": mask,
+        "repeatability": repeatability,
+        "seal_check": {
+            "stable": seal_stable,
+            "bass_delta_db": round(bass_delta, 3),
+            "trusted_bass_bands": trusted_bass,
+            "status": "STABLE" if seal_stable else "UNSTABLE",
+        },
+    }
+
+
+
+def _mic_loop_compare(
+    background: np.ndarray,
+    baseline_a: np.ndarray,
+    baseline_b: np.ndarray,
+    stress: np.ndarray,
+    sample_rate: int = 48000,
+) -> dict[str, Any]:
+    base = _mic_loop_baseline_analysis(background, baseline_a, baseline_b, sample_rate)
+    stress_levels = _mic_measurement_levels(stress, sample_rate)
+    a = base["baseline_a"]
+    b = base["baseline_b"]
+    baseline_rms = (float(a["rms_dbfs"]) + float(b["rms_dbfs"])) / 2.0
+    gain_match_db = baseline_rms - float(stress_levels["rms_dbfs"])
+    residuals: dict[str, Any] = {}
+    flagged: list[str] = []
+    for name in MIC_LOOP_BANDS:
+        baseline_db = (float(a["bands_dbfs"][name]) + float(b["bands_dbfs"][name])) / 2.0
+        normalized_stress_db = float(stress_levels["bands_dbfs"][name]) + gain_match_db
+        residual = normalized_stress_db - baseline_db
+        repeat_delta = float(base["repeatability"][name]["delta_db"])
+        threshold = max(2.5, 1.0 + 3.0 * repeat_delta)
+        noise_db = float(base["background_mask"][name]["noise_dbfs"])
+        stress_snr = float(stress_levels["bands_dbfs"][name]) - noise_db
+        trusted = bool(base["background_mask"][name]["trusted"]) or stress_snr >= 12.0
+        if name in {"sub_20_60", "bass_60_120"} and not base["seal_check"]["stable"]:
+            trusted = False
+        is_flagged = trusted and abs(residual) > threshold
+        if is_flagged:
+            flagged.append(name)
+        residuals[name] = {
+            "baseline_dbfs": round(baseline_db, 3),
+            "stress_dbfs": round(float(stress_levels["bands_dbfs"][name]), 3),
+            "normalized_stress_dbfs": round(normalized_stress_db, 3),
+            "residual_db": round(residual, 3),
+            "threshold_db": round(threshold, 3),
+            "stress_snr_db": round(stress_snr, 3),
+            "trusted": trusted,
+            "flagged": is_flagged,
+        }
+    mic_clip_risk = float(stress_levels["peak_dbfs"]) >= -0.25
+    return {
+        **base,
+        "stress": stress_levels,
+        "gain_match_db": round(gain_match_db, 3),
+        "band_residuals": residuals,
+        "flagged_bands": flagged,
+        "mic_clip_risk": mic_clip_risk,
+        "artifact_detected": bool(flagged) or mic_clip_risk,
+        "status": "ARTIFACT" if (flagged or mic_clip_risk) else "CLEAN_WITHIN_REPEATABILITY",
+    }
+
+
+
+def _decode_mic_recording_bytes(data: bytes, filename: str, sample_rate: int = 48000) -> np.ndarray:
+    payload = bytes(data or b"")
+    if not payload:
+        raise ValueError("Mic-loop recording is empty")
+    if len(payload) > 32 * 1024 * 1024:
+        raise ValueError("Mic-loop recording is too large")
+    suffix = Path(str(filename or "recording.bin")).suffix.lower()
+    if not re.fullmatch(r"\.[a-z0-9]{1,8}", suffix or ""):
+        suffix = ".bin"
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="e-master-mic-", suffix=suffix, delete=False) as handle:
+            handle.write(payload)
+            temp_path = Path(handle.name)
+        return _decode_float_audio(temp_path, sample_rate)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def analyze_mic_loop_recordings(recordings: dict[str, tuple[str, bytes]], sample_rate: int = 48000) -> dict[str, Any]:
+    if not isinstance(recordings, dict):
+        raise ValueError("Mic-loop recordings must be an object")
+    decoded: dict[str, np.ndarray] = {}
+    for key in ("background", "baseline_a", "baseline_b"):
+        item = recordings.get(key)
+        if not item or len(item) != 2:
+            raise ValueError(f"Missing mic-loop recording: {key}")
+        filename, data = item
+        decoded[key] = _decode_mic_recording_bytes(data, filename, sample_rate)
+    stress_item = recordings.get("stress")
+    if stress_item and len(stress_item) == 2:
+        decoded["stress"] = _decode_mic_recording_bytes(stress_item[1], stress_item[0], sample_rate)
+    if "stress" in decoded:
+        report = _mic_loop_compare(
+            decoded["background"], decoded["baseline_a"], decoded["baseline_b"], decoded["stress"], sample_rate
+        )
+        mode = "stress"
+    else:
+        report = _mic_loop_baseline_analysis(
+            decoded["background"], decoded["baseline_a"], decoded["baseline_b"], sample_rate
+        )
+        mode = "baseline"
+    return {"ok": True, "mode": mode, "sample_rate": int(sample_rate), "report": report}
 
 def _decode_float_audio(path: Path, sample_rate: int = 48000) -> np.ndarray:
     proc = subprocess.run([
