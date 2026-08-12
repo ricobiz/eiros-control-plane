@@ -963,67 +963,23 @@ def _diagnostic_panel_html() -> str:
 })();
 </script></body></html>"""
 
-@mcp.resource(
-    DIAGNOSTIC_PANEL_URI,
-    name="EIROS Mastering Diagnostic",
-    title="EIROS Mastering Diagnostic",
-    description="Minimal MCP Apps rendering diagnostic with no external requests.",
-    mime_type="text/html;profile=mcp-app",
-    meta={"ui": {"prefersBorder": True}},
-)
+# Headless preview: UI resources/templates are intentionally not registered with MCP.
 def mastering_diagnostic_resource() -> str:
     return _diagnostic_panel_html()
 
 
-@mcp.resource(
-    PANEL_URI,
-    name="EIROS Mastering Panel Disabled",
-    title="EIROS Mastering",
-    description="Safe placeholder while the in-chat mastering workstation is disabled.",
-    mime_type="text/html;profile=mcp-app",
-    meta={"ui": {"prefersBorder": True}},
-)
 def mastering_panel_resource() -> str:
     return """<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>html,body{margin:0;background:#0b0e12;color:#89929d;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif}.box{padding:12px;font-size:13px}</style></head><body><div class=\"box\">EIROS Mastering in-chat panel is temporarily disabled.</div></body></html>"""
 
 
-@mcp.resource(
-    LEGACY_PANEL_URI,
-    name="EIROS Mastering Panel Legacy Route",
-    title="EIROS Mastering",
-    description="Compatibility route serving the current mastering panel to already-open connector sessions.",
-    mime_type="text/html;profile=mcp-app",
-    meta=PANEL_META,
-)
 def mastering_panel_resource_legacy() -> str:
     return _legacy_panel_html()
 
 
-@mcp.resource(
-    LEGACY_PANEL_URI_V2,
-    name="EIROS Mastering Panel Legacy Route v2",
-    title="EIROS Mastering",
-    description="Compatibility route for older mastering panel sessions.",
-    mime_type="text/html;profile=mcp-app",
-    meta=PANEL_META,
-)
 def mastering_panel_resource_legacy_v2() -> str:
     return _legacy_panel_html()
 
 
-@mcp.tool(
-    name="open_mastering_diagnostic",
-    title="Open EIROS Widget Diagnostic",
-    description="Open a minimal EIROS MCP Apps widget used only to diagnose ChatGPT rendering.",
-    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
-    meta={
-        "ui": {"resourceUri": DIAGNOSTIC_PANEL_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": DIAGNOSTIC_PANEL_URI,
-        "openai/toolInvocation/invoking": "Opening EIROS diagnostic…",
-        "openai/toolInvocation/invoked": "EIROS diagnostic opened.",
-    },
-    structured_output=True,
-)
 def open_mastering_diagnostic() -> dict[str, Any]:
     return {"ok": True, "resource_uri": DIAGNOSTIC_PANEL_URI, "diagnostic": "minimal-static-widget"}
 
