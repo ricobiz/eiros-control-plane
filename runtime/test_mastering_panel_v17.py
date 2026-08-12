@@ -18,7 +18,7 @@ def test_v17_panel_is_responsive_and_not_card_grid_first():
 
 def test_mcp_resource_points_to_v17_and_keeps_v16_legacy():
     import runtime.mastering_mcp_server as s
-    assert s.PANEL_URI.endswith('mastering-panel-v17.html')
+    assert s.PANEL_URI.endswith('mastering-panel-v17-1.html')
     assert s.LEGACY_PANEL_URI.endswith('mastering-panel-v16.html')
     rendered=s.mastering_panel_resource()
     assert '__PUBLIC_BASE__' not in rendered
@@ -53,3 +53,13 @@ def test_v17_ios_safe_controls_and_reload_recovery_contract():
     assert 'recoverSelection' in html
     assert "a.play().catch" in html  # playback only follows explicit control action
     assert 'overflow-x:hidden' in html.replace(' ','')
+
+
+def test_v17_uses_dedicated_widget_origin_without_unneeded_frames():
+    import runtime.mastering_mcp_server as s
+    assert s.PUBLIC_ORIGIN == 'https://eirosmaster.178-105-43-79.sslip.io'
+    meta=s.PANEL_META
+    assert meta['ui']['domain'] == s.PUBLIC_ORIGIN
+    assert meta['openai/widgetDomain'] == s.PUBLIC_ORIGIN
+    assert 'frameDomains' not in meta['ui']['csp']
+    assert 'frame_domains' not in meta['openai/widgetCSP']

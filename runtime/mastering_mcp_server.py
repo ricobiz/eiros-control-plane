@@ -17,11 +17,11 @@ from runtime.config import load_config
 from runtime.version import __version__
 
 CONFIG = load_config()
-PUBLIC_ORIGIN = "https://178-105-43-79.sslip.io"
+PUBLIC_ORIGIN = "https://eirosmaster.178-105-43-79.sslip.io"
 PUBLIC_PREFIX = "/mastering-85949c2f6885e19e8e815fd0faa0c3e097e88c7fc84a18d3"
 PUBLIC_BASE = PUBLIC_ORIGIN + PUBLIC_PREFIX
 PUBLIC_SHARE_BASE = PUBLIC_ORIGIN + "/s"
-PANEL_URI = "ui://eiros/mastering-panel-v17.html"
+PANEL_URI = "ui://eiros/mastering-panel-v17-1.html"
 LEGACY_PANEL_URI = "ui://eiros/mastering-panel-v16.html"
 LEGACY_PANEL_URI_V2 = "ui://eiros/mastering-panel-v15.html"
 
@@ -67,7 +67,6 @@ PANEL_META: dict[str, Any] = {
         "csp": {
             "connectDomains": [PUBLIC_ORIGIN],
             "resourceDomains": [PUBLIC_ORIGIN],
-            "frameDomains": [PUBLIC_ORIGIN],
         },
     },
     "openai/widgetDescription": "Upload, analyze, master and download audio through EIROS Mastering.",
@@ -75,7 +74,6 @@ PANEL_META: dict[str, Any] = {
     "openai/widgetCSP": {
         "connect_domains": [PUBLIC_ORIGIN],
         "resource_domains": [PUBLIC_ORIGIN],
-        "frame_domains": [PUBLIC_ORIGIN],
     },
 }
 
