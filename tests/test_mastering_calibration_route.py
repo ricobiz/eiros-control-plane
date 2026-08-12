@@ -85,3 +85,26 @@ def test_mic_loop_capture_reuses_one_open_microphone_stream():
     assert "ensureMic(" not in capture_block
     assert "if(!micStream)" in capture_block
     assert "Сначала нажми MIC" in capture_block
+
+
+def test_mic_loop_sends_captured_levels_and_renders_level_validation():
+    text = Path("runtime/mastering_mic_loop.html").read_text(encoding="utf-8")
+    for token in [
+        "captureLevels",
+        "baseline_db",
+        "stress_db",
+        "EXPECTED",
+        "MEASURED",
+        "MISMATCH",
+        "TEST INVALID · LEVEL MISMATCH",
+    ]:
+        assert token in text
+    assert "captureLevels[kind]=Number(db)" in text
+
+
+def test_mic_loop_route_passes_expected_gain_from_recorded_levels():
+    text = Path("runtime/mastering_mcp_server.py").read_text(encoding="utf-8")
+    block = text[text.index("def api_calibration_mic_loop_analyze"):text.index("def api_health")]
+    assert 'form.get("baseline_db")' in block
+    assert 'form.get("stress_db")' in block
+    assert "expected_gain_db" in block

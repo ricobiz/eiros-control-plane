@@ -1584,6 +1584,7 @@ async def api_calibration_mic_loop_analyze(request: Request) -> Response:
         return _options()
     try:
         recordings: dict[str, tuple[str, bytes]] = {}
+        expected_gain_db: float | None = None
         async with request.form(max_files=4, max_fields=8, max_part_size=32 * 1024 * 1024) as form:
             for key in ("background", "baseline_a", "baseline_b", "stress"):
                 upload = form.get(key)
@@ -1594,7 +1595,13 @@ async def api_calibration_mic_loop_analyze(request: Request) -> Response:
                 data = await upload.read()
                 filename = str(getattr(upload, "filename", "") or f"{key}.bin")
                 recordings[key] = (filename, data)
-        return _cors(JSONResponse(mastering_engine.analyze_mic_loop_recordings(recordings)))
+            baseline_db_raw = form.get("baseline_db")
+            stress_db_raw = form.get("stress_db")
+            if baseline_db_raw is not None and stress_db_raw is not None:
+                expected_gain_db = float(str(stress_db_raw)) - float(str(baseline_db_raw))
+        return _cors(JSONResponse(mastering_engine.analyze_mic_loop_recordings(
+            recordings, expected_gain_db=expected_gain_db
+        )))
     except Exception as exc:
         return _json_error(exc)
 

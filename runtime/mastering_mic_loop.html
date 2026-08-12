@@ -68,6 +68,7 @@
   const $=id=>document.getElementById(id);
   const masterEl=$('master'),micEl=$('mic'),audio=$('audio'),baselineLevel=$('baseline-level'),stressLevel=$('stress-level');
   const blobs={background:null,baseline_a:null,baseline_b:null,stress:null};
+  const captureLevels={baseline_a:null,baseline_b:null,stress:null};
   let micStream=null,audioCtx=null,mediaSource=null,gainNode=null,busy=false;
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const dbGain=db=>10**(Number(db)/20);
@@ -118,6 +119,7 @@
         recording=await recordFor(cfg.backgroundDuration*1000);
       }
       blobs[kind]=recording;
+      if(withMusic)captureLevels[kind]=Number(db);
       setStatus(statusId,`${kind.toUpperCase()} записан · ${(recording.size/1024).toFixed(0)} KB`,'good');
     }catch(e){
       stopPlayback();
@@ -127,10 +129,26 @@
     }
   }
   function addBlob(fd,key,blob){if(!blob)throw new Error('Нет записи '+key);const ext=recordingExt(blob.type);fd.append(key,blob,key+'.'+ext);}
-  async function sendAnalysis(includeStress){const fd=new FormData();addBlob(fd,'background',blobs.background);addBlob(fd,'baseline_a',blobs.baseline_a);addBlob(fd,'baseline_b',blobs.baseline_b);if(includeStress)addBlob(fd,'stress',blobs.stress);const r=await fetch(API+'/calibration/mic-loop/analyze',{method:'POST',body:fd});const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'analysis failed');return data.report;}
-  function renderReport(report){const seal=report.seal_check||{};const bassConfidence=seal.bass_confidence||((seal.trusted_bass_bands??0)>0?'HIGH':'LOW');$('seal-result').textContent='SEAL '+(seal.status||'—');$('seal-detail').textContent=`bass Δ ${seal.bass_delta_db??'—'} dB · BASS CONFIDENCE ${bassConfidence} · trusted ${seal.trusted_bass_bands??0}`;$('seal-result').style.color=seal.stable?'var(--green)':'var(--amber)';const artifact=Boolean(report.artifact_detected);$('artifact-result').textContent='ARTIFACT '+(report.status||'BASELINE');$('artifact-result').style.color=artifact?'var(--red)':'var(--green)';$('artifact-detail').textContent=report.mic_clip_risk?'MIC CLIP RISK':(report.gain_match_db!=null?`gain match ${report.gain_match_db} dB`:'baseline only');const rows=report.band_residuals||{};$('bands').innerHTML=Object.entries(rows).map(([name,row])=>`<div class="band ${row.flagged?'flag':''}"><span>${name}</span><b>${row.residual_db>=0?'+':''}${row.residual_db} dB ${row.trusted?'':'· LOW CONF'}</b></div>`).join('');}
+  async function sendAnalysis(includeStress){
+    const a=Number(captureLevels.baseline_a),b=Number(captureLevels.baseline_b);
+    if(!Number.isFinite(a)||!Number.isFinite(b))throw new Error('Сначала запиши BASELINE A и B');
+    if(Math.abs(a-b)>0.01)throw new Error('BASELINE A/B записаны на разных уровнях — перезапиши оба одинаково');
+    const fd=new FormData();
+    addBlob(fd,'background',blobs.background);addBlob(fd,'baseline_a',blobs.baseline_a);addBlob(fd,'baseline_b',blobs.baseline_b);
+    fd.append('baseline_db',String((a+b)/2));
+    if(includeStress){const stressDb=Number(captureLevels.stress);if(!Number.isFinite(stressDb))throw new Error('Сначала запиши STRESS');addBlob(fd,'stress',blobs.stress);fd.append('stress_db',String(stressDb));}
+    const r=await fetch(API+'/calibration/mic-loop/analyze',{method:'POST',body:fd});const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'analysis failed');return data.report;
+  }
+  function renderReport(report){
+    const seal=report.seal_check||{};const bassConfidence=seal.bass_confidence||((seal.trusted_bass_bands??0)>0?'HIGH':'LOW');
+    $('seal-result').textContent='SEAL '+(seal.status||'—');$('seal-detail').textContent=`bass Δ ${seal.bass_delta_db??'—'} dB · BASS CONFIDENCE ${bassConfidence} · trusted ${seal.trusted_bass_bands??0}`;$('seal-result').style.color=seal.stable?'var(--green)':'var(--amber)';
+    const level=report.level_validation||null;const artifact=Boolean(report.artifact_detected);
+    if(level&&!level.valid){$('artifact-result').textContent='TEST INVALID · LEVEL MISMATCH';$('artifact-result').style.color='var(--amber)';$('artifact-detail').textContent=`EXPECTED ${level.expected_gain_db>=0?'+':''}${level.expected_gain_db} dB · MEASURED ${level.measured_gain_db>=0?'+':''}${level.measured_gain_db} dB · MISMATCH ${level.mismatch_db>=0?'+':''}${level.mismatch_db} dB`;}
+    else{$('artifact-result').textContent='ARTIFACT '+(report.status||'BASELINE');$('artifact-result').style.color=artifact?'var(--red)':'var(--green)';$('artifact-detail').textContent=report.mic_clip_risk?'MIC CLIP RISK':(level?`EXPECTED ${level.expected_gain_db>=0?'+':''}${level.expected_gain_db} dB · MEASURED ${level.measured_gain_db>=0?'+':''}${level.measured_gain_db} dB · MISMATCH ${level.mismatch_db>=0?'+':''}${level.mismatch_db} dB`:(report.gain_match_db!=null?`gain match ${report.gain_match_db} dB`:'baseline only'));}
+    const rows=report.band_residuals||{};$('bands').innerHTML=Object.entries(rows).map(([name,row])=>`<div class="band ${row.flagged?'flag':''}"><span>${name}</span><b>${row.residual_db>=0?'+':''}${row.residual_db} dB ${row.trusted?'':'· LOW CONF'}</b></div>`).join('');
+  }
   async function checkSeal(){if(busy)return;setBusy(true);try{const r=await sendAnalysis(false);renderReport(r);const seal=r.seal_check||{};const bassConfidence=seal.bass_confidence||((seal.trusted_bass_bands??0)>0?'HIGH':'LOW');let message;if(seal.stable&&bassConfidence==='HIGH')message='SEAL STABLE · BASS CONFIDENCE HIGH — можно идти в STRESS.';else if(seal.stable)message='SEAL STABLE · BASS CONFIDENCE LOW — посадка повторяется, но бас пока слишком близко к фону; низ не будет считаться доказательством артефакта.';else message='SEAL UNSTABLE — A/B реально расходятся. Переложи/прижми наушник и перезапиши A/B.';setStatus('base-status',message,seal.stable?'good':'warn');}catch(e){setStatus('base-status',String(e?.message||e),'bad');}finally{setBusy(false);}}
-  async function analyze(){if(busy)return;setBusy(true);try{const r=await sendAnalysis(true);renderReport(r);setStatus('stress-status',r.artifact_detected?'Есть изменение физической записи сверх baseline. Смотри flagged bands.':'Новых изменений сверх baseline-разброса не найдено.','artifact_detected' in r&&r.artifact_detected?'bad':'good');}catch(e){setStatus('stress-status',String(e?.message||e),'bad');}finally{setBusy(false);}}
+  async function analyze(){if(busy)return;setBusy(true);try{const r=await sendAnalysis(true);renderReport(r);if(r.classification_valid===false)setStatus('stress-status','TEST INVALID · LEVEL MISMATCH — общий уровень записи не соответствует заданной STRESS-ступени. Спектральные residual пока только диагностика.','warn');else setStatus('stress-status',r.artifact_detected?'Есть изменение физической записи сверх baseline. Смотри flagged bands.':'Новых изменений сверх baseline-разброса не найдено.',r.artifact_detected?'bad':'good');}catch(e){setStatus('stress-status',String(e?.message||e),'bad');}finally{setBusy(false);}}
   async function dispose(){stopPlayback();if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}if(audioCtx){try{await audioCtx.close();}catch{}audioCtx=null;mediaSource=null;gainNode=null;}}
   $('reload').addEventListener('click',()=>loadMasters().catch(e=>setStatus('base-status',String(e),'bad')));masterEl.addEventListener('change',()=>loadAudio().catch(()=>{}));
   $('mic-permission').addEventListener('click',()=>ensureMic(micEl.value||'').catch(e=>setStatus('mic-status',String(e?.message||e),'bad')));micEl.addEventListener('change',()=>ensureMic(micEl.value).catch(e=>setStatus('mic-status',String(e?.message||e),'bad')));

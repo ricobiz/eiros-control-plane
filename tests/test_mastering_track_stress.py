@@ -119,3 +119,47 @@ def test_mic_loop_seal_repeatability_is_separate_from_bass_snr_confidence():
     assert result["seal_check"]["stable"] is True
     assert result["seal_check"]["bass_confidence"] == "LOW"
     assert result["seal_check"]["trusted_bass_bands"] == 0
+
+
+def test_mic_loop_level_mismatch_invalidates_artifact_classification():
+    sr = 48000
+    seconds = 2.0
+    background = _stereo_tone(1000.0, 0.0005, seconds, sr)
+    baseline_a = _stereo_tone(63.0, 0.03, seconds, sr) + _stereo_tone(500.0, 0.015, seconds, sr)
+    baseline_b = _stereo_tone(63.0, 0.0302, seconds, sr) + _stereo_tone(500.0, 0.0149, seconds, sr)
+    # The UI says this stress step is +3 dB, but the captured signal is about
+    # +11.25 dB. That makes spectral artifact classification invalid.
+    stress = baseline_a * (10 ** (11.25 / 20.0))
+    stress += _stereo_tone(3000.0, 0.04, seconds, sr)
+
+    result = mastering._mic_loop_compare(
+        background, baseline_a, baseline_b, stress, sr, expected_gain_db=3.0
+    )
+
+    level = result["level_validation"]
+    assert level["expected_gain_db"] == 3.0
+    assert level["measured_gain_db"] > 9.0
+    assert abs(level["mismatch_db"]) > 2.0
+    assert level["valid"] is False
+    assert result["classification_valid"] is False
+    assert result["artifact_detected"] is False
+    assert result["status"] == "TEST_INVALID_LEVEL_MISMATCH"
+
+
+def test_mic_loop_expected_gain_accepts_matching_capture_level():
+    sr = 48000
+    seconds = 2.0
+    background = _stereo_tone(1000.0, 0.0005, seconds, sr)
+    baseline_a = _stereo_tone(63.0, 0.03, seconds, sr) + _stereo_tone(500.0, 0.015, seconds, sr)
+    baseline_b = baseline_a * 0.998
+    stress = baseline_a * (10 ** (3.0 / 20.0))
+
+    result = mastering._mic_loop_compare(
+        background, baseline_a, baseline_b, stress, sr, expected_gain_db=3.0
+    )
+
+    level = result["level_validation"]
+    assert level["valid"] is True
+    assert abs(level["mismatch_db"]) < 0.5
+    assert result["classification_valid"] is True
+    assert result["status"] == "CLEAN_WITHIN_REPEATABILITY"

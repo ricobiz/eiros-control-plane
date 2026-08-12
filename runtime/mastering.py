@@ -501,6 +501,7 @@ def _mic_loop_compare(
     baseline_b: np.ndarray,
     stress: np.ndarray,
     sample_rate: int = 48000,
+    expected_gain_db: float | None = None,
 ) -> dict[str, Any]:
     base = _mic_loop_baseline_analysis(background, baseline_a, baseline_b, sample_rate)
     stress_levels = _mic_measurement_levels(stress, sample_rate)
@@ -508,6 +509,17 @@ def _mic_loop_compare(
     b = base["baseline_b"]
     baseline_rms = (float(a["rms_dbfs"]) + float(b["rms_dbfs"])) / 2.0
     gain_match_db = baseline_rms - float(stress_levels["rms_dbfs"])
+    measured_gain_db = -gain_match_db
+    expected = None if expected_gain_db is None else float(expected_gain_db)
+    mismatch_db = None if expected is None else measured_gain_db - expected
+    level_valid = True if mismatch_db is None else abs(mismatch_db) <= 2.0
+    level_validation = {
+        "valid": level_valid,
+        "tolerance_db": 2.0,
+        "expected_gain_db": None if expected is None else round(expected, 3),
+        "measured_gain_db": round(measured_gain_db, 3),
+        "mismatch_db": None if mismatch_db is None else round(mismatch_db, 3),
+    }
     residuals: dict[str, Any] = {}
     flagged: list[str] = []
     for name in MIC_LOOP_BANDS:
@@ -535,15 +547,23 @@ def _mic_loop_compare(
             "flagged": is_flagged,
         }
     mic_clip_risk = float(stress_levels["peak_dbfs"]) >= -0.25
+    classification_valid = level_valid
+    artifact_detected = classification_valid and (bool(flagged) or mic_clip_risk)
+    if not level_valid:
+        status = "TEST_INVALID_LEVEL_MISMATCH"
+    else:
+        status = "ARTIFACT" if artifact_detected else "CLEAN_WITHIN_REPEATABILITY"
     return {
         **base,
         "stress": stress_levels,
         "gain_match_db": round(gain_match_db, 3),
+        "level_validation": level_validation,
+        "classification_valid": classification_valid,
         "band_residuals": residuals,
         "flagged_bands": flagged,
         "mic_clip_risk": mic_clip_risk,
-        "artifact_detected": bool(flagged) or mic_clip_risk,
-        "status": "ARTIFACT" if (flagged or mic_clip_risk) else "CLEAN_WITHIN_REPEATABILITY",
+        "artifact_detected": artifact_detected,
+        "status": status,
     }
 
 
@@ -568,7 +588,11 @@ def _decode_mic_recording_bytes(data: bytes, filename: str, sample_rate: int = 4
             temp_path.unlink(missing_ok=True)
 
 
-def analyze_mic_loop_recordings(recordings: dict[str, tuple[str, bytes]], sample_rate: int = 48000) -> dict[str, Any]:
+def analyze_mic_loop_recordings(
+    recordings: dict[str, tuple[str, bytes]],
+    sample_rate: int = 48000,
+    expected_gain_db: float | None = None,
+) -> dict[str, Any]:
     if not isinstance(recordings, dict):
         raise ValueError("Mic-loop recordings must be an object")
     decoded: dict[str, np.ndarray] = {}
@@ -583,7 +607,12 @@ def analyze_mic_loop_recordings(recordings: dict[str, tuple[str, bytes]], sample
         decoded["stress"] = _decode_mic_recording_bytes(stress_item[1], stress_item[0], sample_rate)
     if "stress" in decoded:
         report = _mic_loop_compare(
-            decoded["background"], decoded["baseline_a"], decoded["baseline_b"], decoded["stress"], sample_rate
+            decoded["background"],
+            decoded["baseline_a"],
+            decoded["baseline_b"],
+            decoded["stress"],
+            sample_rate,
+            expected_gain_db=expected_gain_db,
         )
         mode = "stress"
     else:
