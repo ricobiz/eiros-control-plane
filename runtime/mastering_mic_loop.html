@@ -101,7 +101,31 @@
   async function countdown(id,label){for(let n=3;n>0;n--){setStatus(id,`${label}: ${n}…`,'warn');await sleep(1000);}}
   function recordFor(ms){return new Promise((resolve,reject)=>{if(!micStream) return reject(new Error('Сначала MIC'));const mime=chooseMime();let rec;try{rec=mime?new MediaRecorder(micStream,{mimeType:mime}):new MediaRecorder(micStream);}catch(e){return reject(e);}const chunks=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};rec.onerror=e=>reject(e.error||e);rec.onstop=()=>resolve(new Blob(chunks,{type:rec.mimeType||mime||'application/octet-stream'}));rec.start(250);setTimeout(()=>{if(rec.state!=='inactive')rec.stop();},ms);});}
   async function capture(kind,withMusic=false,db=-9){
-    if(busy)return;setBusy(true);const statusId=kind==='stress'?'stress-status':'base-status';try{await ensureMic(micEl.value||'');await countdown(statusId,kind.toUpperCase());let recording;if(withMusic){const p=recordFor(cfg.clipDuration*1000+450);await sleep(200);await playExcerpt(db);recording=await p;stopPlayback();}else{recording=await recordFor(cfg.backgroundDuration*1000);}blobs[kind]=recording;setStatus(statusId,`${kind.toUpperCase()} записан · ${(recording.size/1024).toFixed(0)} KB`,'good');}catch(e){stopPlayback();setStatus(statusId,String(e?.message||e),'bad');}finally{setBusy(false);}}
+    if(busy)return;
+    setBusy(true);
+    const statusId=kind==='stress'?'stress-status':'base-status';
+    try{
+      if(!micStream)throw new Error('Сначала нажми MIC — микрофон должен оставаться открытым на весь тест');
+      await countdown(statusId,kind.toUpperCase());
+      let recording;
+      if(withMusic){
+        const p=recordFor(cfg.clipDuration*1000+450);
+        await sleep(200);
+        await playExcerpt(db);
+        recording=await p;
+        stopPlayback();
+      }else{
+        recording=await recordFor(cfg.backgroundDuration*1000);
+      }
+      blobs[kind]=recording;
+      setStatus(statusId,`${kind.toUpperCase()} записан · ${(recording.size/1024).toFixed(0)} KB`,'good');
+    }catch(e){
+      stopPlayback();
+      setStatus(statusId,String(e?.message||e),'bad');
+    }finally{
+      setBusy(false);
+    }
+  }
   function addBlob(fd,key,blob){if(!blob)throw new Error('Нет записи '+key);const ext=recordingExt(blob.type);fd.append(key,blob,key+'.'+ext);}
   async function sendAnalysis(includeStress){const fd=new FormData();addBlob(fd,'background',blobs.background);addBlob(fd,'baseline_a',blobs.baseline_a);addBlob(fd,'baseline_b',blobs.baseline_b);if(includeStress)addBlob(fd,'stress',blobs.stress);const r=await fetch(API+'/calibration/mic-loop/analyze',{method:'POST',body:fd});const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'analysis failed');return data.report;}
   function renderReport(report){const seal=report.seal_check||{};const bassConfidence=seal.bass_confidence||((seal.trusted_bass_bands??0)>0?'HIGH':'LOW');$('seal-result').textContent='SEAL '+(seal.status||'—');$('seal-detail').textContent=`bass Δ ${seal.bass_delta_db??'—'} dB · BASS CONFIDENCE ${bassConfidence} · trusted ${seal.trusted_bass_bands??0}`;$('seal-result').style.color=seal.stable?'var(--green)':'var(--amber)';const artifact=Boolean(report.artifact_detected);$('artifact-result').textContent='ARTIFACT '+(report.status||'BASELINE');$('artifact-result').style.color=artifact?'var(--red)':'var(--green)';$('artifact-detail').textContent=report.mic_clip_risk?'MIC CLIP RISK':(report.gain_match_db!=null?`gain match ${report.gain_match_db} dB`:'baseline only');const rows=report.band_residuals||{};$('bands').innerHTML=Object.entries(rows).map(([name,row])=>`<div class="band ${row.flagged?'flag':''}"><span>${name}</span><b>${row.residual_db>=0?'+':''}${row.residual_db} dB ${row.trusted?'':'· LOW CONF'}</b></div>`).join('');}

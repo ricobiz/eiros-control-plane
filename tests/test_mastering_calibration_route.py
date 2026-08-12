@@ -75,3 +75,13 @@ def test_mic_loop_baseline_level_is_user_adjustable():
     assert 'value="-9"' in text
     assert "Number(baselineLevel.value)" in text
     assert "cfg.baselineDb" not in text
+
+
+def test_mic_loop_capture_reuses_one_open_microphone_stream():
+    text = Path("runtime/mastering_mic_loop.html").read_text(encoding="utf-8")
+    capture_start = text.index("async function capture")
+    capture_end = text.index("function addBlob", capture_start)
+    capture_block = text[capture_start:capture_end]
+    assert "ensureMic(" not in capture_block
+    assert "if(!micStream)" in capture_block
+    assert "Сначала нажми MIC" in capture_block
