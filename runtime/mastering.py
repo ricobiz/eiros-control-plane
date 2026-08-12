@@ -659,6 +659,16 @@ def analyze(asset_id: str, force: bool = False) -> dict[str, Any]:
     return {"ok": True, "asset_id": meta["asset_id"], "cached": False, "analysis": report}
 
 
+def audit_asset_metadata(asset_id: str) -> dict[str, Any]:
+    from runtime.mastering_metadata import inspect_metadata
+    meta = _read_meta(asset_id)
+    audit = inspect_metadata(_input_path(meta))
+    meta["metadata_audit"] = audit
+    meta["metadata_audited_at"] = int(time.time())
+    _write_meta(meta)
+    return {"ok": True, "asset_id": meta["asset_id"], "audit": audit}
+
+
 def _profile_filters(profile: str) -> tuple[str, str]:
     key = str(profile or "transparent").strip().lower()
     profiles = {
