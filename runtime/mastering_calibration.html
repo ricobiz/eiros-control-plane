@@ -7,77 +7,215 @@
 <title>E-MASTER CAL</title>
 <style>
 :root{color-scheme:dark;--bg:#07090d;--panel:#0e141d;--text:#eef4fb;--muted:#7f8b9c;--line:#263244;--accent:#77aaff;--green:#50df9c;--amber:#ffbc57;--red:#ff6170}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;min-height:100%;background:radial-gradient(120% 85% at 50% -12%,#17253d 0,var(--bg) 56%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}body{min-height:100dvh;display:grid;place-items:center;padding:max(14px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom));overflow:auto}.shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,26,39,.98),rgba(8,11,17,.98));border-radius:28px;padding:16px;box-shadow:0 24px 90px rgba(0,0,0,.5)}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{font-size:12px;font-weight:850;letter-spacing:.18em}.step{font-size:10px;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px}.safety{text-align:center;color:#9ba8b8;font-size:10px;line-height:1.45;margin:9px 8px 9px}.safety b{color:#f1f5fa}.guide{margin:0 0 10px;border:1px solid var(--line);border-radius:13px;background:#0c121b}.guide summary{cursor:pointer;padding:9px 11px;color:#9da9b8;font-size:9px;font-weight:850;letter-spacing:.1em}.guideBody{padding:0 11px 10px;color:#7f8c9d;font-size:9px;line-height:1.5}.guideBody b{color:#dfe7ef}
-.stage{display:grid;place-items:center;min-height:180px;border:1px solid rgba(255,255,255,.05);border-radius:22px;background:radial-gradient(circle at 50% 44%,rgba(91,142,232,.16),transparent 45%),rgba(3,6,10,.45)}.hz{font-size:58px;line-height:.9;font-weight:700;letter-spacing:-.055em;font-variant-numeric:tabular-nums}.unit{text-align:center;color:#94a2b4;font-size:12px;letter-spacing:.14em;margin-top:10px}.db{text-align:center;font-size:23px;font-weight:700;margin-top:12px;font-variant-numeric:tabular-nums}.db small{font-size:10px;color:#697689}.compare{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.ab{height:48px;border-radius:15px;border:1px solid var(--line);background:#101824;color:#7e8b9d;font-size:13px;font-weight:850;letter-spacing:.08em}.ab.active{color:#f4f8ff;border-color:#4a6a97;background:#17243a;box-shadow:inset 0 0 24px rgba(119,170,255,.1)}.sliderBox{padding:12px 3px 4px}.sliderLabels{display:flex;justify-content:space-between;color:#667487;font-size:9px;margin:0 3px 5px}input[type=range]{width:100%;height:34px;accent-color:#8db7ff}.fine{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:5px}.fine button,.nav button,.transport button,.profileButtons button{height:39px;border:1px solid var(--line);border-radius:13px;background:#121a26;color:#dce5ef;font-size:11px;font-weight:750}.limits{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.limitBtn{height:58px;border:0;border-radius:17px;font-size:11px;font-weight:900;letter-spacing:.06em}.clean{background:linear-gradient(180deg,#ffd17b,#efa83b);color:#1d1203}.distort{background:linear-gradient(180deg,#ff7b87,#ef5362);color:#190608}.marks{min-height:24px;text-align:center;font-size:10px;color:#8996a6;display:grid;place-items:center;margin-top:6px}.nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:5px}.transport{display:grid;grid-template-columns:1.25fr 1fr;gap:8px;margin-top:8px}.transport .primary{background:#e9eff7;color:#101720;border-color:#e9eff7}
-.profile{margin-top:11px;border:1px solid var(--line);border-radius:15px;padding:9px;background:#0b1119}.profileTitle{font-size:9px;color:#8e9bab;letter-spacing:.12em;font-weight:800;margin:0 0 7px}.profileGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.profile input{width:100%;height:36px;border:1px solid var(--line);border-radius:10px;background:#080d14;color:#e8eef6;padding:0 9px;font-size:10px}.profileButtons{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}.profileStatus{min-height:16px;margin-top:6px;text-align:center;color:#6f7d8e;font-size:9px;line-height:1.35;word-break:break-word}.results{margin-top:11px;border:1px solid rgba(80,223,156,.16);background:rgba(80,223,156,.045);border-radius:16px;padding:9px}.title{color:#98e7c2;font-size:9px;letter-spacing:.12em;margin-bottom:7px}.map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.cell{background:rgba(255,255,255,.035);border-radius:9px;padding:6px 7px;font-size:9px;color:#8491a2}.cell .f{display:flex;justify-content:space-between;gap:6px}.cell b{color:#dfe7f0}.cell .sub{margin-top:3px;color:#667486}.debug{text-align:center;color:#485466;font-size:9px;margin-top:7px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:radial-gradient(120% 85% at 50% -12%,#17253d 0,var(--bg) 56%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+body{min-height:100dvh;display:grid;place-items:center;padding:max(14px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom));overflow:auto}
+.shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,26,39,.98),rgba(8,11,17,.98));border-radius:28px;padding:16px;box-shadow:0 24px 90px rgba(0,0,0,.5)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{font-size:12px;font-weight:850;letter-spacing:.18em}.step{font-size:10px;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px}
+.safety{text-align:center;color:#9ba8b8;font-size:10px;line-height:1.45;margin:9px 8px}.safety b{color:#f1f5fa}
+.guide{margin:0 0 10px;border:1px solid var(--line);border-radius:13px;background:#0c121b}.guide summary{cursor:pointer;padding:9px 11px;color:#9da9b8;font-size:9px;font-weight:850;letter-spacing:.1em}.guideBody{padding:0 11px 10px;color:#7f8c9d;font-size:9px;line-height:1.55}.guideBody b{color:#dfe7ef}
+.stage{display:grid;place-items:center;min-height:190px;border:1px solid rgba(255,255,255,.05);border-radius:22px;background:radial-gradient(circle at 50% 44%,rgba(91,142,232,.16),transparent 45%),rgba(3,6,10,.45)}
+.hz{font-size:58px;line-height:.9;font-weight:700;letter-spacing:-.055em;font-variant-numeric:tabular-nums}.unit{text-align:center;color:#94a2b4;font-size:12px;letter-spacing:.14em;margin-top:10px}.db{text-align:center;font-size:25px;font-weight:720;margin-top:12px;font-variant-numeric:tabular-nums}.db small{font-size:10px;color:#697689}
+.sliderBox{padding:13px 3px 4px}.sliderLabels{display:flex;justify-content:space-between;color:#667487;font-size:9px;margin:0 3px 5px}input[type=range]{width:100%;height:36px;accent-color:#8db7ff}
+.fine{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:5px}.fine button,.nav button,.transport button,.profileButtons button{height:39px;border:1px solid var(--line);border-radius:13px;background:#121a26;color:#dce5ef;font-size:11px;font-weight:750}.fine button:active,.nav button:active,.transport button:active,.profileButtons button:active{transform:scale(.985)}
+.limits{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.limitBtn{height:62px;border:0;border-radius:17px;font-size:11px;font-weight:900;letter-spacing:.06em}.minBtn{background:linear-gradient(180deg,#78b6ff,#5593ed);color:#07101b}.maxBtn{background:linear-gradient(180deg,#68e7aa,#43cb8c);color:#06140d}.limitBtn:active{transform:scale(.985)}
+.marks{min-height:33px;text-align:center;font-size:10px;color:#8996a6;display:grid;place-items:center;margin-top:6px;line-height:1.4}.nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:5px}.transport{display:grid;grid-template-columns:1.25fr 1fr;gap:8px;margin-top:8px}.transport .primary{background:#e9eff7;color:#101720;border-color:#e9eff7}
+.profile{margin-top:11px;border:1px solid var(--line);border-radius:15px;padding:9px;background:#0b1119}.profileTitle{font-size:9px;color:#8e9bab;letter-spacing:.12em;font-weight:800;margin:0 0 7px}.profileGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.profile input{width:100%;height:36px;border:1px solid var(--line);border-radius:10px;background:#080d14;color:#e8eef6;padding:0 9px;font-size:10px}.profileButtons{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}.profileStatus{min-height:16px;margin-top:6px;text-align:center;color:#6f7d8e;font-size:9px;line-height:1.35;word-break:break-word}
+.results{margin-top:11px;border:1px solid rgba(80,223,156,.16);background:rgba(80,223,156,.045);border-radius:16px;padding:9px}.title{color:#98e7c2;font-size:9px;letter-spacing:.12em;margin-bottom:7px}.map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.cell{background:rgba(255,255,255,.035);border-radius:9px;padding:6px 7px;font-size:9px;color:#8491a2}.cell .f{display:flex;justify-content:space-between;gap:6px}.cell b{color:#dfe7f0}.cell .sub{margin-top:3px;color:#667486}.debug{text-align:center;color:#485466;font-size:9px;margin-top:7px}
 </style>
 </head>
 <body>
 <main class="shell">
   <div class="top"><div class="brand">E-MASTER CAL</div><div class="step" id="step">1/11</div></div>
-  <div class="safety"><b>Громкость устройства: MAX</b> для этого профиля. После начала калибровки её не меняй. TEST начинаем с низкого цифрового уровня; если неприятно — сразу STOP.</div>
-  <details class="guide" open><summary>КАК ПРОХОДИТЬ</summary><div class="guideBody"><b>1.</b> Подключи нужные наушники и поставь громкость устройства MAX. <b>2.</b> Нажми START. <b>3.</b> Двигай TEST и мгновенно сравнивай с REF. REF — тот же тон на 6 dB тише. <b>4.</b> Если впервые стабильно появляется неоднородность — сохрани CLEAN LIMIT. <b>5.</b> Если появляется явный хрип/развал — DISTORT LIMIT. <b>6.</b> NEXT Hz и повтори.</div></details>
+  <div class="safety"><b>Громкость устройства: MAX</b> — условие этого профиля. После начала её не меняй. Тестовый уровень стартует очень низко; если звук неприятен — сразу STOP.</div>
+  <details class="guide" open>
+    <summary>КАК ПРОХОДИТЬ</summary>
+    <div class="guideBody">
+      <b>1.</b> Подключи нужные наушники, выставь громкость устройства MAX и больше её не трогай.
+      <b>2.</b> START запускает один непрерывный тон текущей частоты.
+      <b>3.</b> Для <b>MIN AUDIBLE</b> поднимай уровень снизу, пока тон впервые не станет уверенно слышимым; проверь, чуть опустив и вернув назад, затем сохрани.
+      <b>4.</b> Для <b>MAX CLEAN</b> продолжай поднимать. Пока динамик воспроизводит тон нормально — идём выше. Если появляется знакомое кряхтение, хрип, захлёбывание или явный развал — откати вниз до последнего чистого уровня и сохрани MAX CLEAN.
+      <b>5.</b> Если дошёл до 0 dBFS и всё чисто — сохраняй 0: значит предел в доступном цифровом тракте не найден.
+      <b>6.</b> NEXT Hz сбрасывает уровень вниз и переходит к следующей частоте.
+    </div>
+  </details>
 
-  <section class="stage"><div><div class="hz" id="hz">20</div><div class="unit">HZ</div><div class="db"><span id="db">−18.0</span> <small>dBFS</small></div></div></section>
-  <div class="compare"><button class="ab" id="ref">REF</button><button class="ab active" id="test">TEST</button></div>
-  <div class="sliderBox"><div class="sliderLabels"><span>−40 dB</span><span>0 dBFS</span></div><input id="level" type="range" min="-40" max="0" step="0.1" value="-18" aria-label="Test level"></div>
+  <section class="stage"><div><div class="hz" id="hz">20</div><div class="unit">HZ</div><div class="db"><span id="db">−50.0</span> <small>dBFS</small></div></div></section>
+
+  <div class="sliderBox"><div class="sliderLabels"><span>−80 dB</span><span>0 dBFS</span></div><input id="level" type="range" min="-80" max="0" step="0.1" value="-50" aria-label="Test level"></div>
   <div class="fine"><button data-step="-1">−1 dB</button><button data-step="1">+1 dB</button><button data-step="-0.2">−0.2</button><button data-step="0.2">+0.2</button></div>
-  <div class="limits"><button class="limitBtn clean" id="clean-limit">CLEAN LIMIT</button><button class="limitBtn distort" id="distort-limit">DISTORT LIMIT</button></div>
-  <div class="marks" id="marks">Подведи TEST к границе, переключая REF ↔ TEST.</div>
+
+  <div class="limits"><button class="limitBtn minBtn" id="min-audible">MIN AUDIBLE</button><button class="limitBtn maxBtn" id="max-clean">MAX CLEAN</button></div>
+  <div class="marks" id="marks">Сначала найди MIN AUDIBLE, затем MAX CLEAN на той же частоте.</div>
+
   <div class="nav"><button id="prev">◀ PREV Hz</button><button id="next">NEXT Hz ▶</button></div>
   <div class="transport"><button class="primary" id="start">START</button><button id="reset">RESET</button></div>
 
   <section class="profile"><div class="profileTitle">CALIBRATION PROFILE</div><div class="profileGrid"><input id="profile-name" placeholder="Название: AirPods / iPhone"><input id="profile-code" autocapitalize="characters" placeholder="CAL-XXXX-XXXX-XXXX"></div><div class="profileButtons"><button id="save-profile">SAVE PROFILE</button><button id="load-profile">LOAD PROFILE</button></div><div class="profileStatus" id="profile-status">Код позволяет восстановить эту калибровку в другой сессии.</div></section>
 
-  <section class="results"><div class="title">CALIBRATION MAP</div><div class="map" id="map"></div></section>
+  <section class="results"><div class="title">MIN / MAX MAP</div><div class="map" id="map"></div></section>
   <div class="debug" id="debug"></div>
 </main>
 <script>
 (() => {
   'use strict';
+
   const testFrequencies=[20,25,31.5,40,50,63,80,100,125,160,200];
-  const cfg={minDb:-40,maxDb:0,startDb:-18,referenceOffsetDb:6,fadeSeconds:0.025};
-  const referenceOffsetDb=cfg.referenceOffsetDb;
-  const frequencyMap=Object.fromEntries(testFrequencies.map(hz=>[String(hz),{hz,cleanLimitDb:null,distortLimitDb:null}]));
-  const state={index:0,testDb:cfg.startDb,mode:'test',playing:false};
+  const cfg={minDb:-80,maxDb:0,startDb:-50,fadeSeconds:0.025};
+  const frequencyMap=Object.fromEntries(testFrequencies.map(hz=>[String(hz),{hz,minAudibleDb:null,maxCleanDb:null}]));
+  const state={index:0,testDb:cfg.startDb,playing:false};
   let audioCtx=null,oscillator=null,gainNode=null;
 
   const $=id=>document.getElementById(id);
-  const hzEl=$('hz'),dbEl=$('db'),stepEl=$('step'),slider=$('level'),refBtn=$('ref'),testBtn=$('test');
-  const marksEl=$('marks'),mapEl=$('map'),debugEl=$('debug'),startBtn=$('start'),profileNameEl=$('profile-name'),profileCodeEl=$('profile-code'),profileStatusEl=$('profile-status');
+  const hzEl=$('hz'),dbEl=$('db'),stepEl=$('step'),slider=$('level'),marksEl=$('marks'),mapEl=$('map'),debugEl=$('debug'),startBtn=$('start');
+  const profileNameEl=$('profile-name'),profileCodeEl=$('profile-code'),profileStatusEl=$('profile-status');
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const dbToGain=db=>10**(db/20);
   const fmtHz=hz=>Number.isInteger(hz)?String(hz):Number(hz).toFixed(1);
   const fmtDb=db=>db==null?'—':`${Number(db).toFixed(1).replace('-','−')} dB`;
   const currentHz=()=>testFrequencies[state.index];
-  const activeDb=()=>state.mode==='ref'?clamp(state.testDb-referenceOffsetDb,cfg.minDb,cfg.maxDb):state.testDb;
 
-  function renderMap(){mapEl.innerHTML=testFrequencies.map(hz=>{const row=frequencyMap[String(hz)];return `<div class="cell"><div class="f"><span>${fmtHz(hz)} Hz</span><b>${row.cleanLimitDb==null&&row.distortLimitDb==null?'—':'saved'}</b></div><div class="sub">C ${fmtDb(row.cleanLimitDb)} · D ${fmtDb(row.distortLimitDb)}</div></div>`;}).join('');}
-  function render(){hzEl.textContent=fmtHz(currentHz());dbEl.textContent=Number(state.testDb).toFixed(1).replace('-','−');slider.value=String(state.testDb);stepEl.textContent=`${state.index+1}/${testFrequencies.length}`;refBtn.classList.toggle('active',state.mode==='ref');testBtn.classList.toggle('active',state.mode==='test');startBtn.textContent=state.playing?'STOP':'START';const row=frequencyMap[String(currentHz())];marksEl.textContent=`${fmtHz(currentHz())} Hz · CLEAN ${fmtDb(row.cleanLimitDb)} · DISTORT ${fmtDb(row.distortLimitDb)} · ${state.mode.toUpperCase()} ${fmtDb(activeDb())}`;debugEl.textContent=`REF = TEST − ${referenceOffsetDb} dB · full scale limit 0 dBFS`;renderMap();}
+  function renderMap(){
+    mapEl.innerHTML=testFrequencies.map(hz=>{
+      const row=frequencyMap[String(hz)];
+      const saved=row.minAudibleDb!=null||row.maxCleanDb!=null;
+      return `<div class="cell"><div class="f"><span>${fmtHz(hz)} Hz</span><b>${saved?'saved':'—'}</b></div><div class="sub">MIN ${fmtDb(row.minAudibleDb)} · MAX ${fmtDb(row.maxCleanDb)}</div></div>`;
+    }).join('');
+  }
 
-  async function ensureAudio(){const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)throw new Error('AudioContext unavailable');if(!audioCtx||audioCtx.state==='closed')audioCtx=new Ctx({latencyHint:'interactive'});if(audioCtx.state==='suspended')await audioCtx.resume();}
-  function updateGain(){if(!gainNode||!audioCtx)return;const now=audioCtx.currentTime,target=dbToGain(activeDb());try{gainNode.gain.cancelScheduledValues(now);gainNode.gain.setTargetAtTime(target,now,0.018);}catch{}}
-  function updateFrequency(){if(!oscillator||!audioCtx)return;try{oscillator.frequency.setTargetAtTime(currentHz(),audioCtx.currentTime,0.018);}catch{}}
-  async function start(){if(state.playing){await stop(false);return;}await ensureAudio();const now=audioCtx.currentTime;oscillator=audioCtx.createOscillator();gainNode=audioCtx.createGain();oscillator.type='sine';oscillator.frequency.setValueAtTime(currentHz(),now);gainNode.gain.setValueAtTime(0.00001,now);gainNode.gain.exponentialRampToValueAtTime(Math.max(0.00001,dbToGain(activeDb())),now+cfg.fadeSeconds);oscillator.connect(gainNode);gainNode.connect(audioCtx.destination);oscillator.start(now);state.playing=true;render();}
-  async function stop(dispose=false){if(gainNode&&audioCtx){const now=audioCtx.currentTime;try{gainNode.gain.cancelScheduledValues(now);gainNode.gain.setTargetAtTime(0.00001,now,0.01);}catch{}}if(oscillator&&audioCtx){try{oscillator.stop(audioCtx.currentTime+0.06);}catch{}}oscillator=null;gainNode=null;state.playing=false;if(dispose&&audioCtx){try{await audioCtx.close();}catch{}audioCtx=null;}render();}
-  function setMode(mode){state.mode=mode==='ref'?'ref':'test';updateGain();render();}
-  function setTestLevel(db){state.testDb=clamp(Number(db),cfg.minDb,cfg.maxDb);updateGain();render();}
-  function saveCleanLimit(){frequencyMap[String(currentHz())].cleanLimitDb=state.testDb;render();}
-  function saveDistortLimit(){frequencyMap[String(currentHz())].distortLimitDb=state.testDb;render();}
-  function moveFrequency(delta){state.index=clamp(state.index+delta,0,testFrequencies.length-1);state.testDb=cfg.startDb;state.mode='test';updateFrequency();updateGain();render();}
-  async function reset(){await stop(true);for(const hz of testFrequencies){frequencyMap[String(hz)].cleanLimitDb=null;frequencyMap[String(hz)].distortLimitDb=null;}state.index=0;state.testDb=cfg.startDb;state.mode='test';render();}
+  function render(){
+    hzEl.textContent=fmtHz(currentHz());
+    dbEl.textContent=Number(state.testDb).toFixed(1).replace('-','−');
+    slider.value=String(state.testDb);
+    stepEl.textContent=`${state.index+1}/${testFrequencies.length}`;
+    startBtn.textContent=state.playing?'STOP':'START';
+    const row=frequencyMap[String(currentHz())];
+    marksEl.textContent=`${fmtHz(currentHz())} Hz · MIN ${fmtDb(row.minAudibleDb)} · MAX CLEAN ${fmtDb(row.maxCleanDb)}`;
+    debugEl.textContent='Один чистый sine tone · ручной уровень · максимум 0 dBFS';
+    renderMap();
+  }
+
+  async function ensureAudio(){
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(!Ctx)throw new Error('AudioContext unavailable');
+    if(!audioCtx||audioCtx.state==='closed')audioCtx=new Ctx({latencyHint:'interactive'});
+    if(audioCtx.state==='suspended')await audioCtx.resume();
+  }
+
+  function updateGain(){
+    if(!gainNode||!audioCtx)return;
+    const now=audioCtx.currentTime,target=dbToGain(state.testDb);
+    try{gainNode.gain.cancelScheduledValues(now);gainNode.gain.setTargetAtTime(target,now,0.018);}catch{}
+  }
+
+  function updateFrequency(){
+    if(!oscillator||!audioCtx)return;
+    try{oscillator.frequency.setTargetAtTime(currentHz(),audioCtx.currentTime,0.018);}catch{}
+  }
+
+  async function start(){
+    if(state.playing){await stop(false);return;}
+    await ensureAudio();
+    const now=audioCtx.currentTime;
+    oscillator=audioCtx.createOscillator();
+    gainNode=audioCtx.createGain();
+    oscillator.type='sine';
+    oscillator.frequency.setValueAtTime(currentHz(),now);
+    gainNode.gain.setValueAtTime(0.00001,now);
+    gainNode.gain.exponentialRampToValueAtTime(Math.max(0.00001,dbToGain(state.testDb)),now+cfg.fadeSeconds);
+    oscillator.connect(gainNode);gainNode.connect(audioCtx.destination);
+    oscillator.start(now);
+    state.playing=true;
+    render();
+  }
+
+  async function stop(dispose=false){
+    if(gainNode&&audioCtx){
+      const now=audioCtx.currentTime;
+      try{gainNode.gain.cancelScheduledValues(now);gainNode.gain.setTargetAtTime(0.00001,now,0.01);}catch{}
+    }
+    if(oscillator&&audioCtx){try{oscillator.stop(audioCtx.currentTime+0.06);}catch{}}
+    oscillator=null;gainNode=null;state.playing=false;
+    if(dispose&&audioCtx){try{await audioCtx.close();}catch{}audioCtx=null;}
+    render();
+  }
+
+  function setTestLevel(db){
+    state.testDb=clamp(Number(db),cfg.minDb,cfg.maxDb);
+    updateGain();
+    render();
+  }
+
+  function saveMinAudible(){
+    frequencyMap[String(currentHz())].minAudibleDb=state.testDb;
+    render();
+  }
+
+  function saveMaxClean(){
+    frequencyMap[String(currentHz())].maxCleanDb=state.testDb;
+    render();
+  }
+
+  function moveFrequency(delta){
+    state.index=clamp(state.index+delta,0,testFrequencies.length-1);
+    state.testDb=cfg.startDb;
+    updateFrequency();updateGain();render();
+  }
+
+  async function reset(){
+    await stop(true);
+    for(const hz of testFrequencies){frequencyMap[String(hz)].minAudibleDb=null;frequencyMap[String(hz)].maxCleanDb=null;}
+    state.index=0;state.testDb=cfg.startDb;render();
+  }
 
   const profileSavePath='./calibration/profile/save';
   const profileLoadPath='./calibration/profile/load';
-  function profilePayload(){return {schema_version:1,hardware_volume:'max',reference_offset_db:referenceOffsetDb,test_frequencies:[...testFrequencies],frequency_map:JSON.parse(JSON.stringify(frequencyMap)),method:'manual-ref-test-v1'};}
+  function profilePayload(){return {schema_version:1,hardware_volume:'max',test_frequencies:[...testFrequencies],frequency_map:JSON.parse(JSON.stringify(frequencyMap)),method:'manual-min-max-v1'};}
   function profileUrl(action){return new URL(action==='save'?profileSavePath:profileLoadPath,window.location.href).toString();}
-  async function saveProfile(){profileStatusEl.textContent='Сохраняю…';const body={name:profileNameEl.value.trim()||'Calibration profile',code:profileCodeEl.value.trim(),profile:profilePayload()};const response=await fetch(profileUrl('save'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'Save failed');profileNameEl.value=data.name||body.name;profileCodeEl.value=data.code||'';profileStatusEl.textContent=`Сохранено: ${data.code}. Для применения выставь громкость устройства MAX.`;}
-  async function loadProfile(){const code=profileCodeEl.value.trim();if(!code)throw new Error('Введи код профиля');profileStatusEl.textContent='Загружаю…';const response=await fetch(profileUrl('load'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'Load failed');const profile=data.profile||{};const incoming=profile.frequency_map||{};const nullableNumber=value=>value===null||value===undefined||value===''?null:(Number.isFinite(Number(value))?Number(value):null);for(const hz of testFrequencies){const row=incoming[String(hz)]||{};frequencyMap[String(hz)].cleanLimitDb=nullableNumber(row.cleanLimitDb);frequencyMap[String(hz)].distortLimitDb=nullableNumber(row.distortLimitDb);}profileNameEl.value=data.name||'';profileCodeEl.value=data.code||code.toUpperCase();state.index=0;state.testDb=cfg.startDb;state.mode='test';updateFrequency();updateGain();render();profileStatusEl.textContent=`Профиль загружен. Условие: громкость устройства MAX. ${data.code}`;}
 
-  slider.addEventListener('input',()=>setTestLevel(slider.value));document.querySelectorAll('[data-step]').forEach(btn=>btn.addEventListener('click',()=>setTestLevel(state.testDb+Number(btn.dataset.step))));refBtn.addEventListener('click',()=>setMode('ref'));testBtn.addEventListener('click',()=>setMode('test'));$('clean-limit').addEventListener('click',saveCleanLimit);$('distort-limit').addEventListener('click',saveDistortLimit);$('prev').addEventListener('click',()=>moveFrequency(-1));$('next').addEventListener('click',()=>moveFrequency(1));startBtn.addEventListener('click',()=>start().catch(err=>{marksEl.textContent=String(err&&err.message||err);}));$('reset').addEventListener('click',reset);$('save-profile').addEventListener('click',()=>saveProfile().catch(err=>{profileStatusEl.textContent=String(err&&err.message||err);}));$('load-profile').addEventListener('click',()=>loadProfile().catch(err=>{profileStatusEl.textContent=String(err&&err.message||err);}));document.addEventListener('visibilitychange',()=>{if(document.hidden)stop(true);});window.addEventListener('pagehide',()=>{stop(true);});
+  async function saveProfile(){
+    profileStatusEl.textContent='Сохраняю…';
+    const body={name:profileNameEl.value.trim()||'Calibration profile',code:profileCodeEl.value.trim(),profile:profilePayload()};
+    const response=await fetch(profileUrl('save'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'Save failed');
+    profileNameEl.value=data.name||body.name;profileCodeEl.value=data.code||'';
+    profileStatusEl.textContent=`Сохранено: ${data.code}. Для применения выставь громкость устройства MAX.`;
+  }
 
-  window.EMasterCalibration={start,stop,reset,setTestLevel,setMode,saveCleanLimit,saveDistortLimit,saveProfile,loadProfile,frequencyMap,testFrequencies:[...testFrequencies],snapshot:()=>JSON.parse(JSON.stringify({state,frequencyMap}))};render();
+  async function loadProfile(){
+    const code=profileCodeEl.value.trim();if(!code)throw new Error('Введи код профиля');
+    profileStatusEl.textContent='Загружаю…';
+    const response=await fetch(profileUrl('load'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'Load failed');
+    const profile=data.profile||{},incoming=profile.frequency_map||{};
+    const nullableNumber=value=>value===null||value===undefined||value===''?null:(Number.isFinite(Number(value))?Number(value):null);
+    for(const hz of testFrequencies){
+      const row=incoming[String(hz)]||{};
+      frequencyMap[String(hz)].minAudibleDb=nullableNumber(row.minAudibleDb);
+      frequencyMap[String(hz)].maxCleanDb=nullableNumber(row.maxCleanDb!=null?row.maxCleanDb:row.cleanLimitDb);
+    }
+    profileNameEl.value=data.name||'';profileCodeEl.value=data.code||code.toUpperCase();
+    state.index=0;state.testDb=cfg.startDb;updateFrequency();updateGain();render();
+    profileStatusEl.textContent=`Профиль загружен. Условие: громкость устройства MAX. ${data.code}`;
+  }
+
+  slider.addEventListener('input',()=>setTestLevel(slider.value));
+  document.querySelectorAll('[data-step]').forEach(btn=>btn.addEventListener('click',()=>setTestLevel(state.testDb+Number(btn.dataset.step))));
+  $('min-audible').addEventListener('click',saveMinAudible);
+  $('max-clean').addEventListener('click',saveMaxClean);
+  $('prev').addEventListener('click',()=>moveFrequency(-1));
+  $('next').addEventListener('click',()=>moveFrequency(1));
+  startBtn.addEventListener('click',()=>start().catch(err=>{marksEl.textContent=String(err&&err.message||err);}));
+  $('reset').addEventListener('click',reset);
+  $('save-profile').addEventListener('click',()=>saveProfile().catch(err=>{profileStatusEl.textContent=String(err&&err.message||err);}));
+  $('load-profile').addEventListener('click',()=>loadProfile().catch(err=>{profileStatusEl.textContent=String(err&&err.message||err);}));
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop(true);});
+  window.addEventListener('pagehide',()=>{stop(true);});
+
+  window.EMasterCalibration={start,stop,reset,setTestLevel,saveMinAudible,saveMaxClean,saveProfile,loadProfile,frequencyMap,testFrequencies:[...testFrequencies],snapshot:()=>JSON.parse(JSON.stringify({state,frequencyMap}))};
+  render();
 })();
 </script>
 </body>

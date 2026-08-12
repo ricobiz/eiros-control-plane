@@ -9,10 +9,8 @@ def test_calibration_page_contract():
         "E-MASTER CAL",
         'id="start"',
         'id="level"',
-        'id="ref"',
-        'id="test"',
-        'id="clean-limit"',
-        'id="distort-limit"',
+        'id="min-audible"',
+        'id="max-clean"',
         'id="prev"',
         'id="next"',
         'id="profile-name"',
@@ -32,9 +30,15 @@ def test_calibration_page_contract():
         "EMasterCalibration",
         "testFrequencies",
         "frequencyMap",
-        "referenceOffsetDb",
         "setTestLevel",
-        "saveCleanLimit",
-        "saveDistortLimit",
+        "saveMinAudible",
+        "saveMaxClean",
+        "minAudibleDb",
+        "maxCleanDb",
+        "manual-min-max-v1",
     ]:
         assert token in text
+
+    assert 'id="ref"' not in text
+    assert 'id="test"' not in text
+    assert "referenceOffsetDb" not in text
