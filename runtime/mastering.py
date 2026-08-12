@@ -669,6 +669,16 @@ def audit_asset_metadata(asset_id: str) -> dict[str, Any]:
     return {"ok": True, "asset_id": meta["asset_id"], "audit": audit}
 
 
+def experience_similar(asset_id: str, intent_tags: list[str] | None = None, protected_traits: list[str] | None = None, limit: int = 5) -> dict[str, Any]:
+    from runtime.mastering_memory import build_experience_fingerprint, find_similar_experiences
+    meta = _read_meta(asset_id)
+    analysis = meta.get("analysis")
+    if not isinstance(analysis, dict):
+        analysis = analyze(asset_id)["analysis"]
+    fingerprint = build_experience_fingerprint(analysis, intent_tags, protected_traits)
+    return {"ok": True, "asset_id": meta["asset_id"], "fingerprint": fingerprint, "matches": find_similar_experiences(fingerprint, limit)}
+
+
 def _profile_filters(profile: str) -> tuple[str, str]:
     key = str(profile or "transparent").strip().lower()
     profiles = {
