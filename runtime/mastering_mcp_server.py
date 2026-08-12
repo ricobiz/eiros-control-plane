@@ -80,6 +80,12 @@ PANEL_META: dict[str, Any] = {
 }
 
 
+def _panel_v17_html() -> str:
+    path = Path(__file__).with_name("mastering_panel_v17.html")
+    template = path.read_text(encoding="utf-8")
+    return template.replace("__PUBLIC_BASE__", PUBLIC_BASE).replace("__PUBLIC_SHARE_BASE__", PUBLIC_SHARE_BASE)
+
+
 def _panel_html() -> str:
     template = r"""<!doctype html>
 <html lang="ru">
@@ -941,7 +947,7 @@ def _panel_html() -> str:
     meta=PANEL_META,
 )
 def mastering_panel_resource() -> str:
-    return _panel_html()
+    return _panel_v17_html()
 
 
 @mcp.resource(
