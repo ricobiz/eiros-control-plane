@@ -69,7 +69,23 @@
 - [ ] Verify resulting file peak stays below/equal 0 dBFS at `safe_stress_max_db`.
 - [ ] Commit `feat: render track stress preview`.
 
-### Task 4: HTTP endpoints
+### Task 4: Post-render hot-peak artifact audit
+
+**Files:**
+- Modify: `runtime/mastering.py`
+- Modify: `tests/test_mastering_track_stress.py`
+
+**Interfaces:**
+- Produces: `audit_calibration_stress_render(asset_id: str, stress_path: Path, source_start_seconds: float, duration_seconds: float) -> dict[str, Any]`
+- Returns `digital_clean`, `sample_clip_count`, `true_peak_margin_db`, `new_hf_energy_db`, `crest_delta_db`, `hot_windows`, and `reason_codes`.
+
+- [ ] Write a failing test where a clean gain-only derivative passes and a deliberately clipped derivative fails.
+- [ ] Verify RED.
+- [ ] Compare the exact source excerpt and stress derivative in short windows around their highest peaks; detect sample clipping/near-clipping, excessive new high-frequency energy, abnormal crest collapse, and non-finite samples.
+- [ ] Verify GREEN. A user-reported grunt may be attributed to the playback chain only when `digital_clean == true`.
+- [ ] Commit `feat: audit stress render peak artifacts`.
+
+### Task 5: HTTP endpoints
 
 **Files:**
 - Modify: `runtime/mastering_mcp_server.py`
@@ -84,7 +100,7 @@
 - [ ] Implement routes and CORS/no-store behavior.
 - [ ] Verify GREEN and commit `feat: expose track stress calibration api`.
 
-### Task 5: Browser TRACK STRESS mode
+### Task 6: Browser TRACK STRESS mode
 
 **Files:**
 - Modify: `runtime/mastering_calibration.html`
@@ -101,7 +117,7 @@
 - [ ] Verify no gain can exceed server safe max.
 - [ ] Commit `feat: add track stress calibration ui`.
 
-### Task 6: Culprit localization and profile persistence
+### Task 7: Culprit localization and profile persistence
 
 **Files:**
 - Modify: `runtime/mastering_calibration.html`
@@ -118,7 +134,7 @@
 - [ ] Add stress-history schema and load/save migration in browser payload only; backend profile store remains generic JSON.
 - [ ] Verify GREEN and commit `feat: persist track stress calibration`.
 
-### Task 7: Preview deployment and validation
+### Task 8: Preview deployment and validation
 
 **Files:**
 - No product source changes unless verification exposes a defect.
