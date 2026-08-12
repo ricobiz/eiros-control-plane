@@ -1822,6 +1822,18 @@ async def api_timeline(request: Request) -> Response:
         return _json_error(exc, 404)
 
 
+@mcp.custom_route("/api/analysis-view", methods=["GET", "OPTIONS"])
+async def api_analysis_view(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        asset_id = str(request.query_params.get("asset_id") or "")
+        output_id = str(request.query_params.get("output_id") or "")
+        return _cors(JSONResponse(mastering_engine.analysis_payload(asset_id, output_id)))
+    except Exception as exc:
+        return _json_error(exc, 404)
+
+
 @mcp.custom_route("/api/ab", methods=["GET", "OPTIONS"])
 async def api_ab(request: Request) -> Response:
     if request.method == "OPTIONS":

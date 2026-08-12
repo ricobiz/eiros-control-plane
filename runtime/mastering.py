@@ -1326,6 +1326,68 @@ def ab_comparison(asset_id: str, output_id: str) -> dict[str, Any]:
     }
 
 
+
+def analysis_payload(asset_id: str, output_id: str) -> dict[str, Any]:
+    """Return source/master/delta views made exclusively from decoded-audio measurements."""
+    meta = _read_meta(asset_id)
+    item = _find_output(meta, output_id)
+    source = meta.get("analysis")
+    if not isinstance(source, dict):
+        source = analyze(asset_id).get("analysis") or {}
+    master = item.get("report") or {}
+    if not master:
+        raise ValueError("selected output has no measured master report")
+
+    def metrics(report: dict[str, Any]) -> dict[str, Any]:
+        loud = report.get("loudness") or {}
+        tech = report.get("technical") or {}
+        return {
+            "lufs_i": loud.get("integrated_lufs"),
+            "true_peak_dbtp": loud.get("true_peak_dbtp"),
+            "lra_lu": loud.get("loudness_range_lu"),
+            "rms_dbfs": tech.get("rms_dbfs"),
+            "crest_db": tech.get("crest_factor_db"),
+            "stereo_correlation": tech.get("stereo_correlation"),
+            "dc_offset": tech.get("dc_offset"),
+            "bands_percent": ((tech.get("spectrum") or {}).get("energy_percent") or {}),
+        }
+
+    def series(report: dict[str, Any]) -> list[dict[str, Any]]:
+        return [{
+            "t": p.get("t"), "rms_dbfs": p.get("short_rms_dbfs"),
+            "peak_dbfs": p.get("peak_dbfs"), "crest_db": p.get("crest_db"),
+            "stereo_correlation": p.get("stereo_correlation"),
+            "bands_percent": p.get("bands_percent") or {},
+        } for p in ((report.get("timeline") or {}).get("points") or [])]
+
+    sm, mm = metrics(source), metrics(master)
+    ss, ms = series(source), series(master)
+    bands_db = {}
+    for key in BAND_RANGES:
+        a=max(float((sm["bands_percent"] or {}).get(key) or 0.0),1e-9)
+        b=max(float((mm["bands_percent"] or {}).get(key) or 0.0),1e-9)
+        bands_db[key]=round(10.0*math.log10(b/a),3)
+    ds=[]
+    for a,b in zip(ss,ms):
+        ds.append({
+            "t": a["t"],
+            "rms_db": round(float(b["rms_dbfs"] or -120)-float(a["rms_dbfs"] or -120),3),
+            "crest_db": round(float(b["crest_db"] or 0)-float(a["crest_db"] or 0),3),
+            "stereo_correlation": round(float(b["stereo_correlation"] or 0)-float(a["stereo_correlation"] or 0),5),
+        })
+    def diff(key, digits=3):
+        if sm.get(key) is None or mm.get(key) is None:return None
+        return round(float(mm[key])-float(sm[key]),digits)
+    return {
+        "asset_id": meta["asset_id"], "output_id": item["output_id"],
+        "measurement_basis": "decoded_audio_measurements",
+        "source": {"metrics": sm, "series": ss, "sections": (source.get("timeline") or {}).get("sections") or []},
+        "master": {"metrics": mm, "series": ms, "sections": (master.get("timeline") or {}).get("sections") or []},
+        "delta": {"metrics": {"lufs_i":diff("lufs_i"),"true_peak_dbtp":diff("true_peak_dbtp"),"lra_lu":diff("lra_lu"),"rms_dbfs":diff("rms_dbfs"),"crest_db":diff("crest_db"),"stereo_correlation":diff("stereo_correlation",5)}, "bands_db":bands_db, "series":ds},
+        "stereo_note": "Measured stereo correlation over time; no synthetic vectorscope is generated.",
+    }
+
+
 def timeline_payload(asset_id: str, output_id: str | None = None, points: int = 384) -> dict[str, Any]:
     """Return one compact, measured timebase for workstation waveform/actions/QA."""
     meta = _read_meta(asset_id)
