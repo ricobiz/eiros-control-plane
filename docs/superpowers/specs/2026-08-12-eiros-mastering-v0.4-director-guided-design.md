@@ -462,3 +462,92 @@ v0.4 is considered complete when:
 ## Architectural invariant
 
 **No DSP action without a traceable reason. No FINAL master without post-render verification. No statistical anomaly may be treated as a defect until artistic intent says it is one.**
+
+## Professional Workstation UI Amendment
+
+The MCP panel is a first-class mastering workstation, not a thin control surface. Its design goal is the clarity, immediacy, and visual authority of professional mastering software while remaining optimized for ChatGPT-hosted interaction.
+
+### UI principles
+
+- The visual hierarchy must make the current mastering state obvious within one glance: source, analysis, director plan, render, verification, approval.
+- The interface must be dark, restrained, information-dense, and cinematic without decorative noise.
+- Core information must be visible before controls. Controls should appear only where they correspond to a clear mastering decision.
+- Every DSP action shown in the UI must be traceable to a reason and a time/frequency scope.
+- The panel must feel alive during analysis and rendering: timeline progress, active section highlighting, meter movement, analysis status, render status, and verification state should update coherently rather than through generic spinners.
+- Mobile/iOS rendering is a hard requirement. The panel must collapse intelligently without turning into an unreadable desktop UI squeezed into a phone.
+
+### Main workstation layout
+
+1. **Transport / source strip**
+   - Source name, codec, duration, sample rate, bit depth, file size.
+   - Play/pause, seek, current time, duration.
+   - Source/Master/Delta audition selector.
+   - A/B loudness-matched audition mode.
+
+2. **Master timeline**
+   - Waveform overview.
+   - Section boundaries and trajectory labels.
+   - Per-section status markers: untouched, planned, processed, flagged, verified.
+   - Overlay lanes for gain, dynamic EQ, compression/limiter activity, detected issues, and verification failures.
+   - Clicking a section opens the exact Director decision, reason, DSP parameters, and source/master delta for that section.
+
+3. **Analysis workspace**
+   - Real measured LUFS, true peak, LRA, RMS, crest factor, stereo correlation, DC offset.
+   - Spectrum and band-energy view.
+   - Spectrogram or time-frequency heatmap when available.
+   - Stereo/phase view.
+   - Transient density / crest timeline.
+   - Clipping, overs, resonance and suspicious-artifact markers.
+
+4. **Director plan view**
+   - Human-readable artistic intent.
+   - Explicit protected traits, e.g. `preserve sub mass`, `preserve crescendo`, `do not widen choir`.
+   - Per-section actions with reason, scope, strength and hard bounds.
+   - Candidate strategy selector: Preserve / Impact / Cinematic / custom Director candidate.
+   - No opaque "adaptive" action may appear without an explainable Director plan entry.
+
+5. **Render / Delta view**
+   - Source versus Master spectrum delta.
+   - Loudness and crest delta by time.
+   - Gain reduction and limiter activity timeline.
+   - Stereo correlation delta.
+   - Per-band and per-section change summaries.
+   - Every visible change links back to the Director decision that caused it.
+
+6. **Post-master verification view**
+   - Verification status: PASS / REVIEW / REJECTED.
+   - Exact failed checks, affected time ranges and severity.
+   - Automatic rerender history and what changed between attempts.
+   - FINAL/APPROVED export is impossible until verification passes and the Director approves.
+
+7. **Metadata and clean-export view**
+   - Enumerate container metadata, ID3/RIFF/BWF/XMP/comments, embedded art, chapters and encoder-identifying fields when detectable.
+   - Distinguish required structural fields from optional metadata.
+   - Show exactly what will be removed.
+   - Clean export strips optional metadata and does not claim removal of proprietary acoustic watermarks that cannot be reliably detected or removed.
+
+8. **Experience Memory view**
+   - Show relevant prior mastering cases as contextual evidence, never as automatic rules.
+   - Display similarity reason, prior decision, QA outcome and Rico approval/rejection.
+   - Allow accepted/rejected outcomes to become experience records.
+   - Experience is advisory to the Director; it never bypasses Director reasoning or verification.
+
+### Professional interaction requirements
+
+- No dashboard-card clutter for primary audio work. Timeline, waveform, spectrum and delta views are the dominant surfaces.
+- Metrics use compact strips and contextual overlays rather than large decorative tiles.
+- Controls must be labeled with audio meaning, not implementation jargon.
+- Dangerous actions such as delete, destructive metadata removal from originals, or output replacement require explicit confirmation; source audio is immutable.
+- Rendering must always create a new revision so comparisons remain possible.
+- The panel must expose revision history and allow immediate A/B comparison between source and every candidate/master revision.
+- Visual styling must remain consistent across desktop browser, ChatGPT web, and ChatGPT iOS embedding.
+
+### UI acceptance criteria
+
+- A user can understand what the system changed, where it changed it, and why without reading logs or raw JSON.
+- A user can audition Source, Master and loudness-matched A/B from the same transport.
+- A user can click any processed section and see its Director reasoning and exact DSP delta.
+- Verification failures are visible on the timeline at the affected time range.
+- Metadata slated for removal is explicitly listed before clean export.
+- The workstation remains usable at 320 CSS px width and scales cleanly to desktop width.
+- The UI does not present the automatic DSP engine as the decision maker; the Director plan is the authority shown to the user.
