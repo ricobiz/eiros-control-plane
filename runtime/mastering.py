@@ -1282,10 +1282,32 @@ def ab_comparison(asset_id: str, output_id: str) -> dict[str, Any]:
             "gain_ride_summary": adaptive.get("gain_ride") or {},
         }
 
+    source_duration = float(((analysis.get("probe") or {}).get("duration_seconds")) or probe(_input_path(meta)).get("duration_seconds") or 0.0)
+    master_duration = float(((master_report.get("probe") or {}).get("duration_seconds")) or probe(Path(str(item.get("path") or ""))).get("duration_seconds") or 0.0)
+    source_i = float(source_loudness.get("integrated_lufs") or -120.0)
+    master_i = float(master_loudness.get("integrated_lufs") or -120.0)
+    if not math.isfinite(source_i):
+        source_i = -120.0
+    if not math.isfinite(master_i):
+        master_i = -120.0
+    quiet_target = min(source_i, master_i)
+    source_match_db = max(-12.0, min(0.0, quiet_target - source_i))
+    master_match_db = max(-12.0, min(0.0, quiet_target - master_i))
+    preview = {
+        "source_duration_seconds": round(source_duration, 4),
+        "master_duration_seconds": round(master_duration, 4),
+        "timebase_match": abs(source_duration - master_duration) < 0.02,
+        "source_gain_db": round(source_match_db, 3),
+        "master_gain_db": round(master_match_db, 3),
+        "level_match_method": "attenuate_to_quieter_integrated_lufs",
+        "max_attenuation_db": 12.0,
+    }
+
     return {
         "asset_id": meta["asset_id"],
         "output_id": item["output_id"],
         "profile": item.get("profile") or "master",
+        "preview": preview,
         "section_count": adaptive.get("section_count"),
         "source": {
             "label": "A · ORIGINAL",
@@ -1302,6 +1324,56 @@ def ab_comparison(asset_id: str, output_id: str) -> dict[str, Any]:
         "processing_map": processing_map,
         "spectrum_note": "Whole-track relative spectral energy; processing map shows actual adaptive EQ decisions over time.",
     }
+
+
+def ensure_delta_preview(asset_id: str, output_id: str) -> dict[str, Any]:
+    """Create an internal MP3 monitor of the exact sample-domain master-source difference."""
+    meta = _read_meta(asset_id)
+    item = _find_output(meta, output_id)
+    master_path = Path(str(item.get("path") or "")).resolve()
+    expected = (OUTPUT_ROOT / _validate_id(meta["asset_id"])).resolve()
+    if expected not in master_path.parents or not master_path.is_file():
+        raise FileNotFoundError("Rendered master is missing")
+    derivatives = item.setdefault("derivatives", {})
+    cached = derivatives.get("delta_preview")
+    if isinstance(cached, dict):
+        cached_path = Path(str(cached.get("path") or "")).resolve()
+        if expected in cached_path.parents and cached_path.is_file():
+            return cached
+
+    source_audio = _decode_float_audio(_input_path(meta), 48000)
+    master_audio = _decode_float_audio(master_path, 48000)
+    frames = min(len(source_audio), len(master_audio))
+    if frames < 1:
+        raise RuntimeError("Cannot build delta preview from empty audio")
+    delta = (master_audio[:frames].astype(np.float64) - source_audio[:frames].astype(np.float64)).astype(np.float32)
+
+    delta_wav = expected / f".{item['output_id']}.delta-preview.wav"
+    delta_mp3 = expected / f".{item['output_id']}.delta-preview.mp3"
+    _write_float_wav(delta, 48000, delta_wav)
+    proc = _run([
+        "ffmpeg", "-y", "-v", "error", "-i", str(delta_wav),
+        "-map", "0:a:0", "-map_metadata", "-1", "-map_chapters", "-1",
+        "-vn", "-sn", "-dn", "-fflags", "+bitexact", "-flags:a", "+bitexact",
+        "-c:a", "libmp3lame", "-b:a", "320k", "-ar", "48000",
+        "-write_xing", "1", "-id3v2_version", "0", "-write_id3v1", "0",
+        str(delta_mp3),
+    ], timeout=900)
+    delta_wav.unlink(missing_ok=True)
+    if proc.returncode != 0:
+        delta_mp3.unlink(missing_ok=True)
+        raise RuntimeError(f"Delta preview export failed: {(proc.stderr or proc.stdout)[-1800:]}")
+    info = {
+        "format": "mp3", "quality": "320k", "filename": delta_mp3.name,
+        "path": str(delta_mp3), "size_bytes": delta_mp3.stat().st_size,
+        "created_at": int(time.time()), "private_preview": True,
+        "difference_signal": True, "difference_formula": "master-source",
+        "sample_rate": 48000, "duration_seconds": round(frames / 48000.0, 4),
+        "metadata_stripped": True, "distribution_policy": "internal delta audition only",
+    }
+    derivatives["delta_preview"] = info
+    _write_meta(meta)
+    return info
 
 
 def ensure_source_preview(asset_id: str) -> dict[str, Any]:

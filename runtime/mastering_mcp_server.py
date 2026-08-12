@@ -1809,6 +1809,33 @@ async def public_share_file(request: Request) -> Response:
         return _share_error_page(str(exc), 404)
 
 
+@mcp.custom_route("/api/ab", methods=["GET", "OPTIONS"])
+async def api_ab(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        asset_id = str(request.query_params.get("asset_id") or "")
+        output_id = str(request.query_params.get("output_id") or "")
+        return _cors(JSONResponse(mastering_engine.ab_comparison(asset_id, output_id)))
+    except Exception as exc:
+        return _json_error(exc, 404)
+
+
+@mcp.custom_route("/api/delta", methods=["GET", "OPTIONS"])
+async def api_delta(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return _options()
+    try:
+        asset_id = str(request.query_params.get("asset_id") or "")
+        output_id = str(request.query_params.get("output_id") or "")
+        inline = str(request.query_params.get("inline") or "").lower() in {"1", "true", "yes"}
+        info = mastering_engine.ensure_delta_preview(asset_id, output_id)
+        resolved = {"path": info["path"], "media_type": "audio/mpeg", "filename": info["filename"]}
+        return _cors(_download_response(resolved, inline))
+    except Exception as exc:
+        return _json_error(exc, 404)
+
+
 @mcp.custom_route("/api/player", methods=["GET"])
 async def api_player(request: Request) -> Response:
     try:
