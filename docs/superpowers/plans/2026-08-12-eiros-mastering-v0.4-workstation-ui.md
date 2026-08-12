@@ -154,7 +154,7 @@ Target payload shape:
   "duration": 243.4,
   "waveform": [[0.0, 0.12], [0.1, 0.18]],
   "sections": [{"start": 57.5, "end": 74.5, "status": "verified"}],
-  "actions": [{"start": 60.0, "end": 66.0, "type": "dynamic_eq", "action_id": "..."}],
+  "actions": [{"start": 60.0, "end": 66.0, "type": "dynamic_eq", "action_id": "act_62hz_control_001"}],
   "flags": [{"start": 92.0, "end": 94.5, "severity": "review", "code": "crest_delta"}]
 }
 ```
