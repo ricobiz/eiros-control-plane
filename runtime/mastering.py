@@ -674,6 +674,27 @@ def _profile_filters(profile: str) -> tuple[str, str]:
     return filters, description
 
 
+def save_director_plan(asset_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+    from runtime.mastering_director import plan_fingerprint, validate_director_plan
+    meta = _read_meta(asset_id)
+    duration = float(probe(_input_path(meta)).get("duration_seconds") or 0.0)
+    validated = validate_director_plan(plan, duration)
+    validated["fingerprint"] = plan_fingerprint(validated)
+    plans = list(meta.get("director_plans") or [])
+    plans.append(validated)
+    meta["director_plans"] = plans
+    _write_meta(meta)
+    return validated
+
+
+def get_director_plan(asset_id: str, plan_id: str) -> dict[str, Any]:
+    meta = _read_meta(asset_id)
+    for plan in meta.get("director_plans") or []:
+        if plan.get("plan_id") == plan_id:
+            return plan
+    raise KeyError(f"director plan not found: {plan_id}")
+
+
 def render(asset_id: str, profile: str = "adaptive", target_lufs: float = -14.0, true_peak_dbtp: float = -1.0, label: str = "spotify") -> dict[str, Any]:
     target_lufs = float(target_lufs)
     true_peak_dbtp = float(true_peak_dbtp)

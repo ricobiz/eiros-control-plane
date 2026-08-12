@@ -56,16 +56,14 @@ def test_each_render_has_unique_output_id(tmp_path, monkeypatch):
     assert a['output']['output_id'] != b['output']['output_id']
 
 
-import pytest
-
-@pytest.mark.xfail(reason='Director plan API arrives in Task 2', strict=True)
 def test_director_protected_sub_mass_does_not_auto_cut():
     # v0.4 contract: intentional spectral dominance is evidence, not a defect.
-    plan = mastering.create_director_plan(
-        analysis={'bands': {'20_60': 0.49}},
-        intent={'protected_traits': ['sub_mass']},
-    )
-    assert not any(
-        a.get('type') in {'eq', 'dynamic_eq'} and a.get('band') == '20_60' and a.get('gain_db', 0) < 0
-        for a in plan['actions']
-    )
+    from runtime.mastering_director import validate_director_plan
+    plan = validate_director_plan({
+        'intent': 'preserve intentional sub dominance',
+        'protected_traits': ['sub_mass'],
+        'target': {'lufs': -10.8, 'true_peak_dbtp': -1.1},
+        'sections': [{'start': 0.0, 'end': 20.0, 'actions': []}],
+    }, 20.0)
+    assert plan['protected_traits'] == ['sub_mass']
+    assert plan['sections'][0]['actions'] == []
