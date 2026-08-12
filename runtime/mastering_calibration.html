@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#07090d">
+<title>E-MASTER CAL</title>
+<style>
+:root{color-scheme:dark;--bg:#07090d;--panel:#0d1118;--panel2:#121925;--text:#eef3f8;--muted:#778394;--line:#202938;--ok:#49e59b;--bad:#ff5e6d;--accent:#72a7ff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:radial-gradient(120% 80% at 50% -10%,#142037 0%,var(--bg) 54%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 14px max(20px,env(safe-area-inset-bottom));overflow:hidden}
+.shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,25,37,.96),rgba(9,12,18,.96));border-radius:30px;padding:18px 16px 16px;box-shadow:0 24px 90px rgba(0,0,0,.46),inset 0 1px rgba(255,255,255,.04)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.brand{font-size:12px;letter-spacing:.18em;font-weight:750;color:#dfe9f7}.phase{font-size:10px;letter-spacing:.08em;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px}
+.safety{font-size:11px;line-height:1.35;color:#8793a4;text-align:center;margin:5px 8px 14px}
+.stage{position:relative;display:grid;place-items:center;min-height:220px;border-radius:24px;background:radial-gradient(circle at 50% 42%,rgba(75,126,214,.16),transparent 42%),rgba(3,6,10,.42);border:1px solid rgba(255,255,255,.05);overflow:hidden}
+.ring{position:absolute;width:160px;height:160px;border-radius:50%;border:1px solid rgba(114,167,255,.2);box-shadow:0 0 50px rgba(72,124,210,.08);transform:scale(.94);opacity:.6;transition:.2s ease}.ring.playing{animation:pulse 1.1s ease-in-out infinite;border-color:rgba(114,167,255,.48);box-shadow:0 0 70px rgba(72,124,210,.18)}@keyframes pulse{50%{transform:scale(1.04);opacity:1}}
+.readout{position:relative;text-align:center}.hz{font-size:52px;font-weight:680;letter-spacing:-.055em;line-height:.95;font-variant-numeric:tabular-nums}.unit{font-size:13px;color:#9ba8b9;margin-top:8px;letter-spacing:.12em}.level{font-size:11px;color:#657184;margin-top:8px;font-variant-numeric:tabular-nums}
+.bracket{height:20px;margin:10px 0 4px;font-size:10px;color:#8c98a8;text-align:center;font-variant-numeric:tabular-nums}.bracket strong{color:#dce6f2;font-weight:600}
+.responses{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.answer{height:70px;border:0;border-radius:21px;font-size:16px;font-weight:800;letter-spacing:.06em;color:#09100d;touch-action:manipulation}.answer:disabled{opacity:.25}.answer.ok{background:linear-gradient(180deg,#60efab,#35cc87);box-shadow:0 10px 30px rgba(53,204,135,.13)}.answer.no{background:linear-gradient(180deg,#ff7581,#f14d5d);box-shadow:0 10px 30px rgba(241,77,93,.13);color:#170608}.answer:active{transform:scale(.985)}
+.controls{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:8px;margin-top:10px}.ctrl{height:42px;border-radius:14px;border:1px solid var(--line);background:#121824;color:#d8e1ec;font-size:12px;font-weight:650}.ctrl.primary{background:#e8eef7;color:#111720;border-color:#e8eef7}.ctrl:disabled{opacity:.35}.ctrl:active{transform:scale(.985)}
+.result{display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(73,229,155,.22);background:rgba(73,229,155,.06);border-radius:16px;font-size:11px;line-height:1.45;color:#9fecc8}.result.show{display:block}.result b{color:#dff9ec}
+.debug{margin-top:8px;text-align:center;font-size:9px;color:#465062;min-height:12px}
+</style>
+</head>
+<body>
+<main class="shell" aria-label="E-MASTER calibration">
+  <div class="top"><div class="brand">E-MASTER CAL</div><div class="phase" id="phase">BASS · READY</div></div>
+  <div class="safety">Set headphone volume low before Start. The test never changes hardware volume.</div>
+
+  <section class="stage">
+    <div class="ring" id="ring"></div>
+    <div class="readout">
+      <div class="hz" id="hz">80.0</div>
+      <div class="unit">HZ</div>
+      <div class="level" id="level">−30 dBFS</div>
+    </div>
+  </section>
+
+  <div class="bracket" id="bracket">Press Start, listen, then answer.</div>
+
+  <div class="responses">
+    <button class="answer ok" id="ok" disabled>OK</button>
+    <button class="answer no" id="no" disabled>NO</button>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl primary" id="start">START</button>
+    <button class="ctrl" id="retest" disabled>RETEST</button>
+    <button class="ctrl" id="reset">RESET</button>
+  </div>
+
+  <div class="result" id="result"></div>
+  <div class="debug" id="debug"></div>
+</main>
+<script>
+(() => {
+  'use strict';
+
+  const cfg = {
+    mode: "frequency",
+    fixedLevelDb: -30,
+    initialHz: 80,
+    minHz: 20,
+    coarseRatio: 0.75,
+    toleranceHz: 0.75,
+    maxGainDb: -18,
+    toneMs: 900,
+    gapMs: 180
+  };
+
+  const freshState = () => ({
+    running: false,
+    phase: "coarse",
+    currentHz: cfg.initialHz,
+    lastGoodHz: null,
+    firstBadHz: null,
+    candidateHz: null,
+    verification: [],
+    decisions: [],
+    completed: false,
+    confidence: null,
+    tonePlaying: false,
+    message: ""
+  });
+
+  let state = freshState();
+  let audioCtx = null;
+  let oscillator = null;
+  let gainNode = null;
+  let stopTimer = 0;
+  let nextTimer = 0;
+
+  const el = id => document.getElementById(id);
+  const hzEl = el('hz'), levelEl = el('level'), phaseEl = el('phase'), bracketEl = el('bracket');
+  const ringEl = el('ring'), okEl = el('ok'), noEl = el('no'), startEl = el('start');
+  const retestEl = el('retest'), resetEl = el('reset'), resultEl = el('result'), debugEl = el('debug');
+
+  function dbToGain(db){ return 10 ** (db / 20); }
+  function safeDb(db){ return Math.min(Number(db), cfg.maxGainDb); }
+  function fmtHz(v){ return Number(v).toFixed(v < 40 ? 2 : 1); }
+
+  function render(){
+    hzEl.textContent = fmtHz(state.currentHz);
+    levelEl.textContent = `${String(cfg.fixedLevelDb).replace('-', '−')} dBFS`;
+    ringEl.classList.toggle('playing', !!state.tonePlaying);
+    const canAnswer = state.running && !state.completed;
+    okEl.disabled = !canAnswer;
+    noEl.disabled = !canAnswer;
+    retestEl.disabled = state.completed;
+    startEl.textContent = state.running ? 'STOP' : (state.decisions.length ? 'START' : 'START');
+
+    const phaseNames = {coarse:'BASS · SEARCH',refine:'BASS · REFINE',verify:'BASS · VERIFY',complete:'BASS · DONE',floor:'BASS · LIMIT'};
+    phaseEl.textContent = phaseNames[state.phase] || 'BASS';
+
+    if(state.lastGoodHz != null && state.firstBadHz != null){
+      const hi = Math.max(state.lastGoodHz, state.firstBadHz);
+      const lo = Math.min(state.lastGoodHz, state.firstBadHz);
+      bracketEl.innerHTML = `<strong>OK ${fmtHz(state.lastGoodHz)}</strong> · <strong>NO ${fmtHz(state.firstBadHz)}</strong> · window ${(hi-lo).toFixed(2)} Hz`;
+    } else if(state.phase === 'floor') {
+      bracketEl.textContent = `Still OK at ${cfg.minHz} Hz · lower boundary not found in this test range.`;
+    } else {
+      bracketEl.textContent = state.message || (state.running ? 'Listen, then choose OK or NO.' : 'Press Start, listen, then answer.');
+    }
+
+    if(state.completed){
+      const hi = Math.max(state.lastGoodHz, state.firstBadHz);
+      const lo = Math.min(state.lastGoodHz, state.firstBadHz);
+      resultEl.classList.add('show');
+      resultEl.innerHTML = `<b>Boundary ${fmtHz(state.candidateHz)} Hz</b><br>Confirmed window ${fmtHz(lo)}–${fmtHz(hi)} Hz · confidence ${Math.round((state.confidence||0)*100)}%`;
+    } else {
+      resultEl.classList.remove('show'); resultEl.textContent='';
+    }
+    debugEl.textContent = `${state.decisions.length} decisions${state.verification.length ? ` · verify ${state.verification.length}/2` : ''}`;
+  }
+
+  function clearTimers(){
+    if(stopTimer){ clearTimeout(stopTimer); stopTimer = 0; }
+    if(nextTimer){ clearTimeout(nextTimer); nextTimer = 0; }
+  }
+
+  function stopTone(){
+    if(stopTimer){ clearTimeout(stopTimer); stopTimer = 0; }
+    const now = audioCtx ? audioCtx.currentTime : 0;
+    if(gainNode && audioCtx){
+      try{ gainNode.gain.cancelScheduledValues(now); gainNode.gain.setTargetAtTime(0, now, 0.012); }catch{}
+    }
+    if(oscillator){ try{ oscillator.stop(now + 0.045); }catch{} }
+    oscillator = null; gainNode = null;
+    state.tonePlaying = false;
+    render();
+  }
+
+  async function ensureAudio(){
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) throw new Error('AudioContext unavailable');
+    if(!audioCtx || audioCtx.state === 'closed') audioCtx = new Ctx({latencyHint:'interactive'});
+    if(audioCtx.state === 'suspended') await audioCtx.resume();
+  }
+
+  async function playCurrent(){
+    if(state.completed || !state.running) return;
+    await ensureAudio();
+    stopTone();
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const target = dbToGain(safeDb(cfg.fixedLevelDb));
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(Math.max(cfg.minHz, state.currentHz), now);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(target, now + 0.04);
+    const fadeAt = now + Math.max(0.12, cfg.toneMs / 1000 - 0.06);
+    gain.gain.setValueAtTime(target, fadeAt);
+    gain.gain.linearRampToValueAtTime(0, now + cfg.toneMs / 1000);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    oscillator = osc; gainNode = gain;
+    state.tonePlaying = true; render();
+    osc.start(now); osc.stop(now + cfg.toneMs / 1000 + 0.025);
+    stopTimer = window.setTimeout(() => {
+      if(oscillator === osc){ oscillator = null; gainNode = null; state.tonePlaying = false; render(); }
+    }, cfg.toneMs + 80);
+  }
+
+  function bracketWidth(){
+    if(state.lastGoodHz == null || state.firstBadHz == null) return Infinity;
+    return Math.abs(state.lastGoodHz - state.firstBadHz);
+  }
+
+  function startVerification(){
+    const hi = Math.max(state.lastGoodHz, state.firstBadHz);
+    const lo = Math.min(state.lastGoodHz, state.firstBadHz);
+    state.candidateHz = Math.sqrt(hi * lo);
+    state.phase = 'verify';
+    state.currentHz = state.candidateHz;
+    state.verification = [];
+    state.message = 'Verification pass 1/2';
+    return state.currentHz;
+  }
+
+  function finishVerification(){
+    const hi = Math.max(state.lastGoodHz, state.firstBadHz);
+    const lo = Math.min(state.lastGoodHz, state.firstBadHz);
+    state.candidateHz = Math.sqrt(hi * lo);
+    const width = Math.max(0, hi - lo);
+    const tightness = Math.max(0, 1 - width / Math.max(cfg.toleranceHz * 2.5, 1));
+    state.confidence = Math.min(0.98, 0.78 + 0.18 * tightness + 0.02 * Math.min(2, state.verification.length));
+    state.currentHz = state.candidateHz;
+    state.phase = 'complete'; state.completed = true; state.running = false;
+    stopTone(); render();
+  }
+
+  function applyFrequencyDecision(ok, verification=false){
+    const f = state.currentHz;
+    const row = {mode:'frequency', hz:f, levelDb:cfg.fixedLevelDb, ok:!!ok, at:Date.now(), verification:!!verification};
+    state.decisions.push(row);
+    if(verification) state.verification.push(row);
+
+    if(ok){
+      // In this descending bass search, any lower OK point is a stronger known-good boundary.
+      if(state.lastGoodHz == null || f < state.lastGoodHz) state.lastGoodHz = f;
+    } else {
+      // Keep the highest bad point only if no lower good point has contradicted it; refinement will tighten the bracket.
+      if(state.firstBadHz == null || f > state.firstBadHz) state.firstBadHz = f;
+    }
+  }
+
+  function normalizeBracket(){
+    // If responses crossed because perception varied, keep the most recent pair and continue refinement instead of claiming certainty.
+    if(state.lastGoodHz != null && state.firstBadHz != null && state.lastGoodHz <= state.firstBadHz){
+      const recentGood = [...state.decisions].reverse().find(x => x.ok)?.hz;
+      const recentBad = [...state.decisions].reverse().find(x => !x.ok)?.hz;
+      if(recentGood != null) state.lastGoodHz = recentGood;
+      if(recentBad != null) state.firstBadHz = recentBad;
+    }
+  }
+
+  function nextFrequencyAfterAnswer(ok){
+    const wasVerify = state.phase === 'verify';
+    applyFrequencyDecision(ok, wasVerify);
+    normalizeBracket();
+
+    if(wasVerify){
+      if(state.verification.length >= 2){ finishVerification(); return null; }
+      const good = state.lastGoodHz, bad = state.firstBadHz;
+      if(good != null && bad != null){
+        state.currentHz = Math.sqrt(good * bad);
+      }
+      state.message = 'Verification pass 2/2';
+      return state.currentHz;
+    }
+
+    if(state.lastGoodHz != null && state.firstBadHz != null){
+      state.phase = 'refine';
+      const hi = Math.max(state.lastGoodHz, state.firstBadHz);
+      const lo = Math.min(state.lastGoodHz, state.firstBadHz);
+      if(hi - lo <= cfg.toleranceHz) return startVerification();
+      state.currentHz = Math.sqrt(hi * lo); // geometric midpoint is appropriate for frequency.
+      return state.currentHz;
+    }
+
+    if(ok){
+      if(state.currentHz <= cfg.minHz + 0.001){
+        state.phase = 'floor'; state.running = false; state.message = 'No bad point found.'; stopTone(); render(); return null;
+      }
+      state.currentHz = Math.max(cfg.minHz, state.currentHz * cfg.coarseRatio);
+      return state.currentHz;
+    }
+
+    // A NO before any known-good point means the starting point itself is not usable.
+    if(state.lastGoodHz == null){
+      state.running = false;
+      state.message = 'NO at the starting point. Lower headphone volume, Reset, and try again.';
+      stopTone(); render(); return null;
+    }
+    return state.currentHz;
+  }
+
+  async function start(){
+    if(state.running){ await stop(false); return; }
+    if(state.completed) return;
+    try{
+      await ensureAudio();
+      state.running = true; state.message = 'Listen, then choose OK or NO.'; render();
+      await playCurrent();
+    }catch(err){
+      state.running = false; state.message = String(err && err.message || err); render();
+    }
+  }
+
+  async function answer(ok){
+    if(!state.running || state.completed) return;
+    stopTone();
+    const next = nextFrequencyAfterAnswer(!!ok);
+    render();
+    if(next == null || state.completed || !state.running) return;
+    nextTimer = window.setTimeout(() => { nextTimer=0; playCurrent().catch(err => {state.message=String(err); render();}); }, cfg.gapMs);
+  }
+
+  async function retest(){
+    if(state.completed) return;
+    try{
+      await ensureAudio(); state.running = true; render(); await playCurrent();
+    }catch(err){ state.running=false; state.message=String(err); render(); }
+  }
+
+  async function stop(dispose=false){
+    clearTimers(); stopTone(); state.running = false;
+    if(dispose && audioCtx){
+      try{ await audioCtx.close(); }catch{}
+      audioCtx = null;
+    }
+    render();
+  }
+
+  async function reset(){
+    await stop(true); state = freshState(); render();
+  }
+
+  startEl.addEventListener('click', start);
+  retestEl.addEventListener('click', retest);
+  resetEl.addEventListener('click', reset);
+  okEl.addEventListener('click', () => answer(true));
+  noEl.addEventListener('click', () => answer(false));
+  document.addEventListener('visibilitychange', () => { if(document.hidden) stop(true); });
+  window.addEventListener('pagehide', () => { stop(true); });
+
+  window.EMasterCalibration = {
+    start,
+    stop,
+    answer,
+    reset,
+    snapshot: () => JSON.parse(JSON.stringify(state))
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>
