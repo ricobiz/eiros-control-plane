@@ -17,3 +17,13 @@ def test_calibration_page_contract():
         "Math.sqrt",
     ]:
         assert token in text
+
+    for token in [
+        'data-mode="frequency"',
+        'data-mode="level"',
+        "fixedHz",
+        "lastGoodDb",
+        "firstBadDb",
+        "toleranceDb",
+    ]:
+        assert token in text

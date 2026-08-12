@@ -11,8 +11,8 @@
 html,body{margin:0;min-height:100%;background:radial-gradient(120% 80% at 50% -10%,#142037 0%,var(--bg) 54%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
 body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 14px max(20px,env(safe-area-inset-bottom));overflow:hidden}
 .shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,25,37,.96),rgba(9,12,18,.96));border-radius:30px;padding:18px 16px 16px;box-shadow:0 24px 90px rgba(0,0,0,.46),inset 0 1px rgba(255,255,255,.04)}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.brand{font-size:12px;letter-spacing:.18em;font-weight:750;color:#dfe9f7}.phase{font-size:10px;letter-spacing:.08em;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px}
-.safety{font-size:11px;line-height:1.35;color:#8793a4;text-align:center;margin:5px 8px 14px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.brand{font-size:12px;letter-spacing:.18em;font-weight:750;color:#dfe9f7}.phase{font-size:10px;letter-spacing:.08em;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px}
+.modes{display:flex;justify-content:center;gap:6px;margin:0 0 9px}.mode{height:27px;min-width:64px;border:1px solid var(--line);border-radius:999px;background:#0b1018;color:#677486;font-size:9px;font-weight:800;letter-spacing:.12em}.mode.active{color:#eaf2fd;border-color:#3a4c67;background:#172132;box-shadow:inset 0 0 18px rgba(114,167,255,.08)}.safety{font-size:11px;line-height:1.35;color:#8793a4;text-align:center;margin:5px 8px 14px}
 .stage{position:relative;display:grid;place-items:center;min-height:220px;border-radius:24px;background:radial-gradient(circle at 50% 42%,rgba(75,126,214,.16),transparent 42%),rgba(3,6,10,.42);border:1px solid rgba(255,255,255,.05);overflow:hidden}
 .ring{position:absolute;width:160px;height:160px;border-radius:50%;border:1px solid rgba(114,167,255,.2);box-shadow:0 0 50px rgba(72,124,210,.08);transform:scale(.94);opacity:.6;transition:.2s ease}.ring.playing{animation:pulse 1.1s ease-in-out infinite;border-color:rgba(114,167,255,.48);box-shadow:0 0 70px rgba(72,124,210,.18)}@keyframes pulse{50%{transform:scale(1.04);opacity:1}}
 .readout{position:relative;text-align:center}.hz{font-size:52px;font-weight:680;letter-spacing:-.055em;line-height:.95;font-variant-numeric:tabular-nums}.unit{font-size:13px;color:#9ba8b9;margin-top:8px;letter-spacing:.12em}.level{font-size:11px;color:#657184;margin-top:8px;font-variant-numeric:tabular-nums}
@@ -26,6 +26,7 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
 <body>
 <main class="shell" aria-label="E-MASTER calibration">
   <div class="top"><div class="brand">E-MASTER CAL</div><div class="phase" id="phase">BASS · READY</div></div>
+  <div class="modes"><button class="mode active" data-mode="frequency">FREQ</button><button class="mode" data-mode="level">LEVEL</button></div>
   <div class="safety">Set headphone volume low before Start. The test never changes hardware volume.</div>
 
   <section class="stage">
@@ -69,22 +70,36 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
     gapMs: 180
   };
 
-  const freshState = () => ({
+  const levelCfg = {
+    fixedHz: 60,
+    initialDb: -36,
+    maxDb: -18,
+    coarseStepDb: 4,
+    toleranceDb: 0.75
+  };
+
+  const freshState = (mode='frequency', rawDecisions=[]) => ({
+    mode,
     running: false,
     phase: "coarse",
     currentHz: cfg.initialHz,
     lastGoodHz: null,
     firstBadHz: null,
     candidateHz: null,
+    currentDb: levelCfg.initialDb,
+    lastGoodDb: null,
+    firstBadDb: null,
+    candidateDb: null,
     verification: [],
     decisions: [],
+    rawDecisions,
     completed: false,
     confidence: null,
     tonePlaying: false,
     message: ""
   });
 
-  let state = freshState();
+  let state = freshState('frequency', []);
   let audioCtx = null;
   let oscillator = null;
   let gainNode = null;
@@ -95,39 +110,54 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
   const hzEl = el('hz'), levelEl = el('level'), phaseEl = el('phase'), bracketEl = el('bracket');
   const ringEl = el('ring'), okEl = el('ok'), noEl = el('no'), startEl = el('start');
   const retestEl = el('retest'), resetEl = el('reset'), resultEl = el('result'), debugEl = el('debug');
+  const modeEls = [...document.querySelectorAll('[data-mode]')];
 
   function dbToGain(db){ return 10 ** (db / 20); }
   function safeDb(db){ return Math.min(Number(db), cfg.maxGainDb); }
   function fmtHz(v){ return Number(v).toFixed(v < 40 ? 2 : 1); }
 
   function render(){
-    hzEl.textContent = fmtHz(state.currentHz);
-    levelEl.textContent = `${String(cfg.fixedLevelDb).replace('-', '−')} dBFS`;
+    const isLevel = state.mode === 'level';
+    const shownHz = isLevel ? levelCfg.fixedHz : state.currentHz;
+    const shownDb = isLevel ? state.currentDb : cfg.fixedLevelDb;
+    hzEl.textContent = fmtHz(shownHz);
+    levelEl.textContent = `${String(Number(shownDb).toFixed(isLevel ? 1 : 0)).replace('-', '−')} dBFS`;
     ringEl.classList.toggle('playing', !!state.tonePlaying);
+    modeEls.forEach(node => node.classList.toggle('active', node.dataset.mode === state.mode));
     const canAnswer = state.running && !state.completed;
     okEl.disabled = !canAnswer;
     noEl.disabled = !canAnswer;
     retestEl.disabled = state.completed;
-    startEl.textContent = state.running ? 'STOP' : (state.decisions.length ? 'START' : 'START');
+    startEl.textContent = state.running ? 'STOP' : 'START';
 
-    const phaseNames = {coarse:'BASS · SEARCH',refine:'BASS · REFINE',verify:'BASS · VERIFY',complete:'BASS · DONE',floor:'BASS · LIMIT'};
-    phaseEl.textContent = phaseNames[state.phase] || 'BASS';
+    const phaseNames = {coarse:'SEARCH',refine:'REFINE',verify:'VERIFY',complete:'DONE',floor:'LIMIT',ceiling:'LIMIT'};
+    phaseEl.textContent = `${isLevel ? 'LEVEL' : 'BASS'} · ${phaseNames[state.phase] || 'READY'}`;
 
-    if(state.lastGoodHz != null && state.firstBadHz != null){
+    if(isLevel && state.lastGoodDb != null && state.firstBadDb != null){
+      const hi = Math.max(state.lastGoodDb, state.firstBadDb);
+      const lo = Math.min(state.lastGoodDb, state.firstBadDb);
+      bracketEl.innerHTML = `<strong>OK ${state.lastGoodDb.toFixed(2)}</strong> · <strong>NO ${state.firstBadDb.toFixed(2)}</strong> · window ${(hi-lo).toFixed(2)} dB`;
+    } else if(!isLevel && state.lastGoodHz != null && state.firstBadHz != null){
       const hi = Math.max(state.lastGoodHz, state.firstBadHz);
       const lo = Math.min(state.lastGoodHz, state.firstBadHz);
       bracketEl.innerHTML = `<strong>OK ${fmtHz(state.lastGoodHz)}</strong> · <strong>NO ${fmtHz(state.firstBadHz)}</strong> · window ${(hi-lo).toFixed(2)} Hz`;
     } else if(state.phase === 'floor') {
       bracketEl.textContent = `Still OK at ${cfg.minHz} Hz · lower boundary not found in this test range.`;
+    } else if(state.phase === 'ceiling') {
+      bracketEl.textContent = `Still OK at ${levelCfg.maxDb} dBFS · level boundary not found inside the safe test range.`;
     } else {
       bracketEl.textContent = state.message || (state.running ? 'Listen, then choose OK or NO.' : 'Press Start, listen, then answer.');
     }
 
     if(state.completed){
-      const hi = Math.max(state.lastGoodHz, state.firstBadHz);
-      const lo = Math.min(state.lastGoodHz, state.firstBadHz);
       resultEl.classList.add('show');
-      resultEl.innerHTML = `<b>Boundary ${fmtHz(state.candidateHz)} Hz</b><br>Confirmed window ${fmtHz(lo)}–${fmtHz(hi)} Hz · confidence ${Math.round((state.confidence||0)*100)}%`;
+      if(isLevel){
+        const hi = Math.max(state.lastGoodDb, state.firstBadDb), lo = Math.min(state.lastGoodDb, state.firstBadDb);
+        resultEl.innerHTML = `<b>Boundary ${state.candidateDb.toFixed(2)} dBFS @ ${levelCfg.fixedHz} Hz</b><br>Confirmed window ${lo.toFixed(2)}–${hi.toFixed(2)} dB · confidence ${Math.round((state.confidence||0)*100)}%`;
+      } else {
+        const hi = Math.max(state.lastGoodHz, state.firstBadHz), lo = Math.min(state.lastGoodHz, state.firstBadHz);
+        resultEl.innerHTML = `<b>Boundary ${fmtHz(state.candidateHz)} Hz</b><br>Confirmed window ${fmtHz(lo)}–${fmtHz(hi)} Hz · confidence ${Math.round((state.confidence||0)*100)}%`;
+      }
     } else {
       resultEl.classList.remove('show'); resultEl.textContent='';
     }
@@ -165,9 +195,11 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
     const now = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    const target = dbToGain(safeDb(cfg.fixedLevelDb));
+    const testDb = state.mode === 'level' ? state.currentDb : cfg.fixedLevelDb;
+    const testHz = state.mode === 'level' ? levelCfg.fixedHz : state.currentHz;
+    const target = dbToGain(safeDb(testDb));
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(Math.max(cfg.minHz, state.currentHz), now);
+    osc.frequency.setValueAtTime(Math.max(cfg.minHz, testHz), now);
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(target, now + 0.04);
     const fadeAt = now + Math.max(0.12, cfg.toneMs / 1000 - 0.06);
@@ -214,6 +246,7 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
     const f = state.currentHz;
     const row = {mode:'frequency', hz:f, levelDb:cfg.fixedLevelDb, ok:!!ok, at:Date.now(), verification:!!verification};
     state.decisions.push(row);
+    state.rawDecisions.push(row);
     if(verification) state.verification.push(row);
 
     if(ok){
@@ -276,6 +309,80 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
     return state.currentHz;
   }
 
+  function applyLevelDecision(ok, verification=false){
+    const db = state.currentDb;
+    const row = {mode:'level', hz:levelCfg.fixedHz, levelDb:db, ok:!!ok, at:Date.now(), verification:!!verification};
+    state.decisions.push(row); state.rawDecisions.push(row);
+    if(verification) state.verification.push(row);
+    if(ok){
+      if(state.lastGoodDb == null || db > state.lastGoodDb) state.lastGoodDb = db;
+    } else {
+      if(state.firstBadDb == null || db < state.firstBadDb) state.firstBadDb = db;
+    }
+  }
+
+  function normalizeLevelBracket(){
+    if(state.lastGoodDb != null && state.firstBadDb != null && state.lastGoodDb >= state.firstBadDb){
+      const recentGood = [...state.decisions].reverse().find(x => x.mode === 'level' && x.ok)?.levelDb;
+      const recentBad = [...state.decisions].reverse().find(x => x.mode === 'level' && !x.ok)?.levelDb;
+      if(recentGood != null) state.lastGoodDb = recentGood;
+      if(recentBad != null) state.firstBadDb = recentBad;
+    }
+  }
+
+  function startLevelVerification(){
+    state.candidateDb = (state.lastGoodDb + state.firstBadDb) / 2;
+    state.currentDb = state.candidateDb;
+    state.phase = 'verify'; state.verification = []; state.message = 'Verification pass 1/2';
+    return state.currentDb;
+  }
+
+  function finishLevelVerification(){
+    const hi = Math.max(state.lastGoodDb, state.firstBadDb), lo = Math.min(state.lastGoodDb, state.firstBadDb);
+    state.candidateDb = (hi + lo) / 2;
+    const width = hi - lo;
+    const tightness = Math.max(0, 1 - width / Math.max(levelCfg.toleranceDb * 2.5, 1));
+    state.confidence = Math.min(0.98, 0.78 + 0.18 * tightness + 0.02 * Math.min(2, state.verification.length));
+    state.currentDb = state.candidateDb; state.phase = 'complete'; state.completed = true; state.running = false;
+    stopTone(); render();
+  }
+
+  function nextLevelAfterAnswer(ok){
+    const wasVerify = state.phase === 'verify';
+    applyLevelDecision(ok, wasVerify); normalizeLevelBracket();
+    if(wasVerify){
+      if(state.verification.length >= 2){ finishLevelVerification(); return null; }
+      if(state.lastGoodDb != null && state.firstBadDb != null) state.currentDb = (state.lastGoodDb + state.firstBadDb) / 2;
+      state.message = 'Verification pass 2/2'; return state.currentDb;
+    }
+    if(state.lastGoodDb != null && state.firstBadDb != null){
+      state.phase = 'refine';
+      const width = Math.abs(state.firstBadDb - state.lastGoodDb);
+      if(width <= levelCfg.toleranceDb) return startLevelVerification();
+      state.currentDb = (state.lastGoodDb + state.firstBadDb) / 2;
+      return state.currentDb;
+    }
+    if(ok){
+      if(state.currentDb >= levelCfg.maxDb - 0.001){
+        state.phase='ceiling'; state.running=false; state.message='No bad point found inside safe level range.'; stopTone(); render(); return null;
+      }
+      state.currentDb = Math.min(levelCfg.maxDb, state.currentDb + levelCfg.coarseStepDb);
+      return state.currentDb;
+    }
+    if(state.lastGoodDb == null){
+      state.running=false; state.message='NO at the starting level. Lower headphone volume, Reset, and try again.'; stopTone(); render(); return null;
+    }
+    return state.currentDb;
+  }
+
+  async function switchMode(mode){
+    if(mode !== 'frequency' && mode !== 'level') return;
+    const raw = state.rawDecisions;
+    await stop(true);
+    state = freshState(mode, raw);
+    render();
+  }
+
   async function start(){
     if(state.running){ await stop(false); return; }
     if(state.completed) return;
@@ -291,7 +398,7 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
   async function answer(ok){
     if(!state.running || state.completed) return;
     stopTone();
-    const next = nextFrequencyAfterAnswer(!!ok);
+    const next = state.mode === 'level' ? nextLevelAfterAnswer(!!ok) : nextFrequencyAfterAnswer(!!ok);
     render();
     if(next == null || state.completed || !state.running) return;
     nextTimer = window.setTimeout(() => { nextTimer=0; playCurrent().catch(err => {state.message=String(err); render();}); }, cfg.gapMs);
@@ -314,7 +421,8 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
   }
 
   async function reset(){
-    await stop(true); state = freshState(); render();
+    const mode = state.mode, raw = state.rawDecisions;
+    await stop(true); state = freshState(mode, raw); render();
   }
 
   startEl.addEventListener('click', start);
@@ -322,6 +430,7 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
   resetEl.addEventListener('click', reset);
   okEl.addEventListener('click', () => answer(true));
   noEl.addEventListener('click', () => answer(false));
+  modeEls.forEach(node => node.addEventListener('click', () => switchMode(node.dataset.mode)));
   document.addEventListener('visibilitychange', () => { if(document.hidden) stop(true); });
   window.addEventListener('pagehide', () => { stop(true); });
 
@@ -330,6 +439,7 @@ body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe
     stop,
     answer,
     reset,
+    switchMode,
     snapshot: () => JSON.parse(JSON.stringify(state))
   };
 
