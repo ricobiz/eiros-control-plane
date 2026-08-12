@@ -63,3 +63,12 @@ def test_v17_uses_dedicated_widget_origin_without_unneeded_frames():
     assert meta['openai/widgetDomain'] == s.PUBLIC_ORIGIN
     assert 'frameDomains' not in meta['ui']['csp']
     assert 'frame_domains' not in meta['openai/widgetCSP']
+
+
+def test_minimal_diagnostic_widget_contract():
+    src=Path('runtime/mastering_mcp_server.py').read_text(encoding='utf-8')
+    assert 'ui://eiros/mastering-diagnostic-v1.html' in src
+    assert 'open_mastering_diagnostic' in src
+    assert 'notifyIntrinsicHeight' in src
+    assert 'ui/notifications/tool-result' in src
+    assert 'EIROS WIDGET OK' in src

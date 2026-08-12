@@ -22,6 +22,7 @@ PUBLIC_PREFIX = "/mastering-85949c2f6885e19e8e815fd0faa0c3e097e88c7fc84a18d3"
 PUBLIC_BASE = PUBLIC_ORIGIN + PUBLIC_PREFIX
 PUBLIC_SHARE_BASE = PUBLIC_ORIGIN + "/s"
 PANEL_URI = "ui://eiros/mastering-panel-v17-1.html"
+DIAGNOSTIC_PANEL_URI = "ui://eiros/mastering-diagnostic-v1.html"
 LEGACY_PANEL_URI = "ui://eiros/mastering-panel-v16.html"
 LEGACY_PANEL_URI_V2 = "ui://eiros/mastering-panel-v15.html"
 
@@ -936,6 +937,44 @@ def _panel_html() -> str:
     return template.replace("__PUBLIC_BASE__", PUBLIC_BASE).replace("__PUBLIC_SHARE_BASE__", PUBLIC_SHARE_BASE)
 
 
+
+def _diagnostic_panel_html() -> str:
+    return """<!doctype html>
+<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">
+<style>html,body{margin:0;background:#0b0e12;color:#eef1f4;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}#box{padding:18px;border:1px solid #2e3740;border-radius:14px;background:#11161b}b{color:#67d7bc}small{display:block;margin-top:8px;color:#89929d}</style></head>
+<body><div id=\"box\"><b>EIROS WIDGET OK</b><small id=\"status\">static HTML mounted</small></div>
+<script>
+(function(){
+  const status=document.getElementById('status');
+  function reportHeight(){
+    try{ window.openai?.notifyIntrinsicHeight?.({height:document.documentElement.scrollHeight}); }catch(e){}
+  }
+  window.addEventListener('message',function(event){
+    if(event.source!==window.parent)return;
+    const m=event.data;
+    if(!m||m.jsonrpc!=='2.0')return;
+    if(m.method==='ui/notifications/tool-result') status.textContent='MCP Apps bridge + tool-result received';
+    if(m.method==='ui/notifications/tool-input') status.textContent='MCP Apps bridge + tool-input received';
+    reportHeight();
+  },{passive:true});
+  window.addEventListener('openai:set_globals',reportHeight,{passive:true});
+  requestAnimationFrame(reportHeight);
+  setTimeout(reportHeight,50);
+})();
+</script></body></html>"""
+
+@mcp.resource(
+    DIAGNOSTIC_PANEL_URI,
+    name="EIROS Mastering Diagnostic",
+    title="EIROS Mastering Diagnostic",
+    description="Minimal MCP Apps rendering diagnostic with no external requests.",
+    mime_type="text/html;profile=mcp-app",
+    meta={"ui": {"prefersBorder": True}},
+)
+def mastering_diagnostic_resource() -> str:
+    return _diagnostic_panel_html()
+
+
 @mcp.resource(
     PANEL_URI,
     name="EIROS Mastering Panel",
@@ -970,6 +1009,23 @@ def mastering_panel_resource_legacy() -> str:
 )
 def mastering_panel_resource_legacy_v2() -> str:
     return _legacy_panel_html()
+
+
+@mcp.tool(
+    name="open_mastering_diagnostic",
+    title="Open EIROS Widget Diagnostic",
+    description="Open a minimal EIROS MCP Apps widget used only to diagnose ChatGPT rendering.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={
+        "ui": {"resourceUri": DIAGNOSTIC_PANEL_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": DIAGNOSTIC_PANEL_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS diagnostic…",
+        "openai/toolInvocation/invoked": "EIROS diagnostic opened.",
+    },
+    structured_output=True,
+)
+def open_mastering_diagnostic() -> dict[str, Any]:
+    return {"ok": True, "resource_uri": DIAGNOSTIC_PANEL_URI, "diagnostic": "minimal-static-widget"}
 
 
 @mcp.tool(
