@@ -1521,6 +1521,18 @@ def _options() -> Response:
     return _cors(Response(status_code=204))
 
 
+@mcp.custom_route("/api/calibration", methods=["GET"])
+async def api_calibration(request: Request) -> Response:
+    html_text = Path(__file__).with_name("mastering_calibration.html").read_text(encoding="utf-8")
+    return HTMLResponse(
+        html_text,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @mcp.custom_route("/api/health", methods=["GET", "OPTIONS"])
 async def api_health(request: Request) -> Response:
     if request.method == "OPTIONS":
