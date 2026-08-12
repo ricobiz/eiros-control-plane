@@ -23,3 +23,18 @@ def test_mcp_resource_points_to_v17_and_keeps_v16_legacy():
     rendered=s.mastering_panel_resource()
     assert '__PUBLIC_BASE__' not in rendered
     assert 'id="workstation"' in rendered
+
+
+def test_v17_director_workflow_shows_reasons_bounds_and_revision_controls():
+    html=Path('runtime/mastering_panel_v17.html').read_text(encoding='utf-8')
+    for token in ('id="renderDirectedBtn"','maximum_allowed_change','protected_features','expected_effect','rollback_condition','data-revision-output','Rerender'):
+        assert token in html, token
+    assert 'ERROR: missing Director reason' in html
+
+
+def test_v17_verification_links_flags_to_timeline_and_server_gates_approval():
+    html=Path('runtime/mastering_panel_v17.html').read_text(encoding='utf-8')
+    assert 'seekToRange' in html
+    assert 'data-qa-start' in html
+    assert "v.status!=='PASS'" in html or 'v.status!==\'PASS\'' in html
+    assert "post('/api/approve'" in html
