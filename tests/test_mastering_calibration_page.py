@@ -8,22 +8,16 @@ def test_calibration_page_contract():
     for token in [
         "E-MASTER CAL",
         'id="start"',
-        'id="ok"',
-        'id="no"',
+        'id="limit"',
         "AudioContext",
         "visibilitychange",
         "pagehide",
         "EMasterCalibration",
-        "Math.sqrt",
-    ]:
-        assert token in text
-
-    for token in [
-        'data-mode="frequency"',
-        'data-mode="level"',
-        "fixedHz",
-        "lastGoodDb",
-        "firstBadDb",
-        "toleranceDb",
+        "testFrequencies",
+        "frequencyMap",
+        "rampDbPerSecond",
+        "safeCeilingDb",
+        "requestAnimationFrame",
+        "exponentialRampToValueAtTime",
     ]:
         assert token in text

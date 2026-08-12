@@ -6,441 +6,244 @@
 <meta name="theme-color" content="#07090d">
 <title>E-MASTER CAL</title>
 <style>
-:root{color-scheme:dark;--bg:#07090d;--panel:#0d1118;--panel2:#121925;--text:#eef3f8;--muted:#778394;--line:#202938;--ok:#49e59b;--bad:#ff5e6d;--accent:#72a7ff}
+:root{color-scheme:dark;--bg:#07090d;--panel:#0d1118;--panel2:#111824;--text:#eef3f8;--muted:#7d8999;--line:#222c3a;--bad:#ff5d6c;--accent:#7aaaff;--ok:#54dda0}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;min-height:100%;background:radial-gradient(120% 80% at 50% -10%,#142037 0%,var(--bg) 54%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+html,body{margin:0;min-height:100%;background:radial-gradient(120% 82% at 50% -10%,#15223a 0%,var(--bg) 55%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
 body{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 14px max(20px,env(safe-area-inset-bottom));overflow:hidden}
-.shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,25,37,.96),rgba(9,12,18,.96));border-radius:30px;padding:18px 16px 16px;box-shadow:0 24px 90px rgba(0,0,0,.46),inset 0 1px rgba(255,255,255,.04)}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.brand{font-size:12px;letter-spacing:.18em;font-weight:750;color:#dfe9f7}.phase{font-size:10px;letter-spacing:.08em;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px}
-.modes{display:flex;justify-content:center;gap:6px;margin:0 0 9px}.mode{height:27px;min-width:64px;border:1px solid var(--line);border-radius:999px;background:#0b1018;color:#677486;font-size:9px;font-weight:800;letter-spacing:.12em}.mode.active{color:#eaf2fd;border-color:#3a4c67;background:#172132;box-shadow:inset 0 0 18px rgba(114,167,255,.08)}.safety{font-size:11px;line-height:1.35;color:#8793a4;text-align:center;margin:5px 8px 14px}
-.stage{position:relative;display:grid;place-items:center;min-height:220px;border-radius:24px;background:radial-gradient(circle at 50% 42%,rgba(75,126,214,.16),transparent 42%),rgba(3,6,10,.42);border:1px solid rgba(255,255,255,.05);overflow:hidden}
-.ring{position:absolute;width:160px;height:160px;border-radius:50%;border:1px solid rgba(114,167,255,.2);box-shadow:0 0 50px rgba(72,124,210,.08);transform:scale(.94);opacity:.6;transition:.2s ease}.ring.playing{animation:pulse 1.1s ease-in-out infinite;border-color:rgba(114,167,255,.48);box-shadow:0 0 70px rgba(72,124,210,.18)}@keyframes pulse{50%{transform:scale(1.04);opacity:1}}
-.readout{position:relative;text-align:center}.hz{font-size:52px;font-weight:680;letter-spacing:-.055em;line-height:.95;font-variant-numeric:tabular-nums}.unit{font-size:13px;color:#9ba8b9;margin-top:8px;letter-spacing:.12em}.level{font-size:11px;color:#657184;margin-top:8px;font-variant-numeric:tabular-nums}
-.bracket{height:20px;margin:10px 0 4px;font-size:10px;color:#8c98a8;text-align:center;font-variant-numeric:tabular-nums}.bracket strong{color:#dce6f2;font-weight:600}
-.responses{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.answer{height:70px;border:0;border-radius:21px;font-size:16px;font-weight:800;letter-spacing:.06em;color:#09100d;touch-action:manipulation}.answer:disabled{opacity:.25}.answer.ok{background:linear-gradient(180deg,#60efab,#35cc87);box-shadow:0 10px 30px rgba(53,204,135,.13)}.answer.no{background:linear-gradient(180deg,#ff7581,#f14d5d);box-shadow:0 10px 30px rgba(241,77,93,.13);color:#170608}.answer:active{transform:scale(.985)}
-.controls{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:8px;margin-top:10px}.ctrl{height:42px;border-radius:14px;border:1px solid var(--line);background:#121824;color:#d8e1ec;font-size:12px;font-weight:650}.ctrl.primary{background:#e8eef7;color:#111720;border-color:#e8eef7}.ctrl:disabled{opacity:.35}.ctrl:active{transform:scale(.985)}
-.result{display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(73,229,155,.22);background:rgba(73,229,155,.06);border-radius:16px;font-size:11px;line-height:1.45;color:#9fecc8}.result.show{display:block}.result b{color:#dff9ec}
-.debug{margin-top:8px;text-align:center;font-size:9px;color:#465062;min-height:12px}
+.shell{width:min(100%,430px);border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(18,25,37,.97),rgba(8,11,17,.97));border-radius:30px;padding:18px 16px 16px;box-shadow:0 24px 90px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.04)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.brand{font-size:12px;letter-spacing:.18em;font-weight:800}.step{font-size:10px;color:var(--muted);padding:5px 8px;border:1px solid var(--line);border-radius:999px;font-variant-numeric:tabular-nums}.safety{font-size:10px;line-height:1.4;text-align:center;color:#8793a4;margin:7px 10px 13px}
+.stage{position:relative;display:grid;place-items:center;min-height:225px;border-radius:24px;background:radial-gradient(circle at 50% 44%,rgba(81,132,218,.18),transparent 44%),rgba(3,6,10,.46);border:1px solid rgba(255,255,255,.05);overflow:hidden}.ring{position:absolute;width:166px;height:166px;border-radius:50%;border:1px solid rgba(122,170,255,.22);box-shadow:0 0 55px rgba(86,137,222,.08);opacity:.55;transform:scale(.94)}.ring.playing{animation:pulse 1.05s ease-in-out infinite;border-color:rgba(122,170,255,.52);box-shadow:0 0 72px rgba(86,137,222,.18)}@keyframes pulse{50%{transform:scale(1.04);opacity:1}}
+.readout{position:relative;text-align:center}.hz{font-size:54px;font-weight:680;letter-spacing:-.055em;line-height:.92;font-variant-numeric:tabular-nums}.unit{font-size:12px;color:#9ba8b9;margin-top:9px;letter-spacing:.14em}.db{font-size:20px;font-weight:650;margin-top:11px;font-variant-numeric:tabular-nums}.db small{font-size:10px;color:#687588;font-weight:650;letter-spacing:.08em}
+.progress{height:4px;background:#151d29;border-radius:999px;overflow:hidden;margin:12px 5px 0}.fill{height:100%;width:0;background:linear-gradient(90deg,#648ccf,#9ebfff);border-radius:inherit;transition:width .08s linear}.hint{height:28px;display:grid;place-items:center;text-align:center;color:#8c98a8;font-size:10px;margin:5px 0 2px}
+.limit{width:100%;height:82px;border:0;border-radius:22px;background:linear-gradient(180deg,#ff7581,#ef4a5a);box-shadow:0 12px 34px rgba(239,74,90,.16);color:#1a0608;font-size:18px;font-weight:900;letter-spacing:.12em;touch-action:manipulation}.limit:disabled{opacity:.25}.limit:active{transform:scale(.986)}
+.controls{display:grid;grid-template-columns:1.2fr 1fr;gap:9px;margin-top:10px}.ctrl{height:43px;border-radius:14px;border:1px solid var(--line);background:#121925;color:#dce5ef;font-size:12px;font-weight:700}.ctrl.primary{background:#e8eef7;color:#111720;border-color:#e8eef7}.ctrl:active{transform:scale(.985)}
+.results{display:none;margin-top:11px;padding:10px;border:1px solid rgba(84,221,160,.18);background:rgba(84,221,160,.05);border-radius:16px}.results.show{display:block}.resultsTitle{font-size:10px;color:#9fe7c4;margin-bottom:7px;letter-spacing:.08em}.map{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.cell{display:flex;justify-content:space-between;gap:7px;padding:5px 7px;border-radius:9px;background:rgba(255,255,255,.035);font-size:9px;color:#8794a5;font-variant-numeric:tabular-nums}.cell b{color:#dfe8f1;font-weight:700}.debug{text-align:center;color:#465163;font-size:9px;margin-top:7px;min-height:11px}
 </style>
 </head>
 <body>
 <main class="shell" aria-label="E-MASTER calibration">
-  <div class="top"><div class="brand">E-MASTER CAL</div><div class="phase" id="phase">BASS · READY</div></div>
-  <div class="modes"><button class="mode active" data-mode="frequency">FREQ</button><button class="mode" data-mode="level">LEVEL</button></div>
-  <div class="safety">Set headphone volume low before Start. The test never changes hardware volume.</div>
-
+  <div class="top"><div class="brand">E-MASTER CAL</div><div class="step" id="step">READY</div></div>
+  <div class="safety">Fixed headphone volume. Each bass frequency rises from very low level. Tap LIMIT at the first audible choke/rattle. Stop immediately if uncomfortable.</div>
   <section class="stage">
     <div class="ring" id="ring"></div>
     <div class="readout">
-      <div class="hz" id="hz">80.0</div>
-      <div class="unit">HZ</div>
-      <div class="level" id="level">−30 dBFS</div>
+      <div class="hz" id="hz">20</div><div class="unit">HZ</div>
+      <div class="db" id="db">−50.0 <small>dBFS</small></div>
     </div>
   </section>
-
-  <div class="bracket" id="bracket">Press Start, listen, then answer.</div>
-
-  <div class="responses">
-    <button class="answer ok" id="ok" disabled>OK</button>
-    <button class="answer no" id="no" disabled>NO</button>
-  </div>
-
-  <div class="controls">
-    <button class="ctrl primary" id="start">START</button>
-    <button class="ctrl" id="retest" disabled>RETEST</button>
-    <button class="ctrl" id="reset">RESET</button>
-  </div>
-
-  <div class="result" id="result"></div>
+  <div class="progress"><div class="fill" id="fill"></div></div>
+  <div class="hint" id="hint">Press START. The level will rise automatically.</div>
+  <button class="limit" id="limit" disabled>LIMIT</button>
+  <div class="controls"><button class="ctrl primary" id="start">START</button><button class="ctrl" id="reset">RESET</button></div>
+  <div class="results" id="results"><div class="resultsTitle">CLEAN OUTPUT MAP</div><div class="map" id="map"></div></div>
   <div class="debug" id="debug"></div>
 </main>
 <script>
 (() => {
   'use strict';
 
+  const testFrequencies = [20,25,31.5,40,50,63,80,100,125,160,200];
   const cfg = {
-    mode: "frequency",
-    fixedLevelDb: -30,
-    initialHz: 80,
-    minHz: 20,
-    coarseRatio: 0.75,
-    toleranceHz: 0.75,
-    maxGainDb: -18,
-    toneMs: 900,
-    gapMs: 180
+    startDb: -50,
+    safeCeilingDb: -18,
+    rampDbPerSecond: 3.0,
+    gapMs: 420,
+    fadeMs: 45
   };
+  const rampDbPerSecond = cfg.rampDbPerSecond;
+  const safeCeilingDb = cfg.safeCeilingDb;
 
-  const levelCfg = {
-    fixedHz: 60,
-    initialDb: -36,
-    maxDb: -18,
-    coarseStepDb: 4,
-    toleranceDb: 0.75
-  };
-
-  const freshState = (mode='frequency', rawDecisions=[]) => ({
-    mode,
-    running: false,
-    phase: "coarse",
-    currentHz: cfg.initialHz,
-    lastGoodHz: null,
-    firstBadHz: null,
-    candidateHz: null,
-    currentDb: levelCfg.initialDb,
-    lastGoodDb: null,
-    firstBadDb: null,
-    candidateDb: null,
-    verification: [],
-    decisions: [],
-    rawDecisions,
-    completed: false,
-    confidence: null,
-    tonePlaying: false,
-    message: ""
+  const freshState = () => ({
+    running:false,
+    completed:false,
+    index:0,
+    currentHz:testFrequencies[0],
+    currentDb:cfg.startDb,
+    tonePlaying:false,
+    frequencyMap:[],
+    startedAt:0,
+    message:'Press START. The level will rise automatically.'
   });
 
-  let state = freshState('frequency', []);
+  let state = freshState();
   let audioCtx = null;
   let oscillator = null;
   let gainNode = null;
-  let stopTimer = 0;
+  let rafId = 0;
+  let ceilingTimer = 0;
   let nextTimer = 0;
+  let rampStartPerf = 0;
 
   const el = id => document.getElementById(id);
-  const hzEl = el('hz'), levelEl = el('level'), phaseEl = el('phase'), bracketEl = el('bracket');
-  const ringEl = el('ring'), okEl = el('ok'), noEl = el('no'), startEl = el('start');
-  const retestEl = el('retest'), resetEl = el('reset'), resultEl = el('result'), debugEl = el('debug');
-  const modeEls = [...document.querySelectorAll('[data-mode]')];
+  const hzEl=el('hz'),dbEl=el('db'),stepEl=el('step'),ringEl=el('ring'),fillEl=el('fill');
+  const hintEl=el('hint'),limitEl=el('limit'),startEl=el('start'),resetEl=el('reset');
+  const resultsEl=el('results'),mapEl=el('map'),debugEl=el('debug');
 
-  function dbToGain(db){ return 10 ** (db / 20); }
-  function safeDb(db){ return Math.min(Number(db), cfg.maxGainDb); }
-  function fmtHz(v){ return Number(v).toFixed(v < 40 ? 2 : 1); }
+  const dbToGain = db => 10 ** (db/20);
+  const fmtHz = hz => Number.isInteger(hz) ? String(hz) : Number(hz).toFixed(1);
+  const fmtDb = db => `${Number(db).toFixed(1).replace('-', '−')} dB`;
+  const rampDurationSeconds = () => (cfg.safeCeilingDb-cfg.startDb)/cfg.rampDbPerSecond;
+
+  function currentDbFromClock(){
+    if(!state.tonePlaying || !rampStartPerf) return state.currentDb;
+    const elapsed = Math.max(0,(performance.now()-rampStartPerf)/1000);
+    return Math.min(cfg.safeCeilingDb,cfg.startDb + elapsed*cfg.rampDbPerSecond);
+  }
+
+  function renderMap(){
+    if(!state.frequencyMap.length){resultsEl.classList.remove('show');mapEl.innerHTML='';return;}
+    resultsEl.classList.add('show');
+    mapEl.innerHTML = state.frequencyMap.map(row => {
+      const value = row.status === 'limit' ? fmtDb(row.limitDb) : `≥ ${fmtDb(row.cleanThroughDb)}`;
+      return `<div class="cell"><span>${fmtHz(row.hz)} Hz</span><b>${value}</b></div>`;
+    }).join('');
+  }
 
   function render(){
-    const isLevel = state.mode === 'level';
-    const shownHz = isLevel ? levelCfg.fixedHz : state.currentHz;
-    const shownDb = isLevel ? state.currentDb : cfg.fixedLevelDb;
-    hzEl.textContent = fmtHz(shownHz);
-    levelEl.textContent = `${String(Number(shownDb).toFixed(isLevel ? 1 : 0)).replace('-', '−')} dBFS`;
-    ringEl.classList.toggle('playing', !!state.tonePlaying);
-    modeEls.forEach(node => node.classList.toggle('active', node.dataset.mode === state.mode));
-    const canAnswer = state.running && !state.completed;
-    okEl.disabled = !canAnswer;
-    noEl.disabled = !canAnswer;
-    retestEl.disabled = state.completed;
-    startEl.textContent = state.running ? 'STOP' : 'START';
-
-    const phaseNames = {coarse:'SEARCH',refine:'REFINE',verify:'VERIFY',complete:'DONE',floor:'LIMIT',ceiling:'LIMIT'};
-    phaseEl.textContent = `${isLevel ? 'LEVEL' : 'BASS'} · ${phaseNames[state.phase] || 'READY'}`;
-
-    if(isLevel && state.lastGoodDb != null && state.firstBadDb != null){
-      const hi = Math.max(state.lastGoodDb, state.firstBadDb);
-      const lo = Math.min(state.lastGoodDb, state.firstBadDb);
-      bracketEl.innerHTML = `<strong>OK ${state.lastGoodDb.toFixed(2)}</strong> · <strong>NO ${state.firstBadDb.toFixed(2)}</strong> · window ${(hi-lo).toFixed(2)} dB`;
-    } else if(!isLevel && state.lastGoodHz != null && state.firstBadHz != null){
-      const hi = Math.max(state.lastGoodHz, state.firstBadHz);
-      const lo = Math.min(state.lastGoodHz, state.firstBadHz);
-      bracketEl.innerHTML = `<strong>OK ${fmtHz(state.lastGoodHz)}</strong> · <strong>NO ${fmtHz(state.firstBadHz)}</strong> · window ${(hi-lo).toFixed(2)} Hz`;
-    } else if(state.phase === 'floor') {
-      bracketEl.textContent = `Still OK at ${cfg.minHz} Hz · lower boundary not found in this test range.`;
-    } else if(state.phase === 'ceiling') {
-      bracketEl.textContent = `Still OK at ${levelCfg.maxDb} dBFS · level boundary not found inside the safe test range.`;
-    } else {
-      bracketEl.textContent = state.message || (state.running ? 'Listen, then choose OK or NO.' : 'Press Start, listen, then answer.');
-    }
-
-    if(state.completed){
-      resultEl.classList.add('show');
-      if(isLevel){
-        const hi = Math.max(state.lastGoodDb, state.firstBadDb), lo = Math.min(state.lastGoodDb, state.firstBadDb);
-        resultEl.innerHTML = `<b>Boundary ${state.candidateDb.toFixed(2)} dBFS @ ${levelCfg.fixedHz} Hz</b><br>Confirmed window ${lo.toFixed(2)}–${hi.toFixed(2)} dB · confidence ${Math.round((state.confidence||0)*100)}%`;
-      } else {
-        const hi = Math.max(state.lastGoodHz, state.firstBadHz), lo = Math.min(state.lastGoodHz, state.firstBadHz);
-        resultEl.innerHTML = `<b>Boundary ${fmtHz(state.candidateHz)} Hz</b><br>Confirmed window ${fmtHz(lo)}–${fmtHz(hi)} Hz · confidence ${Math.round((state.confidence||0)*100)}%`;
-      }
-    } else {
-      resultEl.classList.remove('show'); resultEl.textContent='';
-    }
-    debugEl.textContent = `${state.decisions.length} decisions${state.verification.length ? ` · verify ${state.verification.length}/2` : ''}`;
+    state.currentDb = currentDbFromClock();
+    hzEl.textContent=fmtHz(state.currentHz);
+    dbEl.innerHTML=`${Number(state.currentDb).toFixed(1).replace('-', '−')} <small>dBFS</small>`;
+    const p=Math.max(0,Math.min(1,(state.currentDb-cfg.startDb)/(cfg.safeCeilingDb-cfg.startDb)));
+    fillEl.style.width=`${(p*100).toFixed(1)}%`;
+    ringEl.classList.toggle('playing',state.tonePlaying);
+    limitEl.disabled=!state.running || !state.tonePlaying || state.completed;
+    startEl.textContent=state.running?'STOP':(state.completed?'DONE':'START');
+    stepEl.textContent=state.completed?'DONE':`${Math.min(state.index+1,testFrequencies.length)}/${testFrequencies.length}`;
+    hintEl.textContent=state.message;
+    debugEl.textContent=`${state.frequencyMap.length}/${testFrequencies.length} captured · ceiling ${safeCeilingDb} dBFS`;
+    renderMap();
   }
 
   function clearTimers(){
-    if(stopTimer){ clearTimeout(stopTimer); stopTimer = 0; }
-    if(nextTimer){ clearTimeout(nextTimer); nextTimer = 0; }
+    if(rafId){cancelAnimationFrame(rafId);rafId=0;}
+    if(ceilingTimer){clearTimeout(ceilingTimer);ceilingTimer=0;}
+    if(nextTimer){clearTimeout(nextTimer);nextTimer=0;}
   }
 
   function stopTone(){
-    if(stopTimer){ clearTimeout(stopTimer); stopTimer = 0; }
-    const now = audioCtx ? audioCtx.currentTime : 0;
+    if(rafId){cancelAnimationFrame(rafId);rafId=0;}
+    if(ceilingTimer){clearTimeout(ceilingTimer);ceilingTimer=0;}
     if(gainNode && audioCtx){
-      try{ gainNode.gain.cancelScheduledValues(now); gainNode.gain.setTargetAtTime(0, now, 0.012); }catch{}
+      const now=audioCtx.currentTime;
+      try{
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setValueAtTime(Math.max(gainNode.gain.value,0.00001),now);
+        gainNode.gain.exponentialRampToValueAtTime(0.00001,now+cfg.fadeMs/1000);
+      }catch{}
     }
-    if(oscillator){ try{ oscillator.stop(now + 0.045); }catch{} }
-    oscillator = null; gainNode = null;
-    state.tonePlaying = false;
-    render();
+    if(oscillator && audioCtx){try{oscillator.stop(audioCtx.currentTime+cfg.fadeMs/1000+0.01);}catch{}}
+    oscillator=null;gainNode=null;rampStartPerf=0;state.tonePlaying=false;
   }
 
   async function ensureAudio(){
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if(!Ctx) throw new Error('AudioContext unavailable');
-    if(!audioCtx || audioCtx.state === 'closed') audioCtx = new Ctx({latencyHint:'interactive'});
-    if(audioCtx.state === 'suspended') await audioCtx.resume();
+    const AudioContextCtor=window.AudioContext||window.webkitAudioContext;
+    if(!AudioContextCtor) throw new Error('AudioContext unavailable');
+    if(!audioCtx || audioCtx.state==='closed') audioCtx=new AudioContextCtor({latencyHint:'interactive'});
+    if(audioCtx.state==='suspended') await audioCtx.resume();
   }
 
-  async function playCurrent(){
-    if(state.completed || !state.running) return;
+  function animate(){
+    if(!state.tonePlaying) return;
+    state.currentDb=currentDbFromClock();
+    render();
+    rafId=requestAnimationFrame(animate);
+  }
+
+  async function playFrequency(){
+    if(!state.running || state.completed) return;
     await ensureAudio();
     stopTone();
-    const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const testDb = state.mode === 'level' ? state.currentDb : cfg.fixedLevelDb;
-    const testHz = state.mode === 'level' ? levelCfg.fixedHz : state.currentHz;
-    const target = dbToGain(safeDb(testDb));
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(Math.max(cfg.minHz, testHz), now);
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(target, now + 0.04);
-    const fadeAt = now + Math.max(0.12, cfg.toneMs / 1000 - 0.06);
-    gain.gain.setValueAtTime(target, fadeAt);
-    gain.gain.linearRampToValueAtTime(0, now + cfg.toneMs / 1000);
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    oscillator = osc; gainNode = gain;
-    state.tonePlaying = true; render();
-    osc.start(now); osc.stop(now + cfg.toneMs / 1000 + 0.025);
-    stopTimer = window.setTimeout(() => {
-      if(oscillator === osc){ oscillator = null; gainNode = null; state.tonePlaying = false; render(); }
-    }, cfg.toneMs + 80);
-  }
+    state.currentHz=testFrequencies[state.index];
+    state.currentDb=cfg.startDb;
+    state.message='Level rising… tap LIMIT at the first audible degradation.';
 
-  function bracketWidth(){
-    if(state.lastGoodHz == null || state.firstBadHz == null) return Infinity;
-    return Math.abs(state.lastGoodHz - state.firstBadHz);
-  }
-
-  function startVerification(){
-    const hi = Math.max(state.lastGoodHz, state.firstBadHz);
-    const lo = Math.min(state.lastGoodHz, state.firstBadHz);
-    state.candidateHz = Math.sqrt(hi * lo);
-    state.phase = 'verify';
-    state.currentHz = state.candidateHz;
-    state.verification = [];
-    state.message = 'Verification pass 1/2';
-    return state.currentHz;
-  }
-
-  function finishVerification(){
-    const hi = Math.max(state.lastGoodHz, state.firstBadHz);
-    const lo = Math.min(state.lastGoodHz, state.firstBadHz);
-    state.candidateHz = Math.sqrt(hi * lo);
-    const width = Math.max(0, hi - lo);
-    const tightness = Math.max(0, 1 - width / Math.max(cfg.toleranceHz * 2.5, 1));
-    state.confidence = Math.min(0.98, 0.78 + 0.18 * tightness + 0.02 * Math.min(2, state.verification.length));
-    state.currentHz = state.candidateHz;
-    state.phase = 'complete'; state.completed = true; state.running = false;
-    stopTone(); render();
-  }
-
-  function applyFrequencyDecision(ok, verification=false){
-    const f = state.currentHz;
-    const row = {mode:'frequency', hz:f, levelDb:cfg.fixedLevelDb, ok:!!ok, at:Date.now(), verification:!!verification};
-    state.decisions.push(row);
-    state.rawDecisions.push(row);
-    if(verification) state.verification.push(row);
-
-    if(ok){
-      // In this descending bass search, any lower OK point is a stronger known-good boundary.
-      if(state.lastGoodHz == null || f < state.lastGoodHz) state.lastGoodHz = f;
-    } else {
-      // Keep the highest bad point only if no lower good point has contradicted it; refinement will tighten the bracket.
-      if(state.firstBadHz == null || f > state.firstBadHz) state.firstBadHz = f;
-    }
-  }
-
-  function normalizeBracket(){
-    // If responses crossed because perception varied, keep the most recent pair and continue refinement instead of claiming certainty.
-    if(state.lastGoodHz != null && state.firstBadHz != null && state.lastGoodHz <= state.firstBadHz){
-      const recentGood = [...state.decisions].reverse().find(x => x.ok)?.hz;
-      const recentBad = [...state.decisions].reverse().find(x => !x.ok)?.hz;
-      if(recentGood != null) state.lastGoodHz = recentGood;
-      if(recentBad != null) state.firstBadHz = recentBad;
-    }
-  }
-
-  function nextFrequencyAfterAnswer(ok){
-    const wasVerify = state.phase === 'verify';
-    applyFrequencyDecision(ok, wasVerify);
-    normalizeBracket();
-
-    if(wasVerify){
-      if(state.verification.length >= 2){ finishVerification(); return null; }
-      const good = state.lastGoodHz, bad = state.firstBadHz;
-      if(good != null && bad != null){
-        state.currentHz = Math.sqrt(good * bad);
-      }
-      state.message = 'Verification pass 2/2';
-      return state.currentHz;
-    }
-
-    if(state.lastGoodHz != null && state.firstBadHz != null){
-      state.phase = 'refine';
-      const hi = Math.max(state.lastGoodHz, state.firstBadHz);
-      const lo = Math.min(state.lastGoodHz, state.firstBadHz);
-      if(hi - lo <= cfg.toleranceHz) return startVerification();
-      state.currentHz = Math.sqrt(hi * lo); // geometric midpoint is appropriate for frequency.
-      return state.currentHz;
-    }
-
-    if(ok){
-      if(state.currentHz <= cfg.minHz + 0.001){
-        state.phase = 'floor'; state.running = false; state.message = 'No bad point found.'; stopTone(); render(); return null;
-      }
-      state.currentHz = Math.max(cfg.minHz, state.currentHz * cfg.coarseRatio);
-      return state.currentHz;
-    }
-
-    // A NO before any known-good point means the starting point itself is not usable.
-    if(state.lastGoodHz == null){
-      state.running = false;
-      state.message = 'NO at the starting point. Lower headphone volume, Reset, and try again.';
-      stopTone(); render(); return null;
-    }
-    return state.currentHz;
-  }
-
-  function applyLevelDecision(ok, verification=false){
-    const db = state.currentDb;
-    const row = {mode:'level', hz:levelCfg.fixedHz, levelDb:db, ok:!!ok, at:Date.now(), verification:!!verification};
-    state.decisions.push(row); state.rawDecisions.push(row);
-    if(verification) state.verification.push(row);
-    if(ok){
-      if(state.lastGoodDb == null || db > state.lastGoodDb) state.lastGoodDb = db;
-    } else {
-      if(state.firstBadDb == null || db < state.firstBadDb) state.firstBadDb = db;
-    }
-  }
-
-  function normalizeLevelBracket(){
-    if(state.lastGoodDb != null && state.firstBadDb != null && state.lastGoodDb >= state.firstBadDb){
-      const recentGood = [...state.decisions].reverse().find(x => x.mode === 'level' && x.ok)?.levelDb;
-      const recentBad = [...state.decisions].reverse().find(x => x.mode === 'level' && !x.ok)?.levelDb;
-      if(recentGood != null) state.lastGoodDb = recentGood;
-      if(recentBad != null) state.firstBadDb = recentBad;
-    }
-  }
-
-  function startLevelVerification(){
-    state.candidateDb = (state.lastGoodDb + state.firstBadDb) / 2;
-    state.currentDb = state.candidateDb;
-    state.phase = 'verify'; state.verification = []; state.message = 'Verification pass 1/2';
-    return state.currentDb;
-  }
-
-  function finishLevelVerification(){
-    const hi = Math.max(state.lastGoodDb, state.firstBadDb), lo = Math.min(state.lastGoodDb, state.firstBadDb);
-    state.candidateDb = (hi + lo) / 2;
-    const width = hi - lo;
-    const tightness = Math.max(0, 1 - width / Math.max(levelCfg.toleranceDb * 2.5, 1));
-    state.confidence = Math.min(0.98, 0.78 + 0.18 * tightness + 0.02 * Math.min(2, state.verification.length));
-    state.currentDb = state.candidateDb; state.phase = 'complete'; state.completed = true; state.running = false;
-    stopTone(); render();
-  }
-
-  function nextLevelAfterAnswer(ok){
-    const wasVerify = state.phase === 'verify';
-    applyLevelDecision(ok, wasVerify); normalizeLevelBracket();
-    if(wasVerify){
-      if(state.verification.length >= 2){ finishLevelVerification(); return null; }
-      if(state.lastGoodDb != null && state.firstBadDb != null) state.currentDb = (state.lastGoodDb + state.firstBadDb) / 2;
-      state.message = 'Verification pass 2/2'; return state.currentDb;
-    }
-    if(state.lastGoodDb != null && state.firstBadDb != null){
-      state.phase = 'refine';
-      const width = Math.abs(state.firstBadDb - state.lastGoodDb);
-      if(width <= levelCfg.toleranceDb) return startLevelVerification();
-      state.currentDb = (state.lastGoodDb + state.firstBadDb) / 2;
-      return state.currentDb;
-    }
-    if(ok){
-      if(state.currentDb >= levelCfg.maxDb - 0.001){
-        state.phase='ceiling'; state.running=false; state.message='No bad point found inside safe level range.'; stopTone(); render(); return null;
-      }
-      state.currentDb = Math.min(levelCfg.maxDb, state.currentDb + levelCfg.coarseStepDb);
-      return state.currentDb;
-    }
-    if(state.lastGoodDb == null){
-      state.running=false; state.message='NO at the starting level. Lower headphone volume, Reset, and try again.'; stopTone(); render(); return null;
-    }
-    return state.currentDb;
-  }
-
-  async function switchMode(mode){
-    if(mode !== 'frequency' && mode !== 'level') return;
-    const raw = state.rawDecisions;
-    await stop(true);
-    state = freshState(mode, raw);
+    const now=audioCtx.currentTime;
+    const duration=rampDurationSeconds();
+    const osc=audioCtx.createOscillator();
+    const gain=audioCtx.createGain();
+    osc.type='sine';
+    osc.frequency.setValueAtTime(state.currentHz,now);
+    gain.gain.setValueAtTime(dbToGain(cfg.startDb),now);
+    gain.gain.exponentialRampToValueAtTime(dbToGain(cfg.safeCeilingDb),now+duration);
+    osc.connect(gain);gain.connect(audioCtx.destination);
+    oscillator=osc;gainNode=gain;
+    state.tonePlaying=true;
+    rampStartPerf=performance.now();
     render();
+    osc.start(now);
+    rafId=requestAnimationFrame(animate);
+    ceilingTimer=window.setTimeout(()=>captureCeiling(),Math.ceil(duration*1000)+60);
+  }
+
+  function captureCeiling(){
+    if(!state.running || !state.tonePlaying || state.completed) return;
+    state.currentDb=cfg.safeCeilingDb;
+    state.frequencyMap.push({hz:state.currentHz,status:'clean-ceiling',cleanThroughDb:cfg.safeCeilingDb,at:Date.now()});
+    stopTone();
+    state.message=`${fmtHz(state.currentHz)} Hz stayed clean through the safe ceiling.`;
+    advance();
+  }
+
+  function captureLimit(){
+    if(!state.running || !state.tonePlaying || state.completed) return;
+    state.currentDb=currentDbFromClock();
+    const captured=Math.max(cfg.startDb,Math.min(cfg.safeCeilingDb,state.currentDb));
+    state.frequencyMap.push({hz:state.currentHz,status:'limit',limitDb:captured,at:Date.now()});
+    stopTone();
+    state.message=`Limit captured: ${fmtHz(state.currentHz)} Hz @ ${fmtDb(captured)}.`;
+    advance();
+  }
+
+  function advance(){
+    state.index+=1;
+    if(state.index>=testFrequencies.length){
+      state.running=false;state.completed=true;state.tonePlaying=false;
+      state.message='Bass capability map complete.';
+      render();return;
+    }
+    state.currentHz=testFrequencies[state.index];
+    state.currentDb=cfg.startDb;
+    render();
+    nextTimer=window.setTimeout(()=>{nextTimer=0;playFrequency().catch(handleError);},cfg.gapMs);
+  }
+
+  function handleError(err){
+    stopTone();state.running=false;state.message=String(err&&err.message||err);render();
   }
 
   async function start(){
-    if(state.running){ await stop(false); return; }
     if(state.completed) return;
+    if(state.running){await stop(false);return;}
     try{
       await ensureAudio();
-      state.running = true; state.message = 'Listen, then choose OK or NO.'; render();
-      await playCurrent();
-    }catch(err){
-      state.running = false; state.message = String(err && err.message || err); render();
-    }
-  }
-
-  async function answer(ok){
-    if(!state.running || state.completed) return;
-    stopTone();
-    const next = state.mode === 'level' ? nextLevelAfterAnswer(!!ok) : nextFrequencyAfterAnswer(!!ok);
-    render();
-    if(next == null || state.completed || !state.running) return;
-    nextTimer = window.setTimeout(() => { nextTimer=0; playCurrent().catch(err => {state.message=String(err); render();}); }, cfg.gapMs);
-  }
-
-  async function retest(){
-    if(state.completed) return;
-    try{
-      await ensureAudio(); state.running = true; render(); await playCurrent();
-    }catch(err){ state.running=false; state.message=String(err); render(); }
+      state.running=true;state.message='Starting…';render();
+      await playFrequency();
+    }catch(err){handleError(err);}
   }
 
   async function stop(dispose=false){
-    clearTimers(); stopTone(); state.running = false;
-    if(dispose && audioCtx){
-      try{ await audioCtx.close(); }catch{}
-      audioCtx = null;
-    }
+    clearTimers();stopTone();state.running=false;state.message='Stopped.';
+    if(dispose && audioCtx){try{await audioCtx.close();}catch{}audioCtx=null;}
     render();
   }
 
   async function reset(){
-    const mode = state.mode, raw = state.rawDecisions;
-    await stop(true); state = freshState(mode, raw); render();
+    await stop(true);state=freshState();render();
   }
 
-  startEl.addEventListener('click', start);
-  retestEl.addEventListener('click', retest);
-  resetEl.addEventListener('click', reset);
-  okEl.addEventListener('click', () => answer(true));
-  noEl.addEventListener('click', () => answer(false));
-  modeEls.forEach(node => node.addEventListener('click', () => switchMode(node.dataset.mode)));
-  document.addEventListener('visibilitychange', () => { if(document.hidden) stop(true); });
-  window.addEventListener('pagehide', () => { stop(true); });
+  startEl.addEventListener('click',start);
+  resetEl.addEventListener('click',reset);
+  limitEl.addEventListener('click',captureLimit);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden) stop(true);});
+  window.addEventListener('pagehide',()=>{stop(true);});
 
-  window.EMasterCalibration = {
+  window.EMasterCalibration={
     start,
     stop,
-    answer,
     reset,
-    switchMode,
-    snapshot: () => JSON.parse(JSON.stringify(state))
+    captureLimit,
+    testFrequencies:[...testFrequencies],
+    snapshot:()=>JSON.parse(JSON.stringify(state))
   };
 
   render();
