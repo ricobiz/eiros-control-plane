@@ -24,6 +24,7 @@
   ],
   "optional_services": [
     "eiros-claude.service",
-    "eiros-musetalk-jobs.service"
+    "eiros-musetalk-jobs.service",
+    "eiros-musetalk-mcp.service"
   ]
 }

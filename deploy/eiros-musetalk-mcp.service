@@ -1,0 +1,17 @@
+[Unit]
+Description=EIROS MuseTalk MCP API
+After=network-online.target eiros-musetalk-jobs.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/eiros-control-plane
+Environment=PYTHONUNBUFFERED=1
+Environment=EIROS_MUSETALK_STATE_ROOT=/var/lib/eiros/musetalk-jobs
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.musetalk_job_mcp_server
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
