@@ -51,3 +51,12 @@ def test_collect_requires_valid_mp4(tmp_path: Path):
     provider.finish(job.job_id, job.attempt_token, output_path=remote)
     final = runner.collect(job)
     assert final.read_bytes() == b'render'
+
+def test_command_bootstraps_ephemeral_ffmpeg_and_persistent_torch_cache(tmp_path: Path):
+    job, artifacts = _job(tmp_path)
+    provider=FakeRunPodProvider(tmp_path/'remote')
+    runner=MuseTalkRunner(artifacts, provider)
+    cmd=' '.join(runner.command_for(job))
+    assert 'TORCH_HOME=/workspace/.cache/torch' in cmd
+    assert 'command -v ffmpeg' in cmd
+    assert 'apt-get install -y -qq ffmpeg' in cmd

@@ -51,6 +51,9 @@ class MuseTalkRunner:
         d = self.remote_dir(job)
         generated = f'{d}/render/v15/input_input.mp4'
         script = (
+            'export TORCH_HOME=/workspace/.cache/torch; '
+            'mkdir -p /workspace/.cache/torch/hub/checkpoints; '
+            'command -v ffmpeg >/dev/null || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg); '
             f'cd {self.musetalk_root} && '
             f'/workspace/venvs/musetalk/bin/python -m scripts.inference '
             f'--inference_config {self.remote_config(job)} '
