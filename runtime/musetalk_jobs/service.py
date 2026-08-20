@@ -46,25 +46,40 @@ class MuseTalkJobService:
         self.reconciler.maybe_stop_idle_worker(time.time() if now is None else now)
 
 
+
+def runtime_config_from_env() -> dict[str, object]:
+    def first(*names: str, default: str = '') -> str:
+        for name in names:
+            value = os.environ.get(name)
+            if value not in (None, ''):
+                return value
+        return default
+    return {
+        'state_root': first('EIROS_MUSETALK_STATE_ROOT', 'MUSETALK_STATE_DIR', default='/var/lib/eiros/musetalk-jobs'),
+        'target_file': first('EIROS_RUNPOD_TARGET_FILE', 'MUSETALK_RUNPOD_TARGET', default='/opt/eiros-control-plane/runtime/runpod_target.json'),
+        'key_file': first('EIROS_RUNPOD_KEY_FILE', 'MUSETALK_RUNPOD_KEY', default='/root/.ssh/eiros_runpod'),
+        'idle_grace': int(first('EIROS_MUSETALK_IDLE_GRACE_SECONDS', 'MUSETALK_IDLE_GRACE_SECONDS', default='120')),
+        'tick_seconds': max(0.5, float(first('EIROS_MUSETALK_TICK_SECONDS', default='2'))),
+        'api_key': first('EIROS_RUNPOD_API_KEY', 'RUNPOD_API_KEY'),
+        'pod_id': first('EIROS_RUNPOD_POD_ID', 'RUNPOD_POD_ID'),
+        'start_cmd': shlex.split(first('EIROS_RUNPOD_START_CMD')),
+        'stop_cmd': shlex.split(first('EIROS_RUNPOD_STOP_CMD')),
+    }
+
 def main() -> int:
     from .runpod import SshRunPodProvider
     from .runpod_api import RunPodRestLifecycle
 
-    state_root = os.environ.get('EIROS_MUSETALK_STATE_ROOT', '/var/lib/eiros/musetalk-jobs')
-    target_file = os.environ.get('EIROS_RUNPOD_TARGET_FILE', '/opt/eiros-control-plane/runtime/runpod_target.json')
-    key_file = os.environ.get('EIROS_RUNPOD_KEY_FILE', '/root/.ssh/eiros_runpod')
-    start_cmd = shlex.split(os.environ.get('EIROS_RUNPOD_START_CMD', ''))
-    stop_cmd = shlex.split(os.environ.get('EIROS_RUNPOD_STOP_CMD', ''))
-    idle_grace = int(os.environ.get('EIROS_MUSETALK_IDLE_GRACE_SECONDS', '120'))
-    tick_seconds = max(0.5, float(os.environ.get('EIROS_MUSETALK_TICK_SECONDS', '2')))
-    api_key = os.environ.get('EIROS_RUNPOD_API_KEY', '')
-    pod_id = os.environ.get('EIROS_RUNPOD_POD_ID', '')
-    lifecycle = RunPodRestLifecycle(api_key, pod_id) if api_key else None
-    provider = SshRunPodProvider(target_file, key_file, start_command=start_cmd, stop_command=stop_cmd, lifecycle=lifecycle)
-    service = MuseTalkJobService.build(state_root, provider, idle_grace_seconds=idle_grace)
+    cfg = runtime_config_from_env()
+    lifecycle = RunPodRestLifecycle(str(cfg['api_key']), str(cfg['pod_id'])) if cfg['api_key'] else None
+    provider = SshRunPodProvider(
+        str(cfg['target_file']), str(cfg['key_file']),
+        start_command=cfg['start_cmd'], stop_command=cfg['stop_cmd'], lifecycle=lifecycle,
+    )
+    service = MuseTalkJobService.build(str(cfg['state_root']), provider, idle_grace_seconds=int(cfg['idle_grace']))
     while True:
         service.tick_once()
-        time.sleep(tick_seconds)
+        time.sleep(float(cfg['tick_seconds']))
 
 
 if __name__ == '__main__':

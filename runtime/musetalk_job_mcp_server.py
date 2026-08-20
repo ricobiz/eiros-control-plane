@@ -25,7 +25,7 @@ mcp = FastMCP(
     stateless_http=True,
     json_response=True,
     host='127.0.0.1',
-    port=8794,
+    port=int(os.environ.get('EIROS_MUSETALK_MCP_PORT', '8795')),
 )
 
 
