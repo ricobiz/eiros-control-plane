@@ -24,3 +24,12 @@ def test_service_rebuild_recovers_persisted_running_job(tmp_path: Path):
     s2.tick_once(2)
     assert s2.store.get_job(job_id).state is JobState.RUNNING
     assert provider.launch_count==launches
+
+
+def test_units_load_root_only_runpod_environment_file():
+    for path in ['deploy/eiros-musetalk-jobs.service','deploy/eiros-musetalk-mcp.service']:
+        text=Path(path).read_text()
+        assert 'EnvironmentFile=-/etc/eiros/musetalk-jobs.env' in text
+    example=Path('deploy/musetalk-jobs.env.example').read_text()
+    assert 'EIROS_RUNPOD_API_KEY=' in example
+    assert 'EIROS_RUNPOD_POD_ID=' in example
