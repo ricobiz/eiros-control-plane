@@ -97,6 +97,10 @@ class SshRunPodProvider:
             host, port = self._target()
             return WorkerStatus(WorkerState.RUNNING, f'{host}:{port}')
         if self.lifecycle is not None:
+            pub = self.key_file.with_suffix('.pub')
+            repair = getattr(self.lifecycle, 'ensure_public_key', None)
+            if callable(repair) and pub.is_file():
+                repair(pub.read_text(encoding='utf-8').strip())
             status = self.lifecycle.ensure_running(self.target_file)
             if status.state is not WorkerState.RUNNING:
                 return status

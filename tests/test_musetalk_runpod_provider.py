@@ -59,3 +59,17 @@ def test_missing_target_uses_lifecycle_before_ssh(tmp_path: Path):
     s=p.ensure_running()
     assert life.starts == 1
     assert s.state is WorkerState.UNKNOWN
+
+def test_provider_repairs_account_public_key_before_lifecycle_start(tmp_path: Path):
+    from runtime.musetalk_jobs.runpod import SshRunPodProvider, WorkerState, WorkerStatus
+    class Life:
+        def __init__(self): self.keys=[]; self.starts=0
+        def ensure_public_key(self, key): self.keys.append(key); return True
+        def ensure_running(self, target_file): self.starts+=1; return WorkerStatus(WorkerState.UNKNOWN)
+        def stop_compute(self): pass
+    life=Life(); key=tmp_path/'eiros'; key.write_text('private'); key.with_suffix('.pub').write_text('ssh-ed25519 AAA eidos\n')
+    p=SshRunPodProvider(tmp_path/'missing.json', key, lifecycle=life)
+    s=p.ensure_running()
+    assert s.state is WorkerState.UNKNOWN
+    assert life.keys == ['ssh-ed25519 AAA eidos']
+    assert life.starts == 1

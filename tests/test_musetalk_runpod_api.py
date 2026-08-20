@@ -55,3 +55,18 @@ def test_discovers_single_nonterminated_pod_when_id_omitted(tmp_path: Path):
     status=life.ensure_running(target)
     assert life.pod_id=='pod-one'
     assert status.endpoint=='5.6.7.8:34567'
+
+def test_prepare_public_key_updates_env_and_preserves_existing(tmp_path: Path):
+    calls=[]
+    def opener(req, timeout=0):
+        body=json.loads(req.data.decode()) if getattr(req,'data',None) else None
+        calls.append((req.full_url, req.method, body))
+        if req.method=='GET':
+            return Resp({'id':'pod1','desiredStatus':'EXITED','env':{'KEEP':'yes'}})
+        return Resp({'id':'pod1','desiredStatus':'EXITED'})
+    life=RunPodRestLifecycle('tok','pod1',opener=opener,sleep=lambda _:None)
+    changed=life.ensure_public_key('ssh-ed25519 AAA test')
+    assert changed is True
+    update=[c for c in calls if c[0].endswith('/pod1/update')][0]
+    assert update[2]['env']['KEEP']=='yes'
+    assert update[2]['env']['PUBLIC_KEY']=='ssh-ed25519 AAA test'

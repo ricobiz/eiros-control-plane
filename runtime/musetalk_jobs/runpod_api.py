@@ -25,8 +25,12 @@ class RunPodRestLifecycle:
         self.max_polls = max(1, int(max_polls))
         self.poll_seconds = max(0.0, float(poll_seconds))
 
-    def _request_url(self, method: str, url: str) -> dict | list:
-        req = Request(url, method=method, headers={'Authorization': f'Bearer {self._api_key}', 'Accept': 'application/json'})
+    def _request_url(self, method: str, url: str, payload: dict | None = None) -> dict | list:
+        data = json.dumps(payload).encode('utf-8') if payload is not None else None
+        headers={'Authorization': f'Bearer {self._api_key}', 'Accept': 'application/json'}
+        if data is not None:
+            headers['Content-Type']='application/json'
+        req = Request(url, data=data, method=method, headers=headers)
         try:
             with self._opener(req, timeout=30) as resp:
                 raw = resp.read()
@@ -68,6 +72,22 @@ class RunPodRestLifecycle:
         if host and port:
             return str(host), int(port)
         return None
+
+
+    def ensure_public_key(self, public_key: str) -> bool:
+        self._resolve_pod_id()
+        payload = self._request_url('GET', f'{self.BASE}/{self.pod_id}')
+        if not isinstance(payload, dict):
+            raise RunPodApiError('RunPod API returned unexpected pod payload')
+        env = dict(payload.get('env') or {})
+        current = str(env.get('PUBLIC_KEY') or '')
+        if public_key and public_key in current:
+            return False
+        env['PUBLIC_KEY'] = public_key
+        result = self._request_url('POST', f'{self.BASE}/{self.pod_id}/update', {'env': env})
+        if not isinstance(result, dict):
+            raise RunPodApiError('RunPod API returned unexpected update payload')
+        return True
 
     def ensure_running(self, target_file: str | Path) -> WorkerStatus:
         payload = self._request('GET')
