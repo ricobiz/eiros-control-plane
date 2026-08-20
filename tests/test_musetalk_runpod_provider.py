@@ -30,3 +30,17 @@ def test_stop_compute_is_non_destructive(tmp_path: Path):
     assert p.stop_count == 1
     assert p.worker_state is WorkerState.STOPPED
     assert not hasattr(p, 'delete_pod')
+
+
+def test_provider_delegates_stop_to_lifecycle(tmp_path: Path):
+    from runtime.musetalk_jobs.runpod import SshRunPodProvider
+    class Life:
+        def __init__(self): self.stops=0
+        def ensure_running(self, target_file): return None
+        def stop_compute(self): self.stops += 1
+    life=Life()
+    target=tmp_path/'target.json'; target.write_text('{"host":"1.2.3.4","port":22}')
+    key=tmp_path/'key'; key.write_text('x')
+    p=SshRunPodProvider(target,key,lifecycle=life)
+    p.stop_compute()
+    assert life.stops==1

@@ -37,6 +37,11 @@ class RemoteAttempt:
     detail: str = ''
 
 
+class RunPodLifecycle(Protocol):
+    def ensure_running(self, target_file: Path) -> WorkerStatus: ...
+    def stop_compute(self) -> None: ...
+
+
 class RunPodProvider(Protocol):
     def ensure_running(self) -> WorkerStatus: ...
     def inspect_attempt(self, job_id: str, attempt_token: str) -> RemoteAttempt: ...
@@ -60,11 +65,13 @@ class SshRunPodProvider:
         *,
         start_command: Sequence[str] | None = None,
         stop_command: Sequence[str] | None = None,
+        lifecycle: RunPodLifecycle | None = None,
     ):
         self.target_file = Path(target_file)
         self.key_file = Path(key_file)
         self.start_command = list(start_command or [])
         self.stop_command = list(stop_command or [])
+        self.lifecycle = lifecycle
 
     def _target(self) -> tuple[str, int]:
         data = json.loads(self.target_file.read_text(encoding='utf-8'))
@@ -85,6 +92,18 @@ class SshRunPodProvider:
         if probe.returncode == 0:
             host, port = self._target()
             return WorkerStatus(WorkerState.RUNNING, f'{host}:{port}')
+        if self.lifecycle is not None:
+            status = self.lifecycle.ensure_running(self.target_file)
+            if status.state is not WorkerState.RUNNING:
+                return status
+            for _ in range(12):
+                probe = self._run_remote('echo OK', timeout=15)
+                if probe.returncode == 0:
+                    host, port = self._target()
+                    return WorkerStatus(WorkerState.RUNNING, f'{host}:{port}')
+                import time as _time
+                _time.sleep(2)
+            return WorkerStatus(WorkerState.UNKNOWN)
         if self.start_command:
             subprocess.run(self.start_command, check=True, timeout=120)
             host, port = self._target()
@@ -158,6 +177,9 @@ class SshRunPodProvider:
         ], check=True, timeout=120)
 
     def stop_compute(self) -> None:
+        if self.lifecycle is not None:
+            self.lifecycle.stop_compute()
+            return
         if not self.stop_command:
             raise RuntimeError('RunPod stop command is not configured')
         subprocess.run(self.stop_command, check=True, timeout=120)
