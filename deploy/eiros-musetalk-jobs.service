@@ -1,0 +1,17 @@
+[Unit]
+Description=EIROS MuseTalk durable job reconciler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/eiros-control-plane
+Environment=PYTHONUNBUFFERED=1
+Environment=EIROS_MUSETALK_STATE_ROOT=/var/lib/eiros/musetalk-jobs
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.musetalk_jobs.service
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

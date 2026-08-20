@@ -14,7 +14,7 @@ dependencies = ["mcp==1.28.0"]
 eiros = "runtime.cli:main"
 
 [tool.setuptools]
-packages = ["runtime", "root"]
+packages = ["runtime", "runtime.musetalk_jobs", "root"]
 
 [tool.setuptools.package-data]
 runtime = ["*.html"]

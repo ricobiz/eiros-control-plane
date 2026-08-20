@@ -23,6 +23,7 @@
     "eiros-tunnel.service"
   ],
   "optional_services": [
-    "eiros-claude.service"
+    "eiros-claude.service",
+    "eiros-musetalk-jobs.service"
   ]
 }

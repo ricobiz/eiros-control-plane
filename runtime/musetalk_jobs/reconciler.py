@@ -110,6 +110,9 @@ class Reconciler:
             return False
         if float(now) - self._idle_since < self.idle_grace_seconds:
             return False
-        self.provider.stop_compute()
+        try:
+            self.provider.stop_compute()
+        except Exception:
+            return False
         self._stopped_for_idle = True
         return True

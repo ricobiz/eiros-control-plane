@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shlex
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,3 +44,24 @@ class MuseTalkJobService:
         for job in list(self.store.list_active()):
             self.reconciler.tick(job.job_id)
         self.reconciler.maybe_stop_idle_worker(time.time() if now is None else now)
+
+
+def main() -> int:
+    from .runpod import SshRunPodProvider
+
+    state_root = os.environ.get('EIROS_MUSETALK_STATE_ROOT', '/var/lib/eiros/musetalk-jobs')
+    target_file = os.environ.get('EIROS_RUNPOD_TARGET_FILE', '/opt/eiros-control-plane/runtime/runpod_target.json')
+    key_file = os.environ.get('EIROS_RUNPOD_KEY_FILE', '/root/.ssh/eiros_runpod')
+    start_cmd = shlex.split(os.environ.get('EIROS_RUNPOD_START_CMD', ''))
+    stop_cmd = shlex.split(os.environ.get('EIROS_RUNPOD_STOP_CMD', ''))
+    idle_grace = int(os.environ.get('EIROS_MUSETALK_IDLE_GRACE_SECONDS', '120'))
+    tick_seconds = max(0.5, float(os.environ.get('EIROS_MUSETALK_TICK_SECONDS', '2')))
+    provider = SshRunPodProvider(target_file, key_file, start_command=start_cmd, stop_command=stop_cmd)
+    service = MuseTalkJobService.build(state_root, provider, idle_grace_seconds=idle_grace)
+    while True:
+        service.tick_once()
+        time.sleep(tick_seconds)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
