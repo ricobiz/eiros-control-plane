@@ -26,5 +26,15 @@
     "production venv had wrong or incomplete MCP package",
     "systemd previously retained rescue tunnel profile"
   ],
-  "next_action": "Use this production state as the baseline; do not reintroduce rescue-http or public HTTP MCP for the ChatGPT connector."
+  "next_action": "Use this production state as the baseline; do not reintroduce rescue-http or public HTTP MCP for the ChatGPT connector.",
+  "musetalk_job_service": {
+    "status": "live_acceptance_passed",
+    "branch": "feature/musetalk-job-service",
+    "state_root": "/var/lib/eiros/musetalk-jobs",
+    "mcp_port": 8795,
+    "live_job_id": "95da9c18-2fa3-4161-a06b-b588d7904762",
+    "live_result": "/var/lib/eiros/musetalk-jobs/artifacts/95da9c18-2fa3-4161-a06b-b588d7904762/result.mp4",
+    "automatic_compute_delete": false,
+    "automatic_compute_stop": true
+  }
 }
