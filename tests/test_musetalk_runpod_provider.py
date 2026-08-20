@@ -44,3 +44,18 @@ def test_provider_delegates_stop_to_lifecycle(tmp_path: Path):
     p=SshRunPodProvider(target,key,lifecycle=life)
     p.stop_compute()
     assert life.stops==1
+
+def test_missing_target_uses_lifecycle_before_ssh(tmp_path: Path):
+    from runtime.musetalk_jobs.runpod import SshRunPodProvider, WorkerState, WorkerStatus
+    class Life:
+        def __init__(self): self.starts=0
+        def ensure_running(self, target_file):
+            self.starts += 1
+            target_file.write_text('{"host":"127.0.0.1","port":1}')
+            return WorkerStatus(WorkerState.UNKNOWN)
+        def stop_compute(self): pass
+    life=Life()
+    p=SshRunPodProvider(tmp_path/'missing.json', tmp_path/'key', lifecycle=life)
+    s=p.ensure_running()
+    assert life.starts == 1
+    assert s.state is WorkerState.UNKNOWN

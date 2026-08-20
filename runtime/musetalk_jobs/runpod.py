@@ -88,8 +88,12 @@ class SshRunPodProvider:
         return subprocess.run(self._ssh_base() + [script], text=True, capture_output=True, timeout=timeout)
 
     def ensure_running(self) -> WorkerStatus:
-        probe = self._run_remote('echo OK', timeout=15)
-        if probe.returncode == 0:
+        probe = None
+        try:
+            probe = self._run_remote('echo OK', timeout=15)
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError, OSError, subprocess.TimeoutExpired):
+            probe = None
+        if probe is not None and probe.returncode == 0:
             host, port = self._target()
             return WorkerStatus(WorkerState.RUNNING, f'{host}:{port}')
         if self.lifecycle is not None:
