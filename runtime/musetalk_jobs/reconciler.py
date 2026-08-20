@@ -7,11 +7,14 @@ from .store import JobStore
 
 
 class Reconciler:
-    def __init__(self, store: JobStore, runner: MuseTalkRunner, provider: RunPodProvider, *, max_infra_retries: int = 2):
+    def __init__(self, store: JobStore, runner: MuseTalkRunner, provider: RunPodProvider, *, max_infra_retries: int = 2, idle_grace_seconds: int = 120):
         self.store = store
         self.runner = runner
         self.provider = provider
         self.max_infra_retries = max(0, int(max_infra_retries))
+        self.idle_grace_seconds = max(0, int(idle_grace_seconds))
+        self._idle_since: float | None = None
+        self._stopped_for_idle = False
 
     def _retry_or_fail(self, job: RenderJob, fallback: JobState, exc: Exception) -> RenderJob:
         message = str(exc)[-2000:]
@@ -94,3 +97,19 @@ class Reconciler:
             )
 
         return job
+
+    def maybe_stop_idle_worker(self, now: float) -> bool:
+        if self.store.list_active():
+            self._idle_since = None
+            self._stopped_for_idle = False
+            return False
+        if self._stopped_for_idle:
+            return False
+        if self._idle_since is None:
+            self._idle_since = float(now)
+            return False
+        if float(now) - self._idle_since < self.idle_grace_seconds:
+            return False
+        self.provider.stop_compute()
+        self._stopped_for_idle = True
+        return True
