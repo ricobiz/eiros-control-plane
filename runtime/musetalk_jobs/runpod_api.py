@@ -18,29 +18,47 @@ class RunPodRestLifecycle:
     def __init__(self, api_key: str, pod_id: str, *, opener=urlopen, sleep=time.sleep, max_polls: int = 24, poll_seconds: float = 5.0):
         if not api_key:
             raise ValueError('RunPod API key is required')
-        if not pod_id:
-            raise ValueError('RunPod pod id is required')
         self._api_key = api_key
-        self.pod_id = pod_id
+        self.pod_id = str(pod_id or '')
         self._opener = opener
         self._sleep = sleep
         self.max_polls = max(1, int(max_polls))
         self.poll_seconds = max(0.0, float(poll_seconds))
 
-    def _request(self, method: str, suffix: str = '') -> dict:
-        url = f'{self.BASE}/{self.pod_id}{suffix}'
+    def _request_url(self, method: str, url: str) -> dict | list:
         req = Request(url, method=method, headers={'Authorization': f'Bearer {self._api_key}', 'Accept': 'application/json'})
         try:
             with self._opener(req, timeout=30) as resp:
                 raw = resp.read()
         except Exception as exc:
-            raise RunPodApiError(f'RunPod API {method} {suffix or "/"} failed: {type(exc).__name__}') from exc
+            raise RunPodApiError(f'RunPod API {method} request failed: {type(exc).__name__}') from exc
         if not raw:
             return {}
         try:
             return json.loads(raw.decode('utf-8'))
         except Exception as exc:
             raise RunPodApiError('RunPod API returned invalid JSON') from exc
+
+
+    def _request(self, method: str, suffix: str = '') -> dict:
+        self._resolve_pod_id()
+        result = self._request_url(method, f'{self.BASE}/{self.pod_id}{suffix}')
+        if not isinstance(result, dict):
+            raise RunPodApiError('RunPod API returned unexpected payload')
+        return result
+
+    def _resolve_pod_id(self) -> str:
+        if self.pod_id:
+            return self.pod_id
+        result = self._request_url('GET', self.BASE)
+        if not isinstance(result, list):
+            raise RunPodApiError('RunPod pod list returned unexpected payload')
+        candidates = [p for p in result if str(p.get('desiredStatus') or '').upper() in {'RUNNING', 'EXITED'}]
+        if len(candidates) != 1:
+            summary = ', '.join(f"{p.get('id')}:{p.get('name','')}:{p.get('desiredStatus','')}" for p in candidates[:10])
+            raise RunPodApiError(f'expected exactly one reusable Pod, found {len(candidates)} [{summary}]')
+        self.pod_id = str(candidates[0]['id'])
+        return self.pod_id
 
     @staticmethod
     def _endpoint(payload: dict) -> tuple[str, int] | None:

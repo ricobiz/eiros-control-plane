@@ -59,7 +59,7 @@ def main() -> int:
     tick_seconds = max(0.5, float(os.environ.get('EIROS_MUSETALK_TICK_SECONDS', '2')))
     api_key = os.environ.get('EIROS_RUNPOD_API_KEY', '')
     pod_id = os.environ.get('EIROS_RUNPOD_POD_ID', '')
-    lifecycle = RunPodRestLifecycle(api_key, pod_id) if api_key and pod_id else None
+    lifecycle = RunPodRestLifecycle(api_key, pod_id) if api_key else None
     provider = SshRunPodProvider(target_file, key_file, start_command=start_cmd, stop_command=stop_cmd, lifecycle=lifecycle)
     service = MuseTalkJobService.build(state_root, provider, idle_grace_seconds=idle_grace)
     while True:

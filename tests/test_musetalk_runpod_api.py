@@ -39,3 +39,19 @@ def test_stop_uses_only_stop_endpoint(tmp_path: Path):
     life=RunPodRestLifecycle('tok','pod1',opener=opener,sleep=lambda _:None)
     life.stop_compute()
     assert calls==[('https://rest.runpod.io/v1/pods/pod1/stop','POST')]
+
+
+def test_discovers_single_nonterminated_pod_when_id_omitted(tmp_path: Path):
+    calls=[]
+    def opener(req, timeout=0):
+        calls.append((req.full_url, req.method))
+        if req.full_url.endswith('/pods'):
+            return Resp([{'id':'pod-one','name':'MuseTalk','desiredStatus':'EXITED'}])
+        if req.full_url.endswith('/pod-one/start'):
+            return Resp({'id':'pod-one','desiredStatus':'RUNNING'})
+        return Resp({'id':'pod-one','desiredStatus':'RUNNING','publicIp':'5.6.7.8','portMappings':{'22':34567}})
+    target=tmp_path/'target.json'
+    life=RunPodRestLifecycle('tok','',opener=opener,sleep=lambda _:None,max_polls=2)
+    status=life.ensure_running(target)
+    assert life.pod_id=='pod-one'
+    assert status.endpoint=='5.6.7.8:34567'
