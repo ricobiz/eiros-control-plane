@@ -14,17 +14,23 @@
     "cli": "eiros",
     "bootstrap": "eiros init",
     "doctor": "eiros doctor",
-    "release_check": "eiros release-check"
+    "release_check": "eiros release-check",
+    "sam": "python -m runtime.sam daemon",
+    "companion": "uvicorn runtime.companion_server:app",
+    "mastering_mcp": "python -m runtime.mastering_mcp_server"
   },
   "runtime_state": "EIROS_DATA_DIR",
   "required_services": [
     "eiros-root-broker.service",
     "eiros-worker.service",
+    "eiros-sam.service",
     "eiros-tunnel.service"
   ],
   "optional_services": [
     "eiros-claude.service",
     "eiros-musetalk-jobs.service",
-    "eiros-musetalk-mcp.service"
+    "eiros-musetalk-mcp.service",
+    "eiros-companion.service",
+    "eiros-mastering-mcp.service"
   ]
 }

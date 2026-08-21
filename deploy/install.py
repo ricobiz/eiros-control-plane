@@ -213,6 +213,7 @@ def install_release(args: argparse.Namespace) -> dict[str, Any]:
         if plan.systemd:
             shutil.copy2(release / "deploy" / "eiros-root-broker.service", "/etc/systemd/system/eiros-root-broker.service")
             shutil.copy2(release / "deploy" / "eiros-worker.service", "/etc/systemd/system/eiros-worker.service")
+            shutil.copy2(release / "deploy" / "eiros-sam.service", "/etc/systemd/system/eiros-sam.service")
             shutil.copy2(release / "deploy" / "eiros-tunnel.service", "/etc/systemd/system/eiros-tunnel.service")
             shutil.copy2(release / "deploy" / "eiros-claude.service", "/etc/systemd/system/eiros-claude.service")
             run("systemctl", "daemon-reload")
@@ -220,6 +221,8 @@ def install_release(args: argparse.Namespace) -> dict[str, Any]:
             service_actions.append("root_broker_started")
             run("systemctl", "enable", "--now", "eiros-worker.service")
             service_actions.append("worker_started")
+            run("systemctl", "enable", "--now", "eiros-sam.service")
+            service_actions.append("sam_started")
             if Path("/etc/eiros/tunnel.env").exists():
                 run("systemctl", "enable", "--now", "eiros-tunnel.service")
                 service_actions.append("tunnel_started")
@@ -237,6 +240,7 @@ def install_release(args: argparse.Namespace) -> dict[str, Any]:
             if plan.systemd:
                 run("systemctl", "restart", "eiros-root-broker.service", check=False)
                 run("systemctl", "restart", "eiros-worker.service", check=False)
+                run("systemctl", "restart", "eiros-sam.service", check=False)
                 run("systemctl", "restart", "eiros-tunnel.service", check=False)
         raise
 
@@ -267,6 +271,7 @@ def rollback(args: argparse.Namespace) -> dict[str, Any]:
     actions: list[str] = []
     if not args.no_systemd:
         run("systemctl", "restart", "eiros-worker.service", check=False)
+        run("systemctl", "restart", "eiros-sam.service", check=False)
         run("systemctl", "restart", "eiros-tunnel.service", check=False)
         run("systemctl", "restart", "eiros-claude.service", check=False)
         actions.append("services_restarted")
