@@ -15,7 +15,7 @@ from typing import Any, Callable
 SOCKET_PATH = Path("/run/eiros-root.sock")
 AUDIT_PATH = Path("/var/log/eiros/root-broker.jsonl")
 ALLOWED_USER = "eiros"
-ALLOWED_SERVICES = {"eiros-worker.service", "eiros-tunnel.service", "eiros-claude.service", "eiros-vps-ops.service", "eiros-vps-ops-http.service"}
+ALLOWED_SERVICES = {"eiros-worker.service", "eiros-sam.service", "eiros-tunnel.service", "eiros-claude.service", "eiros-vps-ops.service", "eiros-vps-ops-http.service"}
 MAX_REQUEST_BYTES = 65536
 
 
@@ -136,6 +136,9 @@ def read_request(connection: socket.socket) -> dict[str, Any]:
 def serve() -> None:
     allowed_uid = pwd.getpwnam(ALLOWED_USER).pw_uid
     allowed_group = grp.getgrnam(ALLOWED_USER).gr_gid
+    # root already owns this host outright, so refusing uid 0 protects nothing
+    # and only breaks root-run operator services that share this socket.
+    allowed_uids = {allowed_uid, 0}
     SOCKET_PATH.unlink(missing_ok=True)
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(SOCKET_PATH))
@@ -150,7 +153,7 @@ def serve() -> None:
         payload: dict[str, Any] = {}
         try:
             pid, uid, gid = peer_credentials(connection)
-            if uid != allowed_uid:
+            if uid not in allowed_uids:
                 raise PermissionError("Peer UID is not allowed")
             payload = read_request(connection)
             response = handle_request(payload)
