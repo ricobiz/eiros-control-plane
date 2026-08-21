@@ -120,12 +120,36 @@ def ensure_instance_config() -> dict[str, Any]:
         try:
             current: dict[str, Any] = {}
             if CONFIG_FILE.exists():
+                # instance_id is this host's identity: collab.py derives the hub
+                # agent id from it, and the reconnect envelope is keyed on it.
+                # Swallowing a read error here and falling through to the "no
+                # instance_id yet" branch below silently mints a NEW identity
+                # and orphans every existing registration. That is exactly what
+                # happened when the config briefly became root-owned 0600 - one
+                # eiros-side read failure was enough to replace
+                # 107abeda-aabe-4c71-b913-ab1eb1a5a1f2 with a fresh uuid.
+                # An absent file is a first run; an unreadable or malformed one
+                # is a fault, and must be reported rather than papered over.
                 try:
-                    loaded = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-                    if isinstance(loaded, dict):
-                        current = loaded
-                except Exception:
-                    current = {}
+                    raw = CONFIG_FILE.read_text(encoding="utf-8")
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"cannot read {CONFIG_FILE}: {exc}. Refusing to mint a new "
+                        "instance_id over an existing config."
+                    ) from exc
+                try:
+                    loaded = json.loads(raw)
+                except ValueError as exc:
+                    raise RuntimeError(
+                        f"{CONFIG_FILE} is not valid JSON: {exc}. Refusing to mint a "
+                        "new instance_id over an existing config."
+                    ) from exc
+                if not isinstance(loaded, dict):
+                    raise RuntimeError(
+                        f"{CONFIG_FILE} does not contain a JSON object. Refusing to "
+                        "mint a new instance_id over an existing config."
+                    )
+                current = loaded
 
             config = _deep_merge(DEFAULTS, current)
             if not str(config.get("instance_id") or "").strip():
