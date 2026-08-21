@@ -18,3 +18,9 @@ packages = ["runtime", "runtime.musetalk_jobs", "root"]
 
 [tool.setuptools.package-data]
 runtime = ["*.html"]
+
+[tool.pytest.ini_options]
+# deploy/ holds operational probe scripts named test_*.py that open live TLS
+# connections at import time. Collecting them aborted the whole suite with an
+# SSL error, so the suite only ever ran when someone remembered --ignore=deploy.
+testpaths = ["tests", "runtime", "root"]

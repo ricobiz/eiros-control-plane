@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -113,12 +114,25 @@ class StableUiMountContractTests(unittest.TestCase):
         self.assertIn("videoPipState!=='active'", self.anchor)
         self.assertIn("tap Открыть PiP to arm Video PiP", self.anchor)
 
-    def _pulse_domain_meta_for_flag(self, flag: str | None) -> dict[str, object]:
+    # These two tests used to read whatever config/instance.json happened to sit
+    # in the checkout, so they passed only in the one worktree that still had a
+    # widget_domain left over from an old experiment and failed everywhere else.
+    # Both now build the state they assert on, in a throwaway data directory.
+    CONFIGURED_WIDGET_DOMAIN = "https://widget.example.test"
+
+    def _isolated_env(self, data_root: str, flag: str | None) -> dict[str, str]:
         env = os.environ.copy()
+        env["EIROS_DATA_DIR"] = data_root
+        env["EIROS_WIDGET_DOMAIN"] = self.CONFIGURED_WIDGET_DOMAIN
         if flag is None:
             env.pop("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", None)
         else:
             env["EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN"] = flag
+        return env
+
+    def _pulse_domain_meta_for_flag(self, flag: str | None) -> dict[str, object]:
+        data_root = self.enterContext(tempfile.TemporaryDirectory())
+        env = self._isolated_env(data_root, flag)
         script = """
 import json
 from runtime import server_v2
@@ -146,14 +160,22 @@ print(json.dumps({'ui_domain': ui.get('domain'), 'legacy_domain': meta.get('open
         self.assertEqual(custom["legacy_domain"], custom["ui_domain"])
 
     def test_doctor_reports_effective_managed_sandbox_mode(self) -> None:
-        from runtime.doctor import run_doctor
-
-        previous = os.environ.pop("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", None)
-        try:
-            report = run_doctor(offline=True)
-        finally:
-            if previous is not None:
-                os.environ["EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN"] = previous
+        data_root = self.enterContext(tempfile.TemporaryDirectory())
+        env = self._isolated_env(data_root, None)
+        script = (
+            "import json\n"
+            "from runtime.doctor import run_doctor\n"
+            "print(json.dumps(run_doctor(offline=True)))\n"
+        )
+        process = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(__file__).parent.parent,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        report = json.loads(process.stdout)
         check = next(item for item in report["checks"] if item["name"] == "widget_domain")
 
         self.assertEqual(check["details"]["mode"], "chatgpt_managed_sandbox")
