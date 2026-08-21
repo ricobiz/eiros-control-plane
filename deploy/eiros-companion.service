@@ -1,0 +1,21 @@
+[Unit]
+Description=EIROS Global PiP Companion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=eiros
+Group=eiros
+WorkingDirectory=/opt/eiros-control-plane
+Environment=PYTHONUNBUFFERED=1
+UMask=0022
+ExecStartPre=/opt/eiros-control-plane/venv/bin/python -c "import runtime.companion_server"
+ExecStart=/opt/eiros-control-plane/venv/bin/uvicorn runtime.companion_server:app --host 127.0.0.1 --port 8791 --workers 1
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

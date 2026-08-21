@@ -1,0 +1,19 @@
+[Unit]
+Description=EIROS Dedicated Mastering Streamable HTTP MCP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=eiros
+Group=eiros
+WorkingDirectory=/opt/eiros-control-plane
+Environment=PYTHONUNBUFFERED=1
+UMask=0007
+ExecStartPre=/opt/eiros-control-plane/venv/bin/python -c "import runtime.mastering_mcp_server"
+ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.mastering_mcp_server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
