@@ -9,14 +9,18 @@ import sys
 from typing import Any
 
 ROOT = Path('/opt/eiros-control-plane')
-LIVE_ROOT = ROOT / '.worktrees/sum-auto-wake'
 MAIN_OPENAI_CONTROL_PLANE = ROOT / 'runtime/openai_control_plane.py'
 MAIN_VPS_OPS = ROOT / 'runtime/vps_ops_server.py'
 
-# The live SUM branch owns the current EBRIDGE/SAM/widget implementation, while
-# all durable state stays in the canonical /opt/eiros-control-plane checkout.
+# The SUM/SAM/Room/widget implementation used to live only on
+# feat/sum-auto-wake and was reached by putting .worktrees/sum-auto-wake on
+# sys.path. That split - code from an unmerged worktree, state from the
+# canonical checkout - is why runtime/sam.py and runtime/companion_server.py
+# could vanish from this checkout while their services kept running. The branch
+# is merged, so code and state now come from the same place and this process
+# runs what `git log` says it runs.
 os.environ.setdefault('EIROS_DATA_DIR', str(ROOT))
-sys.path.insert(0, str(LIVE_ROOT))
+sys.path.insert(0, str(ROOT))
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 from mcp.server.transport_security import TransportSecuritySettings  # noqa: E402
@@ -33,8 +37,9 @@ def _load_module(name: str, path: Path):
     return module
 
 
-# The SUM worktree predates the latest OpenAI/VPS control-plane module. Load the
-# current implementation explicitly without changing the live runtime package.
+# vps_ops_server is loaded under a private name so its FastMCP instance can be
+# mirrored alongside the EBRIDGE one without the two registering as the same
+# module.
 _load_module('runtime.openai_control_plane', MAIN_OPENAI_CONTROL_PLANE)
 main_vps_ops = _load_module('eiros_main_vps_ops_server', MAIN_VPS_OPS)
 
@@ -97,8 +102,8 @@ def _mirror_prompts(source: FastMCP[Any]) -> None:
         mcp._prompt_manager._prompts.setdefault(prompt.name, prompt)
 
 
-# Live EBRIDGE wins duplicate names. Current VPS Ops contributes all unique
-# privileged/operator tools, including root_exec and OpenAI tunnel management.
+# EBRIDGE wins duplicate names. VPS Ops contributes all unique privileged
+# operator tools, including root_exec and OpenAI tunnel management.
 _mirror_tools(live_server.mcp)
 _mirror_tools(main_vps_ops.mcp)
 _mirror_resources(live_server.mcp)
