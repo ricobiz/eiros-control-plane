@@ -30,7 +30,7 @@ def load_or_create_token() -> str:
 
 
 def render_snippet(token: str) -> str:
-    return f'''# EIROS Claude Operator capability. Treat this path as a bearer secret.\nlocation = /operator-{token}/mcp {{\n    proxy_pass http://127.0.0.1:8794/mcp;\n    proxy_http_version 1.1;\n    proxy_set_header Host 127.0.0.1:8794;\n    proxy_set_header X-Real-IP $remote_addr;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_set_header X-Forwarded-Proto $scheme;\n    proxy_set_header Connection \"\";\n    proxy_buffering off;\n    proxy_cache off;\n    proxy_read_timeout 3600s;\n    proxy_send_timeout 3600s;\n    add_header X-Accel-Buffering no;\n    access_log off;\n}}\n'''
+    return f'''# EIROS Claude Operator capability. Treat this path as a bearer secret.\nlocation = /operator-{token}/mcp {{\n    proxy_pass http://127.0.0.1:8796/mcp;\n    proxy_http_version 1.1;\n    proxy_set_header Host 127.0.0.1:8796;\n    proxy_set_header X-Real-IP $remote_addr;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    proxy_set_header X-Forwarded-Proto $scheme;\n    proxy_set_header Connection \"\";\n    proxy_buffering off;\n    proxy_cache off;\n    proxy_read_timeout 3600s;\n    proxy_send_timeout 3600s;\n    add_header X-Accel-Buffering no;\n    access_log off;\n}}\n'''
 
 
 def ensure_include(path: Path) -> None:

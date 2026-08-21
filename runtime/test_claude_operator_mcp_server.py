@@ -23,6 +23,7 @@ def test_operator_connector_exposes_every_existing_eiros_tool() -> None:
         | _tool_names(vps_ops_server.mcp)
     )
     actual = _tool_names(operator.mcp)
+    assert operator.mcp.settings.port == 8796
 
     assert actual == expected, {
         "missing": sorted(expected - actual),
@@ -66,6 +67,6 @@ def test_operator_route_generator_uses_secret_exact_capability_route() -> None:
     assert "/etc/eiros/claude-operator.token" in text
     assert "/etc/eiros/claude-operator.url" in text
     assert "location = /operator-" in text
-    assert "proxy_pass http://127.0.0.1:8794/mcp" in text
+    assert "proxy_pass http://127.0.0.1:8796/mcp" in text
     assert "access_log off" in text
     assert "location /operator/mcp" not in text

@@ -18,7 +18,7 @@ mcp = FastMCP(
     stateless_http=True,
     json_response=True,
     host="127.0.0.1",
-    port=8794,
+    port=8796,
     warn_on_duplicate_tools=False,
 )
 
