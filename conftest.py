@@ -22,7 +22,32 @@ their own subprocesses are unaffected; they overwrite it themselves.
 """
 
 import os
+import shutil
 import tempfile
+from pathlib import Path
+
+_CODE_ROOT = Path(__file__).resolve().parent
+
+
+def _seed_data_dir(target: Path) -> None:
+    """Give the throwaway data dir the config every server reads at import time.
+
+    Redirecting EIROS_DATA_DIR at an empty directory keeps the suite off live
+    state but also makes `import runtime.claude_server` raise "missing remote
+    config" during collection, which takes the whole module's tests with it.
+    The committed *.example.json files are copied in under their real names, so
+    imports resolve against example config and never against the deployment's.
+    """
+    config_dir = target / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (target / "runtime").mkdir(parents=True, exist_ok=True)
+    for example in (_CODE_ROOT / "config").glob("*.example.json"):
+        destination = config_dir / example.name.replace(".example.json", ".json")
+        if not destination.exists():
+            shutil.copyfile(example, destination)
+
 
 if os.environ.get("EIROS_TEST_ALLOW_LIVE_DATA_DIR", "").strip().lower() not in {"1", "true", "yes"}:
-    os.environ["EIROS_DATA_DIR"] = tempfile.mkdtemp(prefix="eiros-pytest-data-")
+    _data_dir = Path(tempfile.mkdtemp(prefix="eiros-pytest-data-"))
+    _seed_data_dir(_data_dir)
+    os.environ["EIROS_DATA_DIR"] = str(_data_dir)
