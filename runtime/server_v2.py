@@ -2729,14 +2729,15 @@ WIDGET_TEST_META: dict[str, Any] = {
 
 @app_resource(
     WIDGET_TEST_LEGACY_URI,
-    name="EIROS Widget Test Legacy",
-    title="EIROS Widget Diagnostic",
-    description="Backward-compatible static MCP Apps render diagnostic.",
+    name="EIROS SUM Compatibility Listener Legacy",
+    title="EIROS SUM Wake Listener",
+    description="Backward-compatible SUM v5.8 listener on the legacy widget-test URI.",
     mime_type="text/html;profile=mcp-app",
-    meta=WIDGET_TEST_META,
+    meta=PULSE_RESOURCE_META,
 )
 def widget_test_resource_legacy() -> str:
-    return _widget_test_html()
+    attempt = _mark_widget_resource_served(WIDGET_TEST_LEGACY_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
 
 
 @app_resource(
