@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from runtime.config import RUNTIME_DIR
+from runtime.config import RUNTIME_DIR, publish_shared_file
 from runtime.protocol import (
     PROTOCOL_VERSION,
     bootstrap_contract,
@@ -55,7 +55,7 @@ def _atomic_write(path: Path, value: dict[str, Any]) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp_name, path)
+        publish_shared_file(temp_name, path)
     finally:
         if os.path.exists(temp_name):
             os.unlink(temp_name)
