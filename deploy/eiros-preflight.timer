@@ -1,0 +1,11 @@
+[Unit]
+Description=Check hourly that every EIROS unit can still import the code it runs
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1h
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

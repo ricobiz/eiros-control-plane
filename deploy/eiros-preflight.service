@@ -1,0 +1,10 @@
+[Unit]
+Description=EIROS unit/code drift check
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/eiros-control-plane
+ExecStart=/opt/eiros-control-plane/venv/bin/python deploy/preflight.py --write
+User=root
+Group=root
