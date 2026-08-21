@@ -95,6 +95,13 @@ def leader_alive(leader: dict[str, Any] | None, timestamp: int) -> bool:
     return bool(leader and int(leader.get('lease_until', 0)) > timestamp)
 
 
+def widget_generation(widget_id: str) -> int:
+    """Return the Date.now generation embedded in EIROS widget ids, or zero for legacy ids."""
+    digit_runs = ''.join(ch if ch.isdigit() else ' ' for ch in str(widget_id or '')).split()
+    values = [int(value) for value in digit_runs if len(value) == 13]
+    return max(values or [0])
+
+
 def reset_leader(channel: str = '') -> dict[str, Any]:
     """Clear one stale UI leader lease without modifying queued events."""
     target = channel_name(channel)
@@ -143,9 +150,13 @@ def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = 
     with locked_store() as store:
         leaders = store.setdefault('leaders', {})
         leader = leaders.get(target)
-        if not leader_alive(leader, timestamp) or leader.get('widget_id') == identity:
+        incoming_generation = widget_generation(identity)
+        leader_generation = int((leader or {}).get('generation') or widget_generation(str((leader or {}).get('widget_id') or '')))
+        newer_widget = bool(incoming_generation and incoming_generation > leader_generation)
+        if not leader_alive(leader, timestamp) or (leader or {}).get('widget_id') == identity or newer_widget:
             leaders[target] = {
                 'widget_id': identity,
+                'generation': incoming_generation,
                 'lease_until': timestamp + max(10, min(int(leader_lease_seconds), 120)),
                 'last_seen': timestamp,
             }

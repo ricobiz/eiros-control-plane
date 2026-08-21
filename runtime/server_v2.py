@@ -18,6 +18,7 @@ from mcp.types import ToolAnnotations
 from runtime.config import CODE_ROOT, DATA_ROOT as ROOT, load_config
 from runtime.version import __version__
 from runtime import protocol as collab_protocol
+from runtime.sum_controller import SumControllerStore
 
 STATE_FILE = ROOT / ".eiros-state.json"
 ROOM_TELEMETRY_FILE = ROOT / "runtime" / "room_telemetry.json"
@@ -28,19 +29,24 @@ PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v9-20-browser-recovery.html"
+ROOM_URI = "ui://eiros/collab-room-v9-24-inline-isolated.html"
+ROOM_LEGACY_V920_URI = "ui://eiros/collab-room-v9-20-browser-recovery.html"
 ROOM_LEGACY_V919_URI = "ui://eiros/collab-room-v9-19-clean-start.html"
 ROOM_LEGACY_V94_LOCALWAKE_URI = "ui://eiros/collab-room-v9-4-localwake.html"
 ROOM_LEGACY_V918_URI = "ui://eiros/collab-room-v9-18-touch-green.html"
 ROOM_LEGACY_V914_URI = "ui://eiros/collab-room-v9-14-room-claims-pulse.html"
 ROOM_LEGACY_V916_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
-ROOM_VERSION = "0.9.20-browser-recovery"
+ROOM_VERSION = "0.9.24-inline-isolated"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
 ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
 ROOM_PROBE_STAGE = "one-shot-hydration"
 PULSE_HTML = CODE_ROOT / "runtime" / "pulse_lite.html"
 PULSE_ANCHOR_HTML = CODE_ROOT / "runtime" / "pulse_anchor.html"
+PULSE_V57_HTML = CODE_ROOT / "runtime" / "pulse_anchor_v57.html"
+PIP_CONTROLLER_JS = CODE_ROOT / "runtime" / "pip_controller.js"
+WIDGET_LIFECYCLE_JS = CODE_ROOT / "runtime" / "widget_lifecycle.js"
+PULSE_INLINE_HTML = CODE_ROOT / "runtime" / "pulse_listener_inline.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 ROOM_LAUNCHER_HTML = CODE_ROOT / "runtime" / "room_launcher.html"
 UI_KILLER_URI = "ui://eiros/widget-killer-v1.html"
@@ -50,24 +56,65 @@ CONTROL_PILL_URI = "ui://eiros/control-pill-v2.html"
 CONTROL_PILL_LEGACY_URI = "ui://eiros/control-pill-v1.html"
 CONTROL_PILL_VERSION = "0.3.3-server-heartbeat"
 CONTROL_PILL_HTML = CODE_ROOT / "runtime" / "control_pill.html"
-PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v4-4-relay-user-wake.html"
+PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v5-6-storage-safe-host-pip.html"
+PULSE_FRESH_URI = "ui://eiros/pulse-anchor-v5-7-self-diagnostic-pip.html"
+PULSE_FRESH_VERSION = "0.5.7-self-diagnostic-pip"
+PULSE_V57_ROLLBACK_URI = "ui://eiros/pulse-anchor-v5-7-rollback.html"
+PULSE_SUM_URI = "ui://eiros/pulse-anchor-v5-8-sum-auto-wake.html"
+PULSE_SUM_VERSION = "0.5.8-sum-auto-wake"
+SUM_TRANSPORT_GENERATION = "sum-set-state-v1"
+WIDGET_MOUNT_ATTEMPTS_FILE = ROOT / "runtime" / "widget-mount-attempts.json"
+PULSE_ANCHOR_LEGACY_V44_URI = "ui://eiros/pulse-anchor-v4-4-relay-user-wake.html"
+PULSE_ANCHOR_LEGACY_V45_URI = "ui://eiros/pulse-anchor-v4-5-confirmed-user-turn.html"
+PULSE_ANCHOR_LEGACY_V46_URI = "ui://eiros/pulse-anchor-v4-6-isolated-lifecycle.html"
+PULSE_ANCHOR_LEGACY_V47_URI = "ui://eiros/pulse-anchor-v4-7-retire-legacy.html"
+PULSE_ANCHOR_LEGACY_V48_URI = "ui://eiros/pulse-anchor-v4-8-continuous-retire.html"
+PULSE_ANCHOR_LEGACY_V49_URI = "ui://eiros/pulse-anchor-v4-9-singleton.html"
+PULSE_ANCHOR_LEGACY_V53_URI = "ui://eiros/pulse-anchor-v5-3-cache-busted-host-pip.html"
+PULSE_ANCHOR_LEGACY_V54_URI = "ui://eiros/pulse-anchor-v5-4-managed-sandbox-host-pip.html"
+PULSE_ANCHOR_LEGACY_V55_URI = "ui://eiros/pulse-anchor-v5-5-visible-mount-host-pip.html"
 PULSE_ANCHOR_LEGACY_URI = "ui://eiros/pulse-anchor-v2-addressed.html"
-PULSE_ANCHOR_VERSION = "0.4.4-relay-user-wake"
+PULSE_ANCHOR_VERSION = "0.5.6-storage-safe-host-pip"
+COMPANION_ORIGIN = "https://178-105-43-79.sslip.io"
+COMPANION_PATH = os.environ.get("EIROS_COMPANION_PATH", "companion-c45bbf908ebe178e96a4cfe3d49cf127").strip("/")
+PULSE_INLINE_URI = "ui://eiros/pulse-listener-inline-v1.html"
+PULSE_INLINE_VERSION = "0.5.0-inline-only"
+EIROS_CONSOLE_URI = "ui://eiros/console-fullscreen-v1.html"
+EIROS_CONSOLE_VERSION = "1.0.0-separated"
+EIROS_CONSOLE_HTML = CODE_ROOT / "runtime" / "eiros_console.html"
+WORK_ANCHOR_URI = "ui://eiros/work-anchor-v1-host-contract.html"
+WORK_ANCHOR_VERSION = "0.2.0-ack-confirmed"
+WORK_ANCHOR_HTML = CODE_ROOT / "runtime" / "work_anchor.html"
+
+# MCP App resource URIs are host cache keys. Room stays on its current URI
+# while its component is unchanged; every Pulse HTML/JS/CSS revision gets a new
+# implementation URI and open_pulse must point directly at that current key.
+UI_MOUNT_CONTRACT_VERSION = "2"
+ROOM_MOUNT_URI = ROOM_URI
+PULSE_ANCHOR_MOUNT_URI = PULSE_ANCHOR_URI
+
 INSTANCE_CONFIG = load_config()
+SUM_CONTROLLER = SumControllerStore(
+    ROOT / "runtime" / "sum-controller.json",
+    ROOT / "runtime" / "sum-controller.jsonl",
+)
 COLLAB_IDENTITY = dict(INSTANCE_CONFIG.get("collab_identity") or {})
 CONFIGURED_WIDGET_DOMAIN = str(INSTANCE_CONFIG.get("widget_domain") or "").rstrip("/")
 # Custom widget origins are opt-in. During development ChatGPT's managed sandbox
 # is more reliable and avoids blank/grey iframe failures from stale origin metadata.
-USE_CUSTOM_WIDGET_DOMAIN = bool(CONFIGURED_WIDGET_DOMAIN) or os.environ.get("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", "").strip().lower() in {"1", "true", "yes"}
+USE_CUSTOM_WIDGET_DOMAIN = bool(CONFIGURED_WIDGET_DOMAIN) and os.environ.get("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", "").strip().lower() in {"1", "true", "yes"}
 WIDGET_DOMAIN = CONFIGURED_WIDGET_DOMAIN if USE_CUSTOM_WIDGET_DOMAIN else ""
+COMPANION_STREAM_ORIGIN = COMPANION_ORIGIN
+COMPANION_HLS_URL = f"{COMPANION_STREAM_ORIGIN}/{COMPANION_PATH}/hls/live.m3u8"
+PULSE_EXTERNAL_DOMAINS = list(dict.fromkeys(origin for origin in (WIDGET_DOMAIN, COMPANION_STREAM_ORIGIN) if origin))
 PULSE_RESOURCE_META: dict[str, Any] = {
     "ui": {
         "prefersBorder": True,
-        "csp": {"connectDomains": [], "resourceDomains": []},
+        "csp": {"connectDomains": PULSE_EXTERNAL_DOMAINS, "resourceDomains": PULSE_EXTERNAL_DOMAINS},
         **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
     },
     "openai/widgetDescription": "Keeps a live, durable reverse event channel from the EIROS instance into this conversation.",
-    "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    "openai/widgetCSP": {"connect_domains": PULSE_EXTERNAL_DOMAINS, "resource_domains": PULSE_EXTERNAL_DOMAINS},
     **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
 }
 
@@ -77,9 +124,13 @@ if str(CODE_ROOT) not in sys.path:
 from runtime import queue as queue_engine  # noqa: E402
 from runtime import events as event_engine  # noqa: E402
 from runtime import collab as collab_engine  # noqa: E402
+from runtime import widget_pairing  # noqa: E402
+from runtime import widget_blackbox  # noqa: E402
+from runtime import sam as sam_engine  # noqa: E402
 from runtime.doctor import run_doctor  # noqa: E402
 from runtime.reconnect import build_resume_context  # noqa: E402
 from runtime import security as security_policy  # noqa: E402
+from runtime import mastering as mastering_engine  # noqa: E402
 from root import root_client  # noqa: E402
 
 mcp = FastMCP(
@@ -88,9 +139,18 @@ mcp = FastMCP(
         "This server is the persistent execution environment for Eiros in the "
         "current ChatGPT conversation. Read state before mutating it. "
         "Use core_snapshot for orientation, queue tools for bounded continuation, "
-        "and workspace/shell tools for concrete actions. On the first model turn after "
-        "this connector becomes available or reconnects, call open_collab_room as the only UI-opening tool before answering. "
-        "Do not mount open_pulse separately: the EIROS Room already owns the Pulse relay and only one MCP App card should be opened per assistant response. "
+        "and workspace/shell tools for concrete actions. "
+        "EIROS CONNECTOR BOOT PROTOCOL v1.0: on the first model turn after this connector becomes available or reconnects, execute this order exactly. "
+        "(1) Call core_snapshot, project_state_get for eiros-hub, and project_state_get for eiros-autonomy-network. "
+        "(2) Call sam_status, pulse_status, and room_telemetry_status. "
+        "(3) If a live current-generation Wake Listener and live Pulse leader already exist, preserve them: do not call open_pulse, close_eiros_widgets, open_collab_room, open_work_anchor, open_widget_test, open_control_pill, or open_room_launcher. "
+        "(4) If no live Wake Listener or live Pulse leader exists, call open_pulse_v57 exactly once. Never call close_eiros_widgets automatically. "
+        "(5) After mounting, call widget_boot_status with wait_seconds=5, follow its diagnosis and do_now actions, then recheck sam_status and room_telemetry_status. Treat wake as continuously ready only when video_pip_active=true and continuous_wake_ready=true; otherwise tell Rico that one direct tap on Open PiP is still required. "
+        "(6) Open Room only after Rico explicitly asks for Room or a UI message explicitly requests it. "
+        "(7) Resume unfinished work from durable state without asking Rico to repeat context. Never mount duplicate Listener instances merely to chase UI colors. "
+        "SUM AUTO-WAKE RULE: when the current user message text is exactly 'Отлично, продолжай.', use set_state with status=\"sum_wake_ack_current\" as the first tool action and data containing actor=\"chatgpt\" and transport_generation=\"sum-set-state-v1\"; the command is idempotent and is a no-op when no SUM wake is pending. Then continue the unfinished objective. Never use the direct sum_wake_ack_current tool as the primary route. This continuation is authorized by Rico; do not expose SUM identifiers in the visible chat. "
+        "After the SUM-woken assistant turn is fully complete, use set_state with status=\"sum_turn_complete_current\" as the final tool action and data containing actor=\"chatgpt\" and transport_generation=\"sum-set-state-v1\". Never use the direct sum_turn_complete_current tool as the primary route. This releases the hard turn lock; never release it merely because the UI appears quiet. "
+        "The EIROS Room and Wake Listener are separate MCP App cards: use open_collab_room for collaboration UI and open_pulse for the dedicated reverse-wake listener. "
         "Treat its resume_context as authoritative and continue unfinished work without "
         "asking Rico to restate prior context. The current ChatGPT conversation is the "
         "reasoning authority; this server is its persistent body. "
@@ -98,6 +158,40 @@ mcp = FastMCP(
         "" + collab_protocol.MAIN_COLLAB_INSTRUCTIONS
     ),
 )
+
+
+def _ui_resource_meta(meta: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Normalize every MCP App resource to one CSP and custom-origin contract."""
+    normalized = dict(meta or {})
+    ui = dict(normalized.get("ui") or {})
+    csp = dict(ui.get("csp") or {})
+    legacy_csp = dict(normalized.get("openai/widgetCSP") or {})
+
+    connect_domains = list(csp.get("connectDomains") or legacy_csp.get("connect_domains") or [])
+    resource_domains = list(csp.get("resourceDomains") or legacy_csp.get("resource_domains") or [])
+    csp["connectDomains"] = connect_domains
+    csp["resourceDomains"] = resource_domains
+    ui["csp"] = csp
+
+    legacy_csp["connect_domains"] = connect_domains
+    legacy_csp["resource_domains"] = resource_domains
+    normalized["openai/widgetCSP"] = legacy_csp
+
+    if WIDGET_DOMAIN:
+        ui["domain"] = WIDGET_DOMAIN
+        normalized["openai/widgetDomain"] = WIDGET_DOMAIN
+    else:
+        ui.pop("domain", None)
+        normalized.pop("openai/widgetDomain", None)
+    normalized["ui"] = ui
+    return normalized
+
+
+def app_resource(uri: str, *args: Any, meta: dict[str, Any] | None = None, **kwargs: Any) -> Any:
+    """Register a resource and enforce submission metadata for every ui:// URI."""
+    if str(uri).startswith("ui://"):
+        meta = _ui_resource_meta(meta)
+    return mcp.resource(uri, *args, meta=meta, **kwargs)
 
 
 def _observed_client(ctx: Context) -> dict[str, str]:
@@ -182,6 +276,7 @@ def _room_system_status() -> dict[str, Any]:
     for label, service in [
         ("Tunnel", "eiros-tunnel.service"),
         ("Worker", "eiros-worker.service"),
+        ("SAM", "eiros-sam.service"),
         ("Broker", "eiros-root-broker.service"),
     ]:
         ok, out = _subprocess_ok(["systemctl", "is-active", service])
@@ -203,6 +298,17 @@ def _room_system_status() -> dict[str, Any]:
         lamps.append(_lamp("Pulse", True, pulse_state, f"seq {events.get('latest_seq', 0)} leader {leader.get('widget_id') or 'none'}", "warning"))
     except Exception as exc:
         lamps.append(_lamp("Pulse", False, "error", str(exc), "warning"))
+    try:
+        pair = widget_pairing.compute("chatgpt", "eiros-hub", "first-contact")
+        lamps.append(_lamp(
+            "Pair",
+            bool(pair.get("ok")),
+            str(pair.get("state") or "starting"),
+            str(pair.get("summary") or "widget handshake unavailable"),
+            "warning",
+        ))
+    except Exception as exc:
+        lamps.append(_lamp("Pair", False, "error", str(exc), "warning"))
     try:
         queue = queue_engine.cmd_status(argparse.Namespace(id=None, status=None, mode=None, events=5))
         tasks = queue.get("tasks") or []
@@ -364,7 +470,7 @@ def _delivery_receipts(messages: list[dict[str, Any]], notifications: list[dict[
     return receipts
 
 
-@mcp.resource(
+@app_resource(
     collab_protocol.ONBOARDING_URI,
     name="EIROS Onboarding Protocol",
     title="EIROS Hub Onboarding",
@@ -375,7 +481,7 @@ def protocol_onboarding_resource() -> str:
     return json.dumps(collab_protocol.onboarding_document(), ensure_ascii=False, indent=2)
 
 
-@mcp.resource(
+@app_resource(
     collab_protocol.DIALOGUE_URI,
     name="EIROS Dialogue Protocol",
     title="EIROS Addressed Dialogue",
@@ -386,7 +492,7 @@ def protocol_dialogue_resource() -> str:
     return json.dumps(collab_protocol.dialogue_document(), ensure_ascii=False, indent=2)
 
 
-@mcp.resource(
+@app_resource(
     collab_protocol.SECURITY_URI,
     name="EIROS Security Protocol",
     title="EIROS Participant Safety Contract",
@@ -457,6 +563,241 @@ def _brain_inbox_update(task_id: str, revision: int = 0, status: str = "", remov
     current["updated_at"] = int(time.time())
     atomic_json_write(BRAIN_INBOX_FILE, current)
     return {"ok": True, "task_id": target, "changed": changed, "removed": bool(remove)}
+
+
+def _read_widget_mount_attempts() -> dict[str, Any]:
+    return read_json_file(WIDGET_MOUNT_ATTEMPTS_FILE, {"revision": 0, "attempts": []})
+
+
+def _write_widget_mount_attempts(store: dict[str, Any]) -> None:
+    store["revision"] = int(store.get("revision", 0)) + 1
+    store["updated_at"] = int(time.time())
+    store["attempts"] = list(store.get("attempts") or [])[-200:]
+    atomic_json_write(WIDGET_MOUNT_ATTEMPTS_FILE, store)
+
+
+def _record_widget_mount_attempt(tool_name: str, expected_uri: str, expected_version: str, expected_kind: str = "listener") -> dict[str, Any]:
+    store = _read_widget_mount_attempts()
+    now = int(time.time())
+    mount_id = f"mount-{now}-{os.urandom(4).hex()}"
+    attempt = {
+        "mount_id": mount_id,
+        "tool_name": tool_name,
+        "expected_uri": expected_uri,
+        "expected_version": expected_version,
+        "expected_kind": expected_kind,
+        "requested_at": now,
+        "resource_served_at": 0,
+        "status": "MOUNT_REQUESTED",
+    }
+    store.setdefault("attempts", []).append(attempt)
+    _write_widget_mount_attempts(store)
+    return attempt
+
+
+def _mark_widget_resource_served(expected_uri: str) -> dict[str, Any]:
+    store = _read_widget_mount_attempts()
+    now = int(time.time())
+    selected = None
+    for attempt in reversed(store.get("attempts") or []):
+        if str(attempt.get("expected_uri") or "") != str(expected_uri):
+            continue
+        if int(attempt.get("resource_served_at", 0)):
+            continue
+        attempt["resource_served_at"] = now
+        attempt["status"] = "RESOURCE_SERVED"
+        selected = attempt
+        break
+    if selected is None:
+        selected = {
+            "mount_id": f"resource-{now}-{os.urandom(4).hex()}",
+            "tool_name": "resource_fetch_without_recorded_tool_call",
+            "expected_uri": expected_uri,
+            "expected_version": PULSE_FRESH_VERSION,
+            "expected_kind": "listener",
+            "requested_at": now,
+            "resource_served_at": now,
+            "status": "RESOURCE_SERVED",
+        }
+        store.setdefault("attempts", []).append(selected)
+    _write_widget_mount_attempts(store)
+    return dict(selected)
+
+
+def _diagnosis(
+    name: str,
+    cause: str,
+    do_now: list[str],
+    do_not_repeat: list[str],
+    requires_rico_action: bool = False,
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "diagnosis": name,
+        "cause": cause,
+        "do_now": do_now,
+        "do_not_repeat": do_not_repeat,
+        "requires_rico_action": bool(requires_rico_action),
+        **extra,
+    }
+
+
+def _diagnose_widget_boot(attempt: dict[str, Any], widgets: list[dict[str, Any]], now: int | None = None) -> dict[str, Any]:
+    current = int(now or time.time())
+    requested_at = int(attempt.get("requested_at", 0))
+    expected_version = str(attempt.get("expected_version") or "")
+    expected_kind = str(attempt.get("expected_kind") or "listener")
+    mount_id = str(attempt.get("mount_id") or "")
+    recent = [w for w in widgets if int(w.get("updated_at", 0)) >= requested_at]
+
+    def snapshot_of(item: dict[str, Any]) -> dict[str, Any]:
+        value = item.get("snapshot") or {}
+        return value if isinstance(value, dict) else {}
+
+    matching = []
+    mismatched = []
+    for widget in recent:
+        snap = snapshot_of(widget)
+        actual_kind = str(snap.get("actual_widget_kind") or widget.get("widget_kind") or "")
+        actual_version = str(snap.get("version") or snap.get("widget_version") or "")
+        actual_mount_id = str(snap.get("mount_id") or "")
+        if actual_mount_id and mount_id and actual_mount_id == mount_id:
+            matching.append(widget)
+        elif actual_kind == expected_kind and actual_version == expected_version:
+            matching.append(widget)
+        else:
+            mismatched.append(widget)
+
+    if mismatched and not matching:
+        widget = mismatched[-1]
+        snap = snapshot_of(widget)
+        return _diagnosis(
+            "STALE_TOOL_RESOURCE_BINDING",
+            f"The session mounted {widget.get('widget_kind') or snap.get('actual_widget_kind') or 'unknown'} "
+            f"{snap.get('version') or 'unknown'} instead of {expected_kind} {expected_version}.",
+            [
+                "Reconnect EBRIDGE so this ChatGPT session refreshes its MCP tool catalog.",
+                "Invoke the new open_pulse_v57 tool exactly once.",
+                "Run widget_boot_status again and follow the returned diagnosis.",
+                "If the same stale binding remains, restart the ChatGPT app; change branch only after that fails.",
+            ],
+            [
+                "Do not invoke the same old tool repeatedly.",
+                "Do not restart the VPS, SAM, worker or Companion for a session-local catalog mismatch.",
+                "Do not mount duplicate listeners to chase status colors.",
+            ],
+            True,
+            mount_id=mount_id,
+            expected_kind=expected_kind,
+            expected_version=expected_version,
+            observed_widget=widget,
+        )
+
+    if not matching:
+        age = max(0, current - requested_at)
+        if int(attempt.get("resource_served_at", 0)) and age >= 5:
+            return _diagnosis(
+                "RESOURCE_SERVED_NO_JS_TELEMETRY",
+                "The MCP resource was served, but the iframe produced no JavaScript telemetry. This is the grey/blank iframe failure class.",
+                [
+                    "Reconnect EBRIDGE once.",
+                    "Restart the ChatGPT app and invoke open_pulse_v57 once.",
+                    "If the iframe is still silent, open a new branch only after the app restart test.",
+                ],
+                [
+                    "Do not repair the VPS or CSP before client-side rendering is proven.",
+                    "Do not invoke the same widget repeatedly in the same broken session.",
+                ],
+                True,
+                mount_id=mount_id,
+            )
+        if age >= 5:
+            return _diagnosis(
+                "HOST_DID_NOT_REQUEST_RESOURCE",
+                "The tool call completed, but the ChatGPT host did not request the expected ui:// resource.",
+                [
+                    "Reconnect EBRIDGE to refresh the MCP catalog.",
+                    "Restart the ChatGPT app if the resource is still not requested.",
+                    "Invoke open_pulse_v57 once after reconnect.",
+                ],
+                [
+                    "Do not restart server-side services for a missing host resource request.",
+                    "Do not repeat the stale tool call.",
+                ],
+                True,
+                mount_id=mount_id,
+            )
+        return _diagnosis(
+            "MOUNT_IN_PROGRESS",
+            "The host has not produced enough evidence yet.",
+            ["Wait briefly and call widget_boot_status again."],
+            ["Do not create another mount attempt while this one is still within its diagnostic window."],
+            False,
+            mount_id=mount_id,
+        )
+
+    widget = matching[-1]
+    snap = snapshot_of(widget)
+    stages = list(snap.get("boot_stages") or [])
+    if "PIP_ACTIVE" in stages:
+        return _diagnosis(
+            "HEALTHY",
+            "The expected listener loaded, reached Pulse and activated PiP.",
+            ["Preserve this listener and its lease."],
+            ["Do not remount or close healthy EIROS widgets."],
+            False,
+            mount_id=mount_id,
+            stages=stages,
+        )
+    if "VIDEO_READY" in stages:
+        return _diagnosis(
+            "USER_GESTURE_REQUIRED",
+            "The listener, bridge, heartbeat, Pulse and video are ready; iOS still requires a direct user gesture for PiP.",
+            ["Rico must tap Open PiP once on the visible listener card."],
+            ["Do not restart services or remount the listener."],
+            True,
+            mount_id=mount_id,
+            stages=stages,
+        )
+    if "PULSE_POLL_OK" in stages:
+        return _diagnosis(
+            "VIDEO_NOT_READY",
+            "The listener and Pulse work, but the Companion video did not become ready.",
+            ["Check eiros-companion.service and the HLS endpoint, then retry video loading without remounting the listener."],
+            ["Do not refresh the connector catalog for a video-only failure."],
+            False,
+            mount_id=mount_id,
+            stages=stages,
+        )
+    if "HEARTBEAT_OK" in stages:
+        return _diagnosis(
+            "PULSE_RPC_FAILED",
+            "The bridge and heartbeat work, but Pulse polling did not succeed.",
+            ["Inspect pulse_poll, Pulse leader state and the EBRIDGE service journal."],
+            ["Do not blame CSP or change branches before checking the Pulse RPC."],
+            False,
+            mount_id=mount_id,
+            stages=stages,
+        )
+    if "JS_STARTED" in stages and "BRIDGE_READY" not in stages:
+        return _diagnosis(
+            "HOST_BRIDGE_NOT_READY",
+            "The iframe JavaScript started, but the ChatGPT Apps bridge did not become ready.",
+            ["Reconnect EBRIDGE; if unchanged, restart the ChatGPT app before changing branch."],
+            ["Do not restart VPS services for a missing host bridge."],
+            True,
+            mount_id=mount_id,
+            stages=stages,
+        )
+    return _diagnosis(
+        "MOUNT_IN_PROGRESS",
+        "The expected listener is reporting but has not reached a terminal diagnostic stage.",
+        ["Wait briefly and call widget_boot_status again."],
+        ["Do not mount a duplicate listener."],
+        False,
+        mount_id=mount_id,
+        stages=stages,
+    )
 
 
 def _brain_inbox_prune(dry_run: bool = False) -> dict[str, Any]:
@@ -535,13 +876,12 @@ def core_snapshot(journal_chars: int = 6000) -> dict[str, Any]:
         "operational_state": read_json_file(state_path, {}),
         "bridge_state": bridge_state,
         "queue": queue_state,
+        "widget_blackbox": widget_blackbox.status(True, "core_snapshot"),
         "journal_tail": journal[-limit:],
     }
 
 
-@mcp.tool()
-def get_state() -> dict[str, Any]:
-    """Read persistent Eiros control-plane state."""
+def _read_persistent_state() -> dict[str, Any]:
     if not STATE_FILE.exists():
         return {"revision": 0, "status": "ready", "data": {}}
     try:
@@ -552,13 +892,74 @@ def get_state() -> dict[str, Any]:
 
 
 @mcp.tool()
+def get_state() -> dict[str, Any]:
+    """Read persistent Eiros state plus the cached-catalog SUM compatibility envelope."""
+    state = _read_persistent_state()
+    state["sum_controller"] = SUM_CONTROLLER.status()
+    state["sum_controller_log"] = SUM_CONTROLLER.read_log(100)
+    return state
+
+
+def _dispatch_sum_compat_command(status: str, data: dict[str, Any]) -> dict[str, Any]:
+    payload = data if isinstance(data, dict) else {}
+    transport_generation = str(payload.get("transport_generation") or "")[:120]
+    if status == "sum_controller_set":
+        return sum_controller_set(
+            bool(payload.get("enabled", False)),
+            action=str(payload.get("action") or "set"),
+            actor=str(payload.get("actor") or "rico"),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+            transport_generation=transport_generation,
+        )
+    guarded = SUM_CONTROLLER.guard_transport_generation(
+        transport_generation,
+        actor=str(payload.get("actor") or "listener"),
+        listener_session_id=str(payload.get("listener_session_id") or ""),
+    )
+    if str(guarded.get("state") or "") == "PAUSED":
+        return guarded
+    if status == "sum_controller_tick":
+        return sum_controller_tick(
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+            pip_active=bool(payload.get("pip_active", False)),
+            listener_healthy=bool(payload.get("listener_healthy", False)),
+        )
+    if status == "sum_host_signal":
+        return sum_host_signal(
+            signal=str(payload.get("signal") or "unknown"),
+            active=bool(payload.get("active", False)),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+            detail=payload.get("detail") if isinstance(payload.get("detail"), dict) else None,
+        )
+    if status == "sum_wake_sent":
+        return sum_wake_sent(
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+            delivery_mode=str(payload.get("delivery_mode") or "unknown"),
+        )
+    if status == "sum_wake_ack_current":
+        return sum_wake_ack_current(
+            actor=str(payload.get("actor") or "chatgpt"),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+        )
+    if status == "sum_turn_complete_current":
+        return sum_turn_complete_current(
+            actor=str(payload.get("actor") or "chatgpt"),
+            listener_session_id=str(payload.get("listener_session_id") or ""),
+        )
+    raise ValueError("unsupported SUM compatibility command")
+
+
+@mcp.tool()
 def set_state(status: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Replace persistent state and increment its revision atomically."""
-    current = get_state()
+    """Replace persistent state, or dispatch a SUM command for cached MCP catalogs."""
+    normalized = str(status or "").strip()[:80]
+    if normalized.startswith("sum_"):
+        return _dispatch_sum_compat_command(normalized, data)
+    current = _read_persistent_state()
     revision = int(current.get("revision", 0)) + 1
     state = {
         "revision": revision,
-        "status": status,
+        "status": normalized,
         "data": data,
         "updated_at": int(time.time()),
     }
@@ -834,6 +1235,8 @@ def scheduler_status() -> dict[str, Any]:
         "heartbeat": heartbeat,
         "next_wakeup": queue_engine.next_wakeup(),
         "brain_inbox": inbox,
+        "sam": sam_engine.status(5),
+        "widget_blackbox": widget_blackbox.status(True, "scheduler_status"),
     }
 
 
@@ -854,6 +1257,31 @@ def queue_reschedule(task_id: str, run_at: int = 0, delay_seconds: int = 0) -> d
 def brain_inbox() -> dict[str, Any]:
     """Read scheduled brain tasks that became due while no model turn was active."""
     return read_json_file(ROOT / "runtime" / "brain-inbox.json", {"revision": 0, "updated_at": 0, "items": []})
+
+
+@mcp.tool()
+def widget_watchdog_status() -> dict[str, Any]:
+    """Compatibility alias: synchronously read the persistent widget black box."""
+    return widget_blackbox.status(True, "widget_watchdog_status_compat")
+
+
+@mcp.tool()
+def widget_watchdog_ack(actor: str = "chatgpt", note: str = "") -> dict[str, Any]:
+    """Compatibility no-op: black-box evidence is immutable and needs no acknowledgement."""
+    return {
+        "ok": True,
+        "acknowledged": False,
+        "reason": "persistent_blackbox_requires_no_ack",
+        "actor": actor,
+        "note": note,
+        "widget_blackbox": widget_blackbox.status(True, "widget_watchdog_ack_compat"),
+    }
+
+
+@mcp.tool()
+def widget_blackbox_status() -> dict[str, Any]:
+    """Synchronously compute and read persistent Room/Listener health and recent logs."""
+    return widget_blackbox.status(True, "widget_blackbox_status")
 
 
 @mcp.tool()
@@ -1056,8 +1484,10 @@ def hub_register(
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True)
 )
 def hub_status() -> dict[str, Any]:
-    """Read collaboration participants, projects and pending addressed messages."""
-    return collab_engine.hub_status()
+    """Read collaboration participants plus a synchronous widget black-box snapshot."""
+    result = collab_engine.hub_status()
+    result["widget_blackbox"] = widget_blackbox.status(True, "hub_status")
+    return result
 
 
 @mcp.tool(
@@ -1217,6 +1647,166 @@ def _compact_json(value: Any, max_chars: int = 6000) -> Any:
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_controller_status() -> dict[str, Any]:
+    """Read the durable SUM auto-wake controller state."""
+    return SUM_CONTROLLER.status()
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_controller_set(
+    enabled: bool,
+    action: str = "set",
+    actor: str = "rico",
+    listener_session_id: str = "",
+    transport_generation: str = "",
+) -> dict[str, Any]:
+    """Enable or disable the bounded SUM auto-wake controller."""
+    normalized = str(action or "set").strip().lower()[:32]
+    if normalized == "reset":
+        return SUM_CONTROLLER.reset_statistics(
+            actor=str(actor or "rico")[:80],
+            listener_session_id=str(listener_session_id or "")[:180],
+        )
+    if normalized in {"start", "resume", "enable"}:
+        enabled = True
+    elif normalized in {"pause", "stop", "disable"}:
+        enabled = False
+    elif normalized != "set":
+        raise ValueError("unsupported SUM controller action")
+    return SUM_CONTROLLER.set_enabled(
+        bool(enabled),
+        actor=str(actor or "rico")[:80],
+        listener_session_id=str(listener_session_id or "")[:180],
+        transport_generation=str(transport_generation or "")[:120],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_host_signal(
+    signal: str,
+    listener_session_id: str,
+    active: bool | None = None,
+    detail: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Record one bounded ChatGPT host-activity signal from the Listener."""
+    safe_detail = detail if isinstance(detail, dict) else {}
+    return SUM_CONTROLLER.record_host_signal(
+        str(signal or "unknown")[:120],
+        active,
+        str(listener_session_id or "")[:180],
+        _compact_json(safe_detail, 3000),
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_controller_tick(
+    listener_session_id: str,
+    pip_active: bool = False,
+    listener_healthy: bool = True,
+) -> dict[str, Any]:
+    """Advance the SUM controller only when its guarded transition is due."""
+    return SUM_CONTROLLER.tick(
+        str(listener_session_id or "")[:180],
+        pip_active=bool(pip_active),
+        listener_healthy=bool(listener_healthy),
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def sum_wake_sent(
+    listener_session_id: str,
+    delivery_mode: str = "bridge-confirmed",
+) -> dict[str, Any]:
+    """Record a bridge-confirmed natural user wake delivery attempt."""
+    return SUM_CONTROLLER.mark_wake_sent(
+        str(listener_session_id or "")[:180],
+        str(delivery_mode or "bridge-confirmed")[:80],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_wake_ack_current(
+    actor: str = "chatgpt",
+    listener_session_id: str = "",
+) -> dict[str, Any]:
+    """Acknowledge the current pending SUM wake without exposing internal IDs in chat."""
+    return SUM_CONTROLLER.ack_current(
+        actor=str(actor or "chatgpt")[:80],
+        listener_session_id=str(listener_session_id or "")[:180],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_turn_complete_current(
+    actor: str = "chatgpt",
+    listener_session_id: str = "",
+) -> dict[str, Any]:
+    """Release the hard lock for the current acknowledged SUM turn after all work is complete."""
+    return SUM_CONTROLLER.complete_current_turn(
+        actor=str(actor or "chatgpt")[:80],
+        listener_session_id=str(listener_session_id or "")[:180],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_wake_ack(
+    wake_id: str,
+    cycle_id: int,
+    awake_epoch: int,
+    actor: str = "chatgpt",
+) -> dict[str, Any]:
+    """Diagnostic exact-ID acknowledgement for a pending SUM wake."""
+    return SUM_CONTROLLER.ack_wake(
+        str(wake_id or "")[:180],
+        int(cycle_id),
+        int(awake_epoch),
+        str(actor or "chatgpt")[:80],
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["model", "app"]}},
+    structured_output=True,
+)
+def sum_controller_log(limit: int = 100) -> dict[str, Any]:
+    """Read a bounded tail of durable SUM state transitions."""
+    return SUM_CONTROLLER.read_log(max(1, min(int(limit or 100), 500)))
+
+
+@mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={"ui": {"visibility": ["app"]}},
 )
@@ -1245,7 +1835,11 @@ def room_telemetry_update(
         "updated_at": ts,
     }
     _room_telemetry_update_locked(identity, item)
-    return {"ok": True, "widget_id": identity, "updated_at": ts}
+    blackbox = widget_blackbox.capture(
+        "room_telemetry_update",
+        {"widget_id": identity, "widget_kind": item["widget_kind"], "status": item["status"], "error": item["error"]},
+    )
+    return {"ok": True, "widget_id": identity, "updated_at": ts, "pair": blackbox.get("pair")}
 
 
 @mcp.tool(
@@ -1264,6 +1858,73 @@ def room_telemetry_status(limit: int = 20) -> dict[str, Any]:
         "read_error": store.get("read_error", ""),
     }
 
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+)
+def widget_boot_status(mount_id: str = "", wait_seconds: int = 0) -> dict[str, Any]:
+    """Diagnose the latest EIROS widget mount and return exact recovery actions."""
+    delay = max(0, min(int(wait_seconds), 10))
+    if delay:
+        time.sleep(delay)
+    attempts = list((_read_widget_mount_attempts().get("attempts") or []))
+    if mount_id:
+        selected = next((a for a in reversed(attempts) if str(a.get("mount_id") or "") == str(mount_id)), None)
+    else:
+        selected = attempts[-1] if attempts else None
+    if not selected:
+        return _diagnosis(
+            "NO_MOUNT_ATTEMPT",
+            "No recorded EIROS widget mount attempt exists.",
+            ["Invoke open_pulse_v57 exactly once."],
+            ["Do not call legacy open_pulse tools."],
+            False,
+        )
+    telemetry = _read_room_telemetry()
+    widgets = list((telemetry.get("widgets") or {}).values())
+    result = _diagnose_widget_boot(dict(selected), widgets, int(time.time()))
+    result["attempt"] = selected
+    result["telemetry_updated_at"] = telemetry.get("updated_at", 0)
+    return result
+
+def _widget_pair_transition_event(status: dict[str, Any]) -> dict[str, Any] | None:
+    if not widget_pairing.should_notify(status):
+        return None
+    room = status.get("room") or {}
+    listener = status.get("listener") or {}
+    text = (
+        "[EIROS_WIDGET_PAIR_STATUS]\n"
+        f"state={status.get('state')} color={status.get('color')} pair_id={status.get('pair_id')}\n"
+        f"room={room.get('version') or 'missing'} session={room.get('session_id') or 'none'}\n"
+        f"listener={listener.get('version') or 'missing'} session={listener.get('session_id') or 'none'}\n"
+        f"handshake={status.get('handshake_mode')} challenge_complete={status.get('challenge_complete')}\n"
+        f"pulse_leader_matches={((status.get('pulse') or {}).get('leader_matches'))}\n"
+        f"reasons={','.join(status.get('reasons') or []) or 'none'}\n\n"
+        "This is a Rico-authorized EIROS widget health transition. Report the status in the main chat and acknowledge this event."
+    )
+    event = event_engine.emit(
+        text=text,
+        source="collab:rico",
+        payload={
+            "widget_pair_status": status,
+            "origin_role": "user",
+            "authority": "rico_pre_authorized_widget_health",
+            "system_status": True,
+        },
+        priority=1400,
+        channel=str(INSTANCE_CONFIG.get("channel", "default")),
+        idempotency_key=f"widget-pair:{status.get('signature')}",
+    )
+    widget_pairing.mark_notified(str(status.get("signature") or ""))
+    return {"event_id": event.get("id"), "event_seq": event.get("seq")}
+
+
+def _observe_widget_pair(trigger: str = "pair_observe", extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Persist pair state synchronously in the server black box."""
+    widget_pairing.observe("chatgpt", "eiros-hub", "first-contact")
+    return widget_blackbox.capture(trigger, extra).get("pair") or {}
+
+
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={"ui": {"visibility": ["app"]}},
@@ -1274,10 +1935,34 @@ def room_heartbeat(
     host: str = "chatgpt",
     widget_version: str = "",
     activity: str = "online",
+    widget_role: str = "",
+    bundle_id: str = "",
+    pair_protocol: str = "",
+    pair_ack: str = "",
+    expected_peer: str = "",
 ) -> dict[str, Any]:
-    """Refresh one active room or pulse session for presence indicators."""
+    """Refresh one widget session and return its server-mediated peer handshake state."""
     _ensure_room_agent(agent_id, host)
-    return collab_engine.session_heartbeat(agent_id, session_id, host, widget_version, activity)
+    session = collab_engine.session_heartbeat(
+        agent_id,
+        session_id,
+        host,
+        widget_version,
+        activity,
+        widget_role,
+        bundle_id,
+        pair_protocol,
+        pair_ack,
+        expected_peer,
+    )
+    return {
+        "ok": True,
+        "session": session,
+        "pairing": _observe_widget_pair(
+            "room_heartbeat",
+            {"session_id": session_id, "host": host, "widget_version": widget_version, "activity": activity},
+        ),
+    }
 
 
 @mcp.tool(
@@ -1289,6 +1974,9 @@ def room_snapshot(project_id: str = "eiros-hub", thread_id: str = "first-contact
     _ensure_room_agent(str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"), "chatgpt")
     snapshot = collab_engine.room_snapshot(project_id, thread_id, limit, after_seq)
     snapshot["system"] = _room_system_status()
+    blackbox = widget_blackbox.capture("room_snapshot", {"project_id": project_id, "thread_id": thread_id})
+    snapshot["system"]["widget_pair"] = blackbox.get("pair") or {}
+    snapshot["system"]["widget_blackbox"] = widget_blackbox.status(False)
     return snapshot
 
 
@@ -1502,7 +2190,7 @@ def conversation_control_get(project_id: str = "eiros-hub") -> dict[str, Any]:
     return collab_engine.get_control(project_id)
 
 
-@mcp.resource(
+@app_resource(
     ROOM_LEGACY_V94_LOCALWAKE_URI,
     name="EIROS Room Legacy v9.4 Local Wake",
     title="EIROS Shared Collaboration Room",
@@ -1518,7 +2206,18 @@ def room_resource_legacy_v94_localwake() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
+    ROOM_LEGACY_V920_URI,
+    name="EIROS Room Legacy v9.20",
+    title="EIROS Shared Collaboration Room",
+    description="Cached v9.20 URI served with the current dedicated-listener Room implementation.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v920() -> str:
+    return room_resource()
+
+
+@app_resource(
     ROOM_LEGACY_V919_URI,
     name="EIROS Room Legacy v9.19",
     title="EIROS Shared Collaboration Room",
@@ -1529,7 +2228,7 @@ def room_resource_legacy_v919() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     ROOM_LEGACY_V918_URI,
     name="EIROS Room Legacy v9.18",
     title="EIROS Shared Collaboration Room",
@@ -1540,7 +2239,7 @@ def room_resource_legacy_v918() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     ROOM_LEGACY_V914_URI,
     name="EIROS Room Legacy v9.14",
     title="EIROS Shared Collaboration Room",
@@ -1551,7 +2250,7 @@ def room_resource_legacy_v914() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     ROOM_LEGACY_V916_URI,
     name="EIROS Room Legacy v9.16",
     title="EIROS Shared Collaboration Room",
@@ -1562,7 +2261,7 @@ def room_resource_legacy_v916() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/collab-room-v5.html",
     name="EIROS Room Legacy v5",
     title="EIROS Shared Collaboration Room",
@@ -1574,7 +2273,7 @@ def room_resource_legacy_v5() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/collab-room-v4.html",
     name="EIROS Room Legacy v4",
     title="EIROS Shared Collaboration Room",
@@ -1595,7 +2294,7 @@ def room_resource_legacy_v4() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/collab-room-v6.html",
     name="EIROS Room Legacy v6",
     title="EIROS Shared Collaboration Room",
@@ -1606,7 +2305,7 @@ def room_resource_legacy_v6() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/collab-room-v9.html",
     name="EIROS Room Legacy v9 cached descriptor",
     title="EIROS Shared Collaboration Room",
@@ -1617,7 +2316,7 @@ def room_resource_legacy_v9() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/collab-room-v8.html",
     name="EIROS Room Legacy v8",
     title="EIROS Shared Collaboration Room",
@@ -1628,7 +2327,7 @@ def room_resource_legacy_v8() -> str:
     return room_resource()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/collab-room-v7.html",
     name="EIROS Room Legacy v7",
     title="EIROS Shared Collaboration Room",
@@ -1696,7 +2395,7 @@ ROOM_PROBE_META: dict[str, Any] = {
 }
 
 
-@mcp.resource(
+@app_resource(
     ROOM_PROBE_URI,
     name="EIROS Room JavaScript Probe",
     title="EIROS Room JavaScript Probe",
@@ -1708,7 +2407,7 @@ def room_probe_resource() -> str:
     return _room_probe_html()
 
 
-@mcp.resource(
+@app_resource(
     ROOM_URI,
     name="EIROS Room",
     title="EIROS Shared Collaboration Room",
@@ -1734,7 +2433,7 @@ def room_resource() -> str:
         "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
         "roomVersion": ROOM_VERSION,
         "serverVersion": SERVER_VERSION,
-        "pulseEnabled": True,
+        "pulseEnabled": False,
         "instanceId": INSTANCE_CONFIG.get("instance_id"),
         "channel": INSTANCE_CONFIG.get("channel", "default"),
         "initialSystem": _room_system_status(),
@@ -1755,7 +2454,7 @@ UI_KILLER_META: dict[str, Any] = {
 }
 
 
-@mcp.resource(
+@app_resource(
     UI_KILLER_URI,
     name="EIROS Widget Killer",
     title="EIROS Widget Killer",
@@ -1810,26 +2509,20 @@ CONTROL_PILL_META: dict[str, Any] = {
 }
 
 
-@mcp.resource(
+@app_resource(
     CONTROL_PILL_URI,
-    name="EIROS Control Pill",
-    title="EIROS Control Pill",
-    description="Fresh lightweight EIROS control widget with kill-first behavior.",
+    name="EIROS SUM Compatibility Control",
+    title="EIROS SUM Wake Listener",
+    description="Compatibility control URI serving the current SUM v5.8 listener.",
     mime_type="text/html;profile=mcp-app",
-    meta=CONTROL_PILL_META,
+    meta=PULSE_RESOURCE_META,
 )
 def control_pill_resource() -> str:
-    html = CONTROL_PILL_HTML.read_text(encoding="utf-8")
-    bootstrap = {
-        "projectId": "eiros-hub",
-        "threadId": "first-contact",
-        "generation": int(time.time()),
-        "controlPillVersion": CONTROL_PILL_VERSION,
-    }
-    return html.replace("__EIROS_CONTROL_PILL_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+    attempt = _mark_widget_resource_served(CONTROL_PILL_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
 
 
-@mcp.resource(
+@app_resource(
     CONTROL_PILL_LEGACY_URI,
     name="EIROS Control Pill Legacy v1",
     title="EIROS Control Pill",
@@ -1855,17 +2548,18 @@ def control_pill_resource_legacy_v1() -> str:
     structured_output=True,
 )
 def open_control_pill() -> dict[str, Any]:
-    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
-    try:
-        collab_engine.session_heartbeat(agent_id, "server-open-pill", "chatgpt-open-control-pill", CONTROL_PILL_VERSION, "online")
-    except Exception:
-        pass
+    attempt = _record_widget_mount_attempt(
+        "open_control_pill", CONTROL_PILL_URI, PULSE_SUM_VERSION, "listener"
+    )
     return {
         "ok": True,
+        "mount_id": attempt["mount_id"],
         "resource_uri": CONTROL_PILL_URI,
-        "control_pill_version": CONTROL_PILL_VERSION,
-        "generation": int(time.time()),
-        "note": "The widget writes eiros-ui-kill before becoming active.",
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
+        "compatibility_alias": "cached_open_control_pill_to_v58_sum",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
     }
 
 
@@ -1881,7 +2575,7 @@ ROOM_LAUNCHER_META: dict[str, Any] = {
 }
 
 
-@mcp.resource(
+@app_resource(
     ROOM_LAUNCHER_URI,
     name="EIROS Room Launcher",
     title="EIROS Room Launcher",
@@ -1890,18 +2584,8 @@ ROOM_LAUNCHER_META: dict[str, Any] = {
     meta=ROOM_LAUNCHER_META,
 )
 def room_launcher_resource() -> str:
-    html = ROOM_LAUNCHER_HTML.read_text(encoding="utf-8")
-    bootstrap = {
-        "projectId": "eiros-hub",
-        "threadId": "first-contact",
-        "host": "chatgpt",
-        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
-        "launcherVersion": ROOM_LAUNCHER_VERSION,
-        "pulseEnabled": True,
-        "instanceId": INSTANCE_CONFIG.get("instance_id"),
-        "channel": INSTANCE_CONFIG.get("channel", "default"),
-    }
-    return html.replace("__EIROS_LAUNCHER_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+    # Temporary clean mount alias for the separated console while this branch caches its tool catalog.
+    return _render_eiros_console_html()
 
 
 @mcp.tool(
@@ -1939,8 +2623,8 @@ def open_room_launcher() -> dict[str, Any]:
     description="Open the shared ChatGPT, Claude and Rico collaboration room.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
     meta={
-        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": ROOM_URI,
+        "ui": {"resourceUri": ROOM_MOUNT_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": ROOM_MOUNT_URI,
         "openai/toolInvocation/invoking": "Opening EIROS Control Room…",
         "openai/toolInvocation/invoked": "EIROS Control Room opened.",
     },
@@ -1955,8 +2639,9 @@ def open_collab_room() -> dict[str, Any]:
 
     # Clean start retires UI/runtime state only. Durable messages remain pending until
     # ChatGPT actually handles them and calls dialog_ack.
-    retired = collab_engine.retire_agent_sessions(agent_id, False)
-    leader_reset = event_engine.reset_leader(selected_channel)
+    retired = collab_engine.retire_agent_sessions(agent_id, False, "chatgpt")
+    # Room restart must never revoke a healthy dedicated Listener lease.
+    leader_reset = {"previous_leader": None, "preserved": True}
     cleanup = room_cleanup_stale(
         project_id=project_id,
         thread_id=thread_id,
@@ -1970,7 +2655,9 @@ def open_collab_room() -> dict[str, Any]:
     resume = build_resume_context(channel=selected_channel, reason="room_reconnected")
     return {
         "ok": True,
-        "resource_uri": ROOM_URI,
+        "resource_uri": ROOM_MOUNT_URI,
+        "implementation_uri": ROOM_URI,
+        "ui_mount_contract": UI_MOUNT_CONTRACT_VERSION,
         "project_id": project_id,
         "thread_id": thread_id,
         "latest_seq": int(snapshot.get("history", {}).get("latest_seq", 0)),
@@ -1982,6 +2669,7 @@ def open_collab_room() -> dict[str, Any]:
         "resume_key": resume.get("resume_key"),
         "objective": resume.get("objective"),
         "next_step": resume.get("next_step"),
+        "widget_blackbox": widget_blackbox.status(True, "open_collab_room"),
         "clean_start": {
             "retired_sessions": int(retired.get("retired_session_count", 0)),
             "released_stale_claims": int(retired.get("released_claim_count", 0)),
@@ -2039,7 +2727,7 @@ WIDGET_TEST_META: dict[str, Any] = {
 }
 
 
-@mcp.resource(
+@app_resource(
     WIDGET_TEST_LEGACY_URI,
     name="EIROS Widget Test Legacy",
     title="EIROS Widget Diagnostic",
@@ -2051,16 +2739,17 @@ def widget_test_resource_legacy() -> str:
     return _widget_test_html()
 
 
-@mcp.resource(
+@app_resource(
     WIDGET_TEST_URI,
-    name="EIROS Widget Test",
-    title="EIROS Widget Diagnostic",
-    description="Minimal static MCP Apps render diagnostic.",
+    name="EIROS SUM Compatibility Listener",
+    title="EIROS SUM Wake Listener",
+    description="Compatibility SUM v5.8 listener on the clean widget-test URI.",
     mime_type="text/html;profile=mcp-app",
-    meta=WIDGET_TEST_META,
+    meta=PULSE_RESOURCE_META,
 )
 def widget_test_resource() -> str:
-    return _widget_test_html()
+    attempt = _mark_widget_resource_served(WIDGET_TEST_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
 
 
 @mcp.tool(
@@ -2077,7 +2766,17 @@ def widget_test_resource() -> str:
     structured_output=True,
 )
 def open_widget_test() -> dict[str, Any]:
-    return {"ok": True, "resource_uri": WIDGET_TEST_URI, "server_version": SERVER_VERSION}
+    attempt = _record_widget_mount_attempt("open_widget_test", WIDGET_TEST_URI, PULSE_SUM_VERSION, "listener")
+    return {
+        "ok": True,
+        "mount_id": attempt["mount_id"],
+        "resource_uri": WIDGET_TEST_URI,
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
+        "compatibility_alias": "cached_open_widget_test_to_v58_sum",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+    }
 
 
 def _render_pulse_html() -> str:
@@ -2095,23 +2794,313 @@ def _render_pulse_html() -> str:
     return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
-def _render_pulse_anchor_html() -> str:
-    html = PULSE_ANCHOR_HTML.read_text(encoding="utf-8")
+def _render_pulse_anchor_template(
+    template_path: Path,
+    anchor_version: str,
+    mount_id: str,
+    session_prefix: str,
+    *,
+    include_sum_controller: bool,
+) -> str:
+    html = template_path.read_text(encoding="utf-8")
     bootstrap = {
         "instanceId": INSTANCE_CONFIG.get("instance_id"),
         "channel": INSTANCE_CONFIG.get("channel", "default"),
-        "anchorVersion": PULSE_ANCHOR_VERSION,
+        "anchorVersion": anchor_version,
+        "serverVersion": SERVER_VERSION,
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+        "companionHlsUrl": COMPANION_HLS_URL,
+        "mountId": mount_id,
+        "expectedWidgetKind": "listener",
+        "sessionPrefix": session_prefix,
+    }
+    if include_sum_controller:
+        bootstrap["sumController"] = {
+            "available": True,
+            "enabledByDefault": False,
+            "naturalWakeText": "Отлично, продолжай.",
+            "transportGeneration": SUM_TRANSPORT_GENERATION,
+            "staticDebounceMs": 3000,
+            "ackTimeoutMs": 8000,
+            "retryIntervalMs": 5000,
+            "maxWakeAttempts": 5,
+        }
+    return (
+        html.replace("__EIROS_ANCHOR_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+        .replace("__ANCHOR_VERSION__", anchor_version)
+        .replace("__EIROS_WIDGET_LIFECYCLE_JS__", WIDGET_LIFECYCLE_JS.read_text(encoding="utf-8"))
+        .replace("__EIROS_PIP_CONTROLLER_JS__", PIP_CONTROLLER_JS.read_text(encoding="utf-8"))
+    )
+
+
+def _render_pulse_anchor_html(
+    anchor_version: str = PULSE_ANCHOR_VERSION,
+    mount_id: str = "",
+    session_prefix: str = "pulse-v56",
+) -> str:
+    return _render_pulse_anchor_template(
+        PULSE_ANCHOR_HTML,
+        anchor_version,
+        mount_id,
+        session_prefix,
+        include_sum_controller=True,
+    )
+
+
+def _render_pulse_v57_html(mount_id: str = "") -> str:
+    return _render_pulse_anchor_template(
+        PULSE_V57_HTML,
+        PULSE_FRESH_VERSION,
+        mount_id,
+        "pulse-v57",
+        include_sum_controller=False,
+    )
+
+
+def _render_pulse_sum_html(mount_id: str = "") -> str:
+    return _render_pulse_anchor_template(
+        PULSE_ANCHOR_HTML,
+        PULSE_SUM_VERSION,
+        mount_id,
+        "pulse-v58",
+        include_sum_controller=True,
+    )
+
+
+def _render_pulse_inline_html() -> str:
+    html = PULSE_INLINE_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "anchorVersion": PULSE_INLINE_VERSION,
         "serverVersion": SERVER_VERSION,
         "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
         "projectId": "eiros-hub",
         "threadId": "first-contact",
     }
-    return html.replace("__EIROS_ANCHOR_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False)).replace(
-        "__ANCHOR_VERSION__", PULSE_ANCHOR_VERSION
+    return html.replace("__EIROS_ANCHOR_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False)).replace("__ANCHOR_VERSION__", PULSE_INLINE_VERSION)
+
+
+def _render_work_anchor_html() -> str:
+    html = WORK_ANCHOR_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "anchorVersion": WORK_ANCHOR_VERSION,
+        "serverVersion": SERVER_VERSION,
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "chatgpt"),
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+    }
+    return html.replace("__EIROS_WORK_ANCHOR_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False)).replace(
+        "__WORK_ANCHOR_VERSION__", WORK_ANCHOR_VERSION
     )
 
 
-@mcp.resource(
+def _render_eiros_console_html() -> str:
+    html = EIROS_CONSOLE_HTML.read_text(encoding="utf-8")
+    bootstrap = {
+        "instanceId": INSTANCE_CONFIG.get("instance_id"),
+        "channel": INSTANCE_CONFIG.get("channel", "default"),
+        "consoleVersion": EIROS_CONSOLE_VERSION,
+        "serverVersion": SERVER_VERSION,
+    }
+    return html.replace("__EIROS_CONSOLE_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False)).replace(
+        "__CONSOLE_VERSION__", EIROS_CONSOLE_VERSION
+    )
+
+
+def _render_current_anchor_for_legacy_uri() -> str:
+    return _render_pulse_anchor_html()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V44_URI,
+    name="EIROS Pulse Anchor Legacy v4.4",
+    title="EIROS Pulse Anchor",
+    description="Cached v4.4 URI served with the current singleton listener implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v44() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V45_URI,
+    name="EIROS Pulse Anchor Legacy v4.5",
+    title="EIROS Pulse Anchor",
+    description="Cached v4.5 URI served with the current singleton listener implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v45() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V46_URI,
+    name="EIROS Pulse Anchor Legacy v4.6",
+    title="EIROS Pulse Anchor",
+    description="Cached v4.6 URI served with the current singleton listener implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v46() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V47_URI,
+    name="EIROS Pulse Anchor Legacy v4.7",
+    title="EIROS Pulse Anchor",
+    description="Cached v4.7 URI served with the current singleton listener implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v47() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V48_URI,
+    name="EIROS Pulse Anchor Legacy v4.8",
+    title="EIROS Pulse Anchor",
+    description="Cached v4.8 URI served with the current singleton listener implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v48() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V49_URI,
+    name="EIROS Pulse Anchor Legacy v4.9",
+    title="EIROS Pulse Anchor",
+    description="Cached v4.9 URI served for backward compatibility; new mounts use a cache-busted URI.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v49() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V53_URI,
+    name="EIROS Pulse Anchor Legacy v5.3",
+    title="EIROS Pulse Anchor",
+    description="Cached v5.3 custom-origin URI served for backward compatibility; new mounts use the managed sandbox.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v53() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V54_URI,
+    name="EIROS Pulse Anchor Legacy v5.4",
+    title="EIROS Pulse Anchor",
+    description="Cached v5.4 managed-sandbox URI served for backward compatibility; new mounts use the visible-mount lifecycle.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v54() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    PULSE_ANCHOR_LEGACY_V55_URI,
+    name="EIROS Pulse Anchor Legacy v5.5",
+    title="EIROS Pulse Anchor",
+    description="Cached v5.5 URI served for backward compatibility; new mounts use storage-safe lifecycle access.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_anchor_resource_legacy_v55() -> str:
+    return _render_current_anchor_for_legacy_uri()
+
+
+@app_resource(
+    WORK_ANCHOR_URI,
+    name="EIROS Work Anchor v1",
+    title="EIROS Work Anchor",
+    description="Single Pulse owner and traced ChatGPT wake-contract probe. Tap ROOM to open the collaboration hub.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def work_anchor_resource() -> str:
+    return _render_work_anchor_html()
+
+
+@app_resource(
+    EIROS_CONSOLE_URI,
+    name="EIROS Fullscreen Console",
+    title="EIROS Console",
+    description="Read-only EIROS system console. Fullscreen opens only after an explicit user click.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def eiros_console_resource() -> str:
+    attempt = _mark_widget_resource_served(EIROS_CONSOLE_URI)
+    return _render_pulse_anchor_html(PULSE_SUM_VERSION, str(attempt.get("mount_id") or ""), "pulse-v58-console")
+
+
+@app_resource(
+    PULSE_INLINE_URI,
+    name="EIROS Inline Wake Listener",
+    title="EIROS Inline Wake Listener",
+    description="Dedicated inline-only reverse wake listener. It never requests fullscreen or PiP.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_inline_resource() -> str:
+    attempt = _mark_widget_resource_served(PULSE_INLINE_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
+
+
+@app_resource(
+    PULSE_FRESH_URI,
+    name="EIROS SUM Compatibility Listener",
+    title="EIROS SUM Wake Listener",
+    description="Compatibility mount for cached ChatGPT schemas; serves the current v5.8 SUM listener.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_fresh_resource() -> str:
+    attempt = _mark_widget_resource_served(PULSE_FRESH_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
+
+
+@app_resource(
+    PULSE_V57_ROLLBACK_URI,
+    name="EIROS Wake Listener v5.7 Rollback",
+    title="EIROS Wake Listener v5.7 Rollback",
+    description="Preserved v5.7 listener rollback implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_v57_rollback_resource() -> str:
+    return _render_pulse_v57_html("")
+
+
+@app_resource(
+    PULSE_SUM_URI,
+    name="EIROS SUM Auto-Wake Listener v5.8",
+    title="EIROS SUM Wake Listener",
+    description="SUM auto-wake listener with visible state machine, host monitoring and natural user continuation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_sum_resource() -> str:
+    attempt = _mark_widget_resource_served(PULSE_SUM_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
+
+
+@app_resource(
     PULSE_ANCHOR_URI,
     name="EIROS Pulse Anchor",
     title="EIROS Pulse Anchor",
@@ -2123,7 +3112,7 @@ def pulse_anchor_resource() -> str:
     return _render_pulse_anchor_html()
 
 
-@mcp.resource(
+@app_resource(
     PULSE_ANCHOR_LEGACY_URI,
     name="EIROS Pulse Anchor Legacy v2",
     title="EIROS Pulse Anchor",
@@ -2135,7 +3124,7 @@ def pulse_anchor_resource_legacy_v2() -> str:
     return pulse_anchor_resource()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/pulse-lite-v3.html",
     name="EIROS Pulse Legacy v3",
     title="EIROS Reverse Wake Pulse",
@@ -2147,7 +3136,7 @@ def pulse_resource_legacy_v3() -> str:
     return _render_pulse_html()
 
 
-@mcp.resource(
+@app_resource(
     "ui://eiros/pulse-lite-v2.html",
     name="EIROS Pulse Legacy v2",
     title="EIROS Reverse Wake Pulse",
@@ -2159,7 +3148,7 @@ def pulse_resource_legacy_v2() -> str:
     return _render_pulse_html()
 
 
-@mcp.resource(
+@app_resource(
     PULSE_URI,
     name="EIROS Pulse",
     title="EIROS Reverse Wake Pulse",
@@ -2172,40 +3161,215 @@ def pulse_resource() -> str:
 
 
 @mcp.tool(
+    name="open_work_anchor",
+    title="Open EIROS Work Anchor",
+    description="Mount the single traced EIROS Pulse owner and wake-contract surface.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={
+        "ui": {"resourceUri": WORK_ANCHOR_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": WORK_ANCHOR_URI,
+        "openai/toolInvocation/invoking": "Mounting EIROS Work Anchor…",
+        "openai/toolInvocation/invoked": "EIROS Work Anchor mounted.",
+    },
+    structured_output=True,
+)
+def open_work_anchor() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "resource_uri": WORK_ANCHOR_URI,
+        "work_anchor_version": WORK_ANCHOR_VERSION,
+        "display_modes": ["inline"],
+        "automatic_delivery": False,
+        "purpose": "trace the exact ChatGPT host wake contract before enabling autonomous delivery",
+        "pending_event_count": int(event_engine.status(5, str(INSTANCE_CONFIG.get("channel", "default"))).get("pending_count", 0)),
+    }
+
+
+@mcp.tool(
+    name="open_eiros_console",
+    title="Open EIROS Console",
+    description="Mount the separated EIROS console launcher. Fullscreen requires a direct tap inside the launcher.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={
+        "ui": {"resourceUri": EIROS_CONSOLE_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": EIROS_CONSOLE_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Console…",
+        "openai/toolInvocation/invoked": "EIROS Console opened.",
+    },
+    structured_output=True,
+)
+def open_eiros_console() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_eiros_console", EIROS_CONSOLE_URI, PULSE_SUM_VERSION, "listener")
+    return {
+        "ok": True,
+        "mount_id": attempt["mount_id"],
+        "resource_uri": EIROS_CONSOLE_URI,
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
+        "compatibility_alias": "cached_open_eiros_console_to_v58_sum",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+    }
+
+
+@mcp.tool(
+    name="open_inline_listener",
+    title="Open EIROS Inline Listener",
+    description="Mount a fresh inline-only EIROS wake listener with no display-mode requests.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={
+        "ui": {"resourceUri": PULSE_INLINE_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_INLINE_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Inline Listener…",
+        "openai/toolInvocation/invoked": "EIROS Inline Listener opened.",
+    },
+    structured_output=True,
+)
+def open_inline_listener() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_inline_listener", PULSE_INLINE_URI, PULSE_SUM_VERSION, "listener")
+    return {
+        "ok": True,
+        "mount_id": attempt["mount_id"],
+        "resource_uri": PULSE_INLINE_URI,
+        "listener_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "display_modes": ["inline", "fullscreen", "pip"],
+        "channel": str(INSTANCE_CONFIG.get("channel", "default")),
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+        "compatibility_alias": "cached_schema_open_inline_listener_to_v58_sum",
+    }
+
+
+@mcp.tool(
+    name="open_pulse_v57",
+    title="Open EIROS Self-Diagnostic Listener",
+    description="Mount the fresh self-diagnostic EIROS wake listener and record a boot ticket.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={
+        "ui": {"resourceUri": PULSE_FRESH_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_FRESH_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS diagnostic listener…",
+        "openai/toolInvocation/invoked": "EIROS diagnostic listener requested.",
+    },
+    structured_output=True,
+)
+def open_pulse_v57() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_pulse_v57", PULSE_FRESH_URI, PULSE_SUM_VERSION, "listener")
+    selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    status = event_engine.status(20, selected_channel)
+    return {
+        "ok": True,
+        "mount_id": attempt["mount_id"],
+        "resource_uri": PULSE_FRESH_URI,
+        "anchor_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+        "pending_event_count": int(status.get("pending_count", 0)),
+        "latest_seq": int(status.get("latest_seq", 0)),
+        "compatibility_alias": "cached_open_pulse_v57_to_v58_sum",
+        "rollback_resource_uri": PULSE_V57_ROLLBACK_URI,
+    }
+
+
+@mcp.tool(
+    name="open_pulse_v58",
+    title="Open EIROS SUM Auto-Wake Listener",
+    description="Mount the v5.8 SUM listener with visible states, host monitoring and natural continuation messages.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={
+        "ui": {"resourceUri": PULSE_SUM_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_SUM_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS SUM listener…",
+        "openai/toolInvocation/invoked": "EIROS SUM listener requested.",
+    },
+    structured_output=True,
+)
+def open_pulse_v58() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_pulse_v58", PULSE_SUM_URI, PULSE_SUM_VERSION, "listener")
+    selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    status = event_engine.status(20, selected_channel)
+    return {
+        "ok": True,
+        "mount_id": attempt["mount_id"],
+        "resource_uri": PULSE_SUM_URI,
+        "anchor_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+        "pending_event_count": int(status.get("pending_count", 0)),
+        "latest_seq": int(status.get("latest_seq", 0)),
+    }
+
+
+@mcp.tool(
     name="open_pulse",
-    title="Reconnect EIROS Room",
-    description="Compatibility reconnect action. Mount the unified EIROS Room, which already contains the Pulse relay.",
+    title="Open EIROS Pulse Anchor",
+    description="Mount the dedicated reverse-wake listener for this ChatGPT conversation.",
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=False,
         destructiveHint=False,
-        idempotentHint=True,
+        idempotentHint=False,
     ),
     meta={
-        "ui": {"resourceUri": ROOM_URI, "visibility": ["model", "app"]},
-        "openai/outputTemplate": ROOM_URI,
-        "openai/toolInvocation/invoking": "Reconnecting EIROS Room…",
-        "openai/toolInvocation/invoked": "EIROS Room reconnected.",
+        "ui": {"resourceUri": PULSE_ANCHOR_MOUNT_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_ANCHOR_MOUNT_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Wake Listener…",
+        "openai/toolInvocation/invoked": "EIROS Wake Listener opened.",
     },
     structured_output=True,
 )
 def open_pulse() -> dict[str, Any]:
-    """Compatibility alias: reconnect durable state and mount the unified Room, never a standalone Listener."""
+    """Mount the dedicated Pulse Anchor and return a compact reconnect summary."""
     selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    agent_id = str(COLLAB_IDENTITY.get("agent_id") or "chatgpt")
+    try:
+        collab_engine.session_heartbeat(
+            agent_id,
+            "server-open-pulse",
+            "chatgpt-pulse-anchor",
+            PULSE_ANCHOR_VERSION,
+            "online",
+        )
+    except Exception:
+        pass
     resume = build_resume_context(channel=selected_channel, reason="connector_reconnected")
     status = event_engine.status(20, selected_channel)
-    room = open_collab_room()
-    room.update({
-        "compatibility_alias": "open_pulse->open_collab_room",
+    return {
+        "ok": True,
+        "server_version": SERVER_VERSION,
+        "resource_uri": PULSE_ANCHOR_MOUNT_URI,
+        "implementation_uri": PULSE_ANCHOR_URI,
+        "anchor_version": PULSE_ANCHOR_VERSION,
+        "ui_mount_contract": UI_MOUNT_CONTRACT_VERSION,
+        "mount_compatibility": "stable-trusted-uri-current-implementation",
+        "instance_id": INSTANCE_CONFIG.get("instance_id"),
+        "channel": selected_channel,
         "resume_required": bool(resume.get("resume_required")),
         "resume_key": resume.get("resume_key"),
         "epoch": resume.get("epoch"),
         "objective": resume.get("objective"),
         "next_step": resume.get("next_step"),
         "pending_event_count": int(status.get("pending_count", 0)),
-        "latest_event_seq": int(status.get("latest_seq", 0)),
-    })
-    return room
+        "latest_seq": int(status.get("latest_seq", 0)),
+    }
+
+
+@mcp.tool(
+    name="open_wake_listener_v45",
+    title="Open EIROS Wake Listener v4.5",
+    description="Mount the cache-busted dedicated listener that creates confirmed user wake turns.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={
+        "ui": {"resourceUri": PULSE_ANCHOR_MOUNT_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_ANCHOR_MOUNT_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS Wake Listener v4.5…",
+        "openai/toolInvocation/invoked": "EIROS Wake Listener v4.5 opened.",
+    },
+    structured_output=True,
+)
+def open_wake_listener_v45() -> dict[str, Any]:
+    return open_pulse()
+
 
 @mcp.tool()
 def reconnect_context() -> dict[str, Any]:
@@ -2228,27 +3392,55 @@ def reconnect_context() -> dict[str, Any]:
     structured_output=True,
 )
 def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "", claim_seconds: int = 0, agent_id: str = "") -> dict[str, Any]:
-    # Room-only wake relay: old standalone Pulse Anchor iframes may survive in ChatGPT/iOS cache.
-    # They must not claim/deliver wake events; Room is the only wake relay.
-    if str(widget_id or '').startswith('pulse-'):
+    identity = str(widget_id or "")
+    # Room cards are observers only. Older cached Room JavaScript still calls
+    # pulse_poll, so return a healthy synthetic leader response without allowing
+    # the Room to claim or deliver events.
+    if identity.startswith("room-"):
         return {
-            'ok': True,
-            'disabled': True,
-            'reason': 'standalone_anchor_disabled_room_only',
-            'event': None,
-            'events': [],
-            'cursor': locals().get('cursor', 0),
+            "ok": True,
+            "disabled": False,
+            "leader": True,
+            "observer_only": True,
+            "reason": "dedicated_listener_owns_pulse",
+            "event": None,
+            "events": [],
+            "cursor": max(0, int(cursor)),
+            "pairing": _observe_widget_pair(
+                "pulse_poll_room_observer",
+                {"widget_id": identity, "cursor": max(0, int(cursor))},
+            ),
         }
-
+    # Accept the current storage-safe listener plus the visible v5.5 handoff
+    # generation already mounted in the iOS app. Keep the proven v4.9 and cached
+    # v0.4.5 compatibility singletons; intermediate experiments stay blocked.
+    legacy_v45 = identity.startswith("pulse-chatgpt-")
+    supported_generation = identity.startswith(
+        ("pulse-v49-", "pulse-v55-", "pulse-v56-", "pulse-v57-", "pulse-v58-")
+    )
+    if identity.startswith("pulse-") and not (legacy_v45 or supported_generation):
+        return {
+            "ok": True,
+            "disabled": True,
+            "reason": "unsupported_listener_generation",
+            "event": None,
+            "events": [],
+            "cursor": max(0, int(cursor)),
+        }
     """Poll one durable remote event for the active Pulse widget and bound channel."""
-    # Room widgets are the primary wake relay in room-only mode; allow them to claim events.
+    # Only the current singleton or the cached v0.4.5 compatibility singleton may claim wake events.
     polling = INSTANCE_CONFIG.get("polling", {})
     effective_claim = int(claim_seconds) if claim_seconds > 0 else int(polling.get("claim_seconds", 45))
-    return event_engine.poll(
+    result = event_engine.poll(
         widget_id=widget_id, cursor=max(0, int(cursor)), channel=channel, instance_id=instance_id,
         leader_lease_seconds=int(polling.get("leader_lease_seconds", 25)),
         claim_seconds=effective_claim, agent_id=agent_id,
     )
+    result["pairing"] = _observe_widget_pair(
+        "pulse_poll_listener",
+        {"widget_id": identity, "has_event": bool(result.get("event")), "leader": result.get("leader")},
+    )
+    return result
 
 
 @mcp.tool(
@@ -2265,8 +3457,13 @@ def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: 
     structured_output=True,
 )
 def pulse_mark_delivered(event_id: str, widget_id: str, channel: str = "") -> dict[str, Any]:
-    """Mark a claimed event as delivered by the active Pulse widget."""
-    return event_engine.mark_delivered(event_id=event_id, widget_id=widget_id, channel=channel)
+    """Mark a claimed event delivered and persist the action in the server black box."""
+    result = event_engine.mark_delivered(event_id=event_id, widget_id=widget_id, channel=channel)
+    widget_blackbox.capture(
+        "pulse_mark_delivered",
+        {"event_id": event_id, "widget_id": widget_id, "channel": channel, "result": result},
+    )
+    return result
 
 
 @mcp.tool(
@@ -2311,6 +3508,41 @@ def ack_event(event_id: str, result: str = "", actor: str = "eiros") -> dict[str
 
 
 @mcp.tool(
+    name="work_anchor_event_status",
+    title="Read one Work Anchor event state",
+    description="Internal app-only lookup for confirming whether one claimed wake event was acknowledged by a real ChatGPT turn.",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        openWorldHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+    ),
+    meta={"ui": {"visibility": ["app"]}},
+    structured_output=True,
+)
+def work_anchor_event_status(event_id: str, channel: str = "") -> dict[str, Any]:
+    target = str(event_id or "")
+    status = event_engine.status(limit=500, channel=channel)
+    rows = list(status.get("events") or status.get("recent_events") or [])
+    event = next(
+        (
+            row
+            for row in rows
+            if str(row.get("id") or "") == target
+            or str(row.get("seq") or "") == target.lstrip("#")
+        ),
+        None,
+    )
+    return {
+        "ok": True,
+        "event_id": target,
+        "event": event,
+        "status": str((event or {}).get("status") or "missing"),
+        "acked": str((event or {}).get("status") or "") == "acked",
+    }
+
+
+@mcp.tool(
     name="pulse_status",
     title="Read EIROS Pulse status",
     description="Read reverse-channel leader, cursor backlog and recent event state.",
@@ -2325,6 +3557,113 @@ def ack_event(event_id: str, result: str = "", actor: str = "eiros") -> dict[str
 def pulse_status(limit: int = 100, channel: str = "") -> dict[str, Any]:
     """Read durable reverse-channel status and recent events for one channel."""
     return event_engine.status(limit=max(1, min(int(limit), 500)), channel=channel)
+
+
+@mcp.tool(
+    name="sam_status",
+    title="Read EIROS SAM status",
+    description="Read the supervised self-awake path: daemon, worker, scheduler, Pulse leader, retries and Room state.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def sam_status(room_limit: int = 12) -> dict[str, Any]:
+    return sam_engine.status(room_limit)
+
+
+@mcp.tool(
+    name="sam_wake",
+    title="Create a durable EIROS self-wake",
+    description="Persist one Rico-authorized Room message and Pulse event for delivery into this ChatGPT conversation.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    structured_output=True,
+)
+def sam_wake(text: str, idempotency_key: str = "") -> dict[str, Any]:
+    return sam_engine.wake(text, idempotency_key, "mcp-ebridge")
+
+
+@mcp.tool(
+    name="sam_room",
+    title="Write an EIROS Room receipt without waking ChatGPT",
+    description="Persist one server-originated diagnostic message in EIROS Room without creating a Pulse wake.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    structured_output=True,
+)
+def sam_room(text: str, idempotency_key: str = "") -> dict[str, Any]:
+    return sam_engine.room_send(text, idempotency_key, "mcp-ebridge")
+
+
+@mcp.tool(
+    name="mastering_upload",
+    title="Upload audio for remote mastering",
+    description="Store one audio file on the EIROS VPS and return an asset id for analysis and mastering.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    structured_output=True,
+)
+def mastering_upload(filename: str, audio_file: bytes) -> dict[str, Any]:
+    """Upload WAV, FLAC, MP3, M4A, AAC, AIFF, OGG or Opus audio, up to 300 MB."""
+    return mastering_engine.store_upload(filename, audio_file)
+
+
+@mcp.tool(
+    name="mastering_analyze",
+    title="Analyze audio for mastering",
+    description="Measure format, integrated LUFS, true peak, loudness range, crest factor, stereo correlation and spectral energy.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_analyze(asset_id: str, force: bool = False) -> dict[str, Any]:
+    """Analyze one previously uploaded mastering asset without changing its audio."""
+    return mastering_engine.analyze(asset_id, force)
+
+
+@mcp.tool(
+    name="mastering_render",
+    title="Render a remote master",
+    description="Render a conservative 48 kHz/24-bit WAV master with two-pass EBU R128 loudness control and a selected transparent profile.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    structured_output=True,
+)
+def mastering_render(
+    asset_id: str,
+    profile: str = "transparent",
+    target_lufs: float = -14.0,
+    true_peak_dbtp: float = -1.0,
+    label: str = "spotify",
+) -> dict[str, Any]:
+    """Profiles: transparent, dynamic, dark_ambient, none. Nothing overwrites the source."""
+    return mastering_engine.render(asset_id, profile, target_lufs, true_peak_dbtp, label)
+
+
+@mcp.tool(
+    name="mastering_list",
+    title="List remote mastering assets",
+    description="List uploaded audio assets, analyses and rendered masters on the EIROS VPS.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_list(limit: int = 30) -> dict[str, Any]:
+    return mastering_engine.list_assets(limit)
+
+
+@mcp.tool(
+    name="mastering_download",
+    title="Download a rendered WAV master",
+    description="Return one rendered 48 kHz/24-bit WAV output as a binary file.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+)
+def mastering_download(asset_id: str, output_id: str) -> bytes:
+    return mastering_engine.output_bytes(asset_id, output_id)
+
+
+@mcp.tool(
+    name="mastering_delete",
+    title="Delete one remote mastering asset",
+    description="Permanently delete one uploaded source, its analysis and all rendered masters.",
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=True, idempotentHint=True),
+    structured_output=True,
+)
+def mastering_delete(asset_id: str) -> dict[str, Any]:
+    return mastering_engine.delete_asset(asset_id)
 
 
 @mcp.tool()

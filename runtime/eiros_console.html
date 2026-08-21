@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:transparent;color:#e8f4ff}
+.launcher{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #1e4669;border-radius:14px;background:#081827}
+.dot{width:9px;height:9px;border-radius:50%;background:#19c37d;box-shadow:0 0 9px rgba(25,195,125,.55)}
+.label{flex:1;min-width:0}.title{font-weight:760;font-size:13px}.sub{font-size:10px;color:#7599bb;margin-top:2px}
+.btn{border:1px solid #285777;border-radius:10px;background:#0a1b2c;color:#b9d8ef;min-height:34px;padding:0 12px;font-weight:700}
+.console{display:none}
+body.fullscreen{min-height:100vh;background:#03070d;padding:78px 14px 28px;overflow:auto}
+body.fullscreen .launcher{position:sticky;top:6px;z-index:20;background:rgba(7,23,38,.94);backdrop-filter:blur(16px);box-shadow:0 14px 50px rgba(0,0,0,.45)}
+body.fullscreen .console{display:block;margin-top:14px}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.h1{font-size:22px;font-weight:800}.meta{font-size:11px;color:#7297b7;margin-top:4px}
+.actions{display:flex;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.card{min-height:116px;border:1px solid #17334f;border-radius:16px;background:linear-gradient(180deg,#091724,#06101a);padding:13px}
+.card.wide{grid-column:1/-1}
+.k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#5d81a2}
+.v{font-size:24px;font-weight:800;margin-top:9px}.s{font-size:11px;line-height:1.4;color:#7fa2bf;margin-top:6px;word-break:break-word}
+.good{color:#39d98a}.warn{color:#f5b849}.bad{color:#ff6b79}.event{white-space:pre-wrap;max-height:170px;overflow:auto}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.card.wide{grid-column:auto}.h1{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="launcher">
+  <span class="dot"></span>
+  <div class="label"><div class="title">EIROS Console</div><div id="launcherSub" class="sub">Read-only system view · v__CONSOLE_VERSION__</div></div>
+  <button id="open" class="btn">Fullscreen</button>
+</div>
+<div class="console">
+  <div class="head">
+    <div><div class="h1">EIROS Live Console</div><div id="updated" class="meta">Waiting for EBRIDGE…</div></div>
+    <div class="actions"><button id="refresh" class="btn">Refresh</button><button id="back" class="btn">Back to chat</button></div>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="k">Pulse</div><div id="pulseV" class="v">—</div><div id="pulseS" class="s">Waiting…</div></div>
+    <div class="card"><div class="k">Room</div><div id="roomV" class="v">—</div><div id="roomS" class="s">Waiting…</div></div>
+    <div class="card"><div class="k">Queue</div><div id="queueV" class="v">—</div><div id="queueS" class="s">Waiting…</div></div>
+    <div class="card"><div class="k">Hub</div><div id="hubV" class="v">—</div><div id="hubS" class="s">Waiting…</div></div>
+    <div class="card wide"><div class="k">Latest event</div><div id="eventV" class="v">No event</div><div id="eventS" class="s event">Pulse is quiet.</div></div>
+  </div>
+</div>
+<script>
+window.__EIROS_CONSOLE_BOOTSTRAP__=__EIROS_CONSOLE_BOOTSTRAP_JSON__;
+(()=>{
+  const boot=window.__EIROS_CONSOLE_BOOTSTRAP__||{};
+  const openBtn=document.getElementById('open');
+  const backBtn=document.getElementById('back');
+  const refreshBtn=document.getElementById('refresh');
+  const updated=document.getElementById('updated');
+  const launcherSub=document.getElementById('launcherSub');
+  const ids=['pulseV','pulseS','roomV','roomS','queueV','queueS','hubV','hubS','eventV','eventS'];
+  const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
+  let mode='inline';let timer=null;let busy=false;let armed=false;
+  const text=v=>String(v??'');
+  const unwrap=v=>v?.structuredContent||v?.result?.structuredContent||v?.mcp_tool_result?.structuredContent||v||{};
+  function setClass(node,c){if(!node)return;node.classList.remove('good','warn','bad');if(c)node.classList.add(c)}
+  async function callTool(name,args){for(const h of [window.openai,window.mcp])if(h&&typeof h.callTool==='function')return h.callTool(name,args||{});throw new Error('bridge unavailable')}
+  async function rawMode(next){return new Promise((resolve,reject)=>{const id='eiros-console-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);let done=false;const finish=(ok,v)=>{if(done)return;done=true;clearTimeout(t);window.removeEventListener('message',on);ok?resolve(v):reject(v)};const on=e=>{const m=e.data||{};if(e.source!==window.parent||m.id!==id)return;m.error?finish(false,new Error(m.error.message||'display mode rejected')):finish(true,m.result||{})};const t=setTimeout(()=>finish(false,new Error('display mode timeout')),2500);window.addEventListener('message',on);window.parent.postMessage({jsonrpc:'2.0',id,method:'ui/request-display-mode',params:{mode:next}},'*')})}
+  async function requestMode(next){let out=null;for(const h of [window.openai,window.mcp])if(h&&typeof h.requestDisplayMode==='function'){try{out=await h.requestDisplayMode({mode:next});break}catch(e){}}if(!out)out=await rawMode(next);applyMode(String(out?.mode||next));return out}
+  function applyMode(next){mode=String(next||'inline');document.body.classList.toggle('fullscreen',mode==='fullscreen');if(mode==='fullscreen'){schedule(50)}else{clearTimeout(timer);armed=false}}
+  async function enter(){openBtn.disabled=true;armed=true;try{await requestMode('fullscreen')}catch(e){armed=false;launcherSub.textContent='Fullscreen unavailable · '+text(e&&e.message||e)}finally{openBtn.disabled=false}}
+  async function leave(){armed=false;try{await requestMode('inline')}catch(e){applyMode('inline')}}
+  function schedule(ms=3000){clearTimeout(timer);timer=setTimeout(refresh,ms)}
+  async function refresh(){if(mode!=='fullscreen'||busy)return;busy=true;updated.textContent='Refreshing live state…';try{
+    const [pRaw,rRaw,qRaw,hRaw]=await Promise.all([
+      callTool('pulse_status',{limit:20,channel:text(boot.channel||'default')}),
+      callTool('room_snapshot',{project_id:'eiros-hub',thread_id:'first-contact',limit:30,after_seq:0}),
+      callTool('queue_status',{events:10}),
+      callTool('hub_status',{})
+    ]);
+    const p=unwrap(pRaw),r=unwrap(rRaw),q=unwrap(qRaw),h=unwrap(hRaw);
+    const events=Array.isArray(p.events)?p.events:[];const pending=events.filter(e=>!['acked','cancelled'].includes(text(e.status))).length;const leader=p.leader||null;
+    el.pulseV.textContent=leader?'LIVE':'IDLE';setClass(el.pulseV,leader?'good':'warn');el.pulseS.textContent='pending '+pending+' · seq '+text(p.latest_seq||'—');
+    const participants=Array.isArray(r.participants)?r.participants:(Array.isArray(r.agents)?r.agents:[]);const messages=Array.isArray(r.messages)?r.messages:[];
+    el.roomV.textContent=participants.length?text(participants.length):'READY';setClass(el.roomV,'good');el.roomS.textContent='participants '+participants.length+' · messages '+messages.length;
+    const tasks=Array.isArray(q.tasks)?q.tasks:[];const active=tasks.filter(t=>!['completed','failed','cancelled'].includes(text(t.status))).length;
+    el.queueV.textContent=text(active);setClass(el.queueV,active?'warn':'good');el.queueS.textContent=active?'active tasks':'queue clear';
+    const agents=h.agents&&typeof h.agents==='object'?Object.values(h.agents):(Array.isArray(h.participants)?h.participants:[]);const online=agents.filter(a=>text(a.status).startsWith('online')||Number(a.active_session_count||0)>0).length;
+    el.hubV.textContent=text(online);setClass(el.hubV,online?'good':'warn');el.hubS.textContent='online · total '+agents.length;
+    const latest=events.slice().sort((a,b)=>Number(b.seq||0)-Number(a.seq||0))[0];
+    if(latest){el.eventV.textContent='#'+text(latest.seq||'?')+' · '+text(latest.status||'pending');el.eventS.textContent=text(latest.text||latest.source||'Event received')}else{el.eventV.textContent='No event';el.eventS.textContent='Pulse is quiet.'}
+    updated.textContent='EBRIDGE connected · '+new Date().toLocaleTimeString();
+  }catch(e){updated.textContent='Console degraded · '+text(e&&e.message||e);el.pulseV.textContent='OFFLINE';setClass(el.pulseV,'bad')}finally{busy=false;if(mode==='fullscreen')schedule(3000)}}
+  openBtn.addEventListener('click',enter);backBtn.addEventListener('click',leave);refreshBtn.addEventListener('click',()=>schedule(0));
+  window.addEventListener('message',e=>{if(e.source!==window.parent)return;const m=e.data||{};if(m.method==='ui/notifications/host-context-changed'){const next=String(m.params?.displayMode||m.params?.hostContext?.displayMode||'inline');applyMode(next)}});
+  window.addEventListener('openai:set_globals',()=>{const next=String(window.openai?.displayMode||window.mcp?.displayMode||'inline');applyMode(next)});
+  try{window.parent.postMessage({jsonrpc:'2.0',id:'console-init-'+Date.now(),method:'ui/initialize',params:{version:'1.0',capabilities:['tools/call'],appCapabilities:{availableDisplayModes:['inline','fullscreen']}}},'*')}catch(e){}
+  applyMode(String(window.openai?.displayMode||window.mcp?.displayMode||'inline'));
+})();
+</script>
+</body>
+</html>

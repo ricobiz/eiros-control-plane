@@ -44,7 +44,12 @@ def main():
  assert server_v2.ROOM_LEGACY_V94_LOCALWAKE_URI == "ui://eiros/collab-room-v9-4-localwake.html"
  assert server_v2.ROOM_VERSION in server_v2.room_resource_legacy_v94_localwake()
  source=(ROOT/"runtime"/"server_v2.py").read_text()
- assert 'call open_collab_room as the only UI-opening tool' in source
+ assert 'call open_collab_room as the only UI-opening tool' not in source
+ assert 'EIROS CONNECTOR BOOT PROTOCOL v1.0' in source
+ assert 'If no live Wake Listener or live Pulse leader exists, call open_pulse exactly once.' in source
+ assert 'Never call close_eiros_widgets automatically.' in source
+ assert 'Open Room only after Rico explicitly asks for Room' in source
+ assert 'Open Room only after Rico explicitly asks for Room' in source
  assert '"openai/outputTemplate": ROOM_URI' in source
  assert 'compatibility_alias' in source and 'open_pulse->open_collab_room' in source
  assert '"resume_context": resume' in source and 'reason="room_reconnected"' in source

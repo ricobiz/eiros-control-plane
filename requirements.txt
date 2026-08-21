@@ -13,3 +13,6 @@ asyncio
 structlog
 prometheus-client
 playwright
+
+# Remote mastering engine
+numpy

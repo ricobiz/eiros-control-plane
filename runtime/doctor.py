@@ -23,8 +23,13 @@ def run_doctor(offline: bool = False) -> dict[str, Any]:
     checks.append(item("instance_config", bool(config.get("instance_id")), "critical", {
         "path": str(CONFIG_FILE), "instance_id": config.get("instance_id")
     }))
-    checks.append(item("widget_domain", bool(config.get("widget_domain")), "warning", {
-        "configured": bool(config.get("widget_domain"))
+    widget_domain = str(config.get("widget_domain") or "").strip()
+    custom_origin_enabled = bool(widget_domain) and os.environ.get("EIROS_ENABLE_CUSTOM_WIDGET_DOMAIN", "").strip().lower() in {"1", "true", "yes"}
+    checks.append(item("widget_domain", True, "info", {
+        "configured": bool(widget_domain),
+        "enabled": custom_origin_enabled,
+        "mode": "custom_origin" if custom_origin_enabled else "chatgpt_managed_sandbox",
+        "value": widget_domain or None,
     }))
 
     paths = (DATA_ROOT, RUNTIME_DIR, LOG_DIR, TASK_DIR, MEMORY_DIR)
@@ -62,6 +67,27 @@ def run_doctor(offline: bool = False) -> dict[str, Any]:
             worker_details = {"error": f"{type(exc).__name__}: {exc}"}
     checks.append(item("worker", worker_ok, "critical" if not offline else "info", worker_details))
 
+    sam_ok = offline
+    sam_details: dict[str, Any] = {"offline_check": offline}
+    if not offline:
+        try:
+            sam_heartbeat = json.loads((RUNTIME_DIR / "sam-heartbeat.json").read_text(encoding="utf-8"))
+            sam_pid = int((RUNTIME_DIR / "sam.pid").read_text(encoding="utf-8").strip())
+            sam_age = max(0, int(time.time()) - int(sam_heartbeat.get("time", 0)))
+            sam_alive = os.path.exists(f"/proc/{sam_pid}")
+            sam_ok = sam_alive and sam_age <= 20 and sam_heartbeat.get("status") not in {"error", "stopped"}
+            sam_details = {
+                "pid": sam_pid,
+                "alive": sam_alive,
+                "heartbeat_age_seconds": sam_age,
+                "status": sam_heartbeat.get("status"),
+                "wake_ready_now": bool(sam_heartbeat.get("wake_ready_now")),
+            }
+        except Exception as exc:
+            sam_ok = False
+            sam_details = {"error": f"{type(exc).__name__}: {exc}"}
+    checks.append(item("sam_supervisor", sam_ok, "critical" if not offline else "info", sam_details))
+
     disk = shutil.disk_usage(DATA_ROOT)
     checks.append(item("disk_free", disk.free >= 512 * 1024 * 1024, "warning", {"free_bytes": disk.free}))
 
@@ -70,6 +96,7 @@ def run_doctor(offline: bool = False) -> dict[str, Any]:
         CODE_ROOT / "runtime/worker.py",
         CODE_ROOT / "runtime/queue.py",
         CODE_ROOT / "runtime/events.py",
+        CODE_ROOT / "runtime/sam.py",
         CODE_ROOT / "runtime/pulse_widget.html",
     ]
     missing = [str(path) for path in required if not path.is_file()]

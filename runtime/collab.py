@@ -640,6 +640,11 @@ def session_heartbeat(
     host: str = "native-chat",
     widget_version: str = "",
     activity: str = "online",
+    widget_role: str = "",
+    bundle_id: str = "",
+    pair_protocol: str = "",
+    pair_ack: str = "",
+    expected_peer: str = "",
 ) -> dict[str, Any]:
     identity = normalize_agent(agent_id)
     require_bootstrapped(identity)
@@ -664,11 +669,18 @@ def session_heartbeat(
             for key, value in sessions.items()
             if timestamp - int((value or {}).get("last_seen", 0)) <= 180
         }
+        previous = dict(sessions.get(session) or {})
         sessions[session] = {
+            **previous,
             "session_id": session,
             "host": str(host or "native-chat")[:80],
             "widget_version": str(widget_version or "")[:80],
-            "activity": str(activity or "online")[:40],
+            "activity": str(activity or "online")[:80],
+            "widget_role": str(widget_role or previous.get("widget_role") or "")[:40],
+            "bundle_id": str(bundle_id or previous.get("bundle_id") or "")[:120],
+            "pair_protocol": str(pair_protocol or previous.get("pair_protocol") or "")[:120],
+            "pair_ack": str(pair_ack or previous.get("pair_ack") or "")[:160],
+            "expected_peer": str(expected_peer or previous.get("expected_peer") or "")[:40],
             "last_seen": timestamp,
         }
         current["sessions"] = sessions
@@ -988,14 +1000,19 @@ def release(agent_id: str, message_id: str, reason: str = "") -> dict[str, Any]:
 
 
 
-def retire_agent_sessions(agent_id: str, dry_run: bool = False) -> dict[str, Any]:
-    """Retire UI sessions for one participant without touching any messages."""
+def retire_agent_sessions(agent_id: str, dry_run: bool = False, host_filter: str = "") -> dict[str, Any]:
+    """Retire UI sessions for one participant, optionally limited to one exact host."""
     identity = normalize_agent(agent_id)
     timestamp = now()
 
     def apply(store: dict[str, Any], mutate: bool) -> dict[str, Any]:
         agent = store.get("agents", {}).get(identity) or {}
         sessions = dict(agent.get("sessions") or {})
+        selected = {
+            session_id: session
+            for session_id, session in sessions.items()
+            if not host_filter or str((session or {}).get("host") or "") == str(host_filter)
+        }
         retired = [
             {
                 "session_id": session_id,
@@ -1004,11 +1021,12 @@ def retire_agent_sessions(agent_id: str, dry_run: bool = False) -> dict[str, Any
                 "activity": (session or {}).get("activity"),
                 "age_seconds": max(0, timestamp - int((session or {}).get("last_seen", 0))),
             }
-            for session_id, session in sessions.items()
+            for session_id, session in selected.items()
         ]
-        if mutate and sessions:
-            agent["sessions"] = {}
-            agent["active_session_count"] = 0
+        if mutate and selected:
+            remaining = {session_id: session for session_id, session in sessions.items() if session_id not in selected}
+            agent["sessions"] = remaining
+            agent["active_session_count"] = len(remaining)
             store["agents"][identity] = agent
 
         released_claims: list[dict[str, Any]] = []
