@@ -55,7 +55,8 @@ def test_operator_service_is_root_only_and_runs_the_operator_module() -> None:
     text = service.read_text(encoding="utf-8")
     assert "User=root" in text
     assert "WorkingDirectory=/opt/eiros-control-plane" in text
-    assert "runtime.claude_operator_mcp_server" in text
+    assert "deploy/claude_operator_runtime.py" in text
+    assert "Environment=EIROS_DATA_DIR=/opt/eiros-control-plane" in text
 
 
 def test_operator_route_generator_uses_secret_exact_capability_route() -> None:

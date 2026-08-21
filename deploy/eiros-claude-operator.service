@@ -9,7 +9,8 @@ User=root
 Group=root
 WorkingDirectory=/opt/eiros-control-plane
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/eiros-control-plane/venv/bin/python -m runtime.claude_operator_mcp_server
+Environment=EIROS_DATA_DIR=/opt/eiros-control-plane
+ExecStart=/opt/eiros-control-plane/venv/bin/python deploy/claude_operator_runtime.py
 Restart=always
 RestartSec=3
 TimeoutStopSec=15
