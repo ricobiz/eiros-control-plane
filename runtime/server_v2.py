@@ -19,10 +19,13 @@ from runtime.config import CODE_ROOT, DATA_ROOT as ROOT, load_config
 from runtime.version import __version__
 from runtime import protocol as collab_protocol
 from runtime.sum_controller import SumControllerStore
+from runtime import room_telemetry
 
 STATE_FILE = ROOT / ".eiros-state.json"
-ROOM_TELEMETRY_FILE = ROOT / "runtime" / "room_telemetry.json"
-ROOM_TELEMETRY_LOCK = ROOT / "runtime" / "room_telemetry.lock"
+# Kept as aliases so any existing importer still resolves; the shared
+# runtime.room_telemetry module owns both paths and the write contract.
+ROOM_TELEMETRY_FILE = room_telemetry.TELEMETRY_FILE
+ROOM_TELEMETRY_LOCK = room_telemetry.LOCK_FILE
 BRAIN_INBOX_FILE = ROOT / "runtime" / "brain-inbox.json"
 SERVER_VERSION = __version__
 PULSE_URI = "ui://eiros/pulse-lite-v4.html"
@@ -122,7 +125,7 @@ if str(CODE_ROOT) not in sys.path:
     sys.path.insert(0, str(CODE_ROOT))
 
 from runtime import queue as queue_engine  # noqa: E402
-from runtime import events as event_engine  # noqa: E402
+from runtime import events as event_engine
 from runtime import collab as collab_engine  # noqa: E402
 from runtime import widget_pairing  # noqa: E402
 from runtime import widget_blackbox  # noqa: E402
@@ -1596,54 +1599,19 @@ def project_state_set(
 
 
 def _read_room_telemetry() -> dict[str, Any]:
-    try:
-        raw = json.loads(ROOM_TELEMETRY_FILE.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {"schema_version": 1, "widgets": {}}
-    except FileNotFoundError:
-        return {"schema_version": 1, "widgets": {}}
-    except Exception as exc:
-        return {"schema_version": 1, "widgets": {}, "read_error": str(exc)}
+    return room_telemetry.read()
 
 
 def _write_room_telemetry(store: dict[str, Any]) -> None:
-    ROOM_TELEMETRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    store["schema_version"] = 1
-    store["updated_at"] = int(time.time())
-    widgets = store.setdefault("widgets", {})
-    cutoff = int(time.time()) - 3600
-    for key in list(widgets.keys()):
-        if int((widgets.get(key) or {}).get("updated_at", 0)) < cutoff:
-            widgets.pop(key, None)
-    fd, tmp = tempfile.mkstemp(prefix="room-telemetry-", suffix=".json", dir=str(ROOM_TELEMETRY_FILE.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(store, handle, ensure_ascii=False, indent=2, sort_keys=True)
-        os.replace(tmp, ROOM_TELEMETRY_FILE)
-    finally:
-        Path(tmp).unlink(missing_ok=True) if Path(tmp).exists() else None
+    room_telemetry._write(store)
 
 
 def _room_telemetry_update_locked(widget_id: str, item: dict[str, Any]) -> None:
-    """Atomic read-modify-write for telemetry under an exclusive file lock."""
-    ROOM_TELEMETRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with ROOM_TELEMETRY_LOCK.open("a+", encoding="utf-8") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        try:
-            store = _read_room_telemetry()
-            store.setdefault("widgets", {})[widget_id] = item
-            _write_room_telemetry(store)
-        finally:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    room_telemetry.update_locked(widget_id, item)
 
 
 def _compact_json(value: Any, max_chars: int = 6000) -> Any:
-    try:
-        text = json.dumps(value, ensure_ascii=False)
-        if len(text) <= max_chars:
-            return value
-        return {"truncated": True, "text": text[:max_chars]}
-    except Exception:
-        return str(value)[:max_chars]
+    return room_telemetry.compact(value, max_chars)
 
 
 @mcp.tool(
