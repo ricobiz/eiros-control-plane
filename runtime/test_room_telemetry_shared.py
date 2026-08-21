@@ -142,3 +142,32 @@ def test_second_uid_can_write_after_the_first():
         assert set(state["widgets"]) == {"by-root", "by-eiros", "by-root-2"}
     finally:
         shutil.rmtree(base, ignore_errors=True)
+
+
+def test_mount_chain_links_tool_call_to_resource_fetch():
+    """A mount that is requested but never served must stay visibly pending."""
+    mount_id = room_telemetry.open_mount("open_claude_pulse", "ui://x", "v6")
+    rows = room_telemetry.read()["widgets"]
+    assert rows[mount_id]["status"] == "mount-requested:wait", (
+        "an unserved mount reads as success, which is the state we are trying to detect"
+    )
+
+    served = room_telemetry.mark_served("ui://x")
+    assert served == mount_id, "the fetch did not link back to the recorded tool call"
+    row = room_telemetry.read()["widgets"][mount_id]
+    assert row["status"] == "resource-served:ok"
+    assert row["snapshot"]["served_at"] > 0
+
+
+def test_fetch_without_a_tool_call_is_recorded_not_dropped():
+    """A cached card re-hydrating has no tool call behind it; that is a fact worth keeping."""
+    orphan = room_telemetry.mark_served("ui://never-requested")
+    row = room_telemetry.read()["widgets"][orphan]
+    assert row["status"] == "resource-served:no-recorded-tool-call"
+
+
+def test_a_second_fetch_does_not_steal_an_already_served_mount():
+    mount_id = room_telemetry.open_mount("open_claude_pulse", "ui://x", "v6")
+    assert room_telemetry.mark_served("ui://x") == mount_id
+    second = room_telemetry.mark_served("ui://x")
+    assert second != mount_id, "the second fetch reused a mount that was already served"

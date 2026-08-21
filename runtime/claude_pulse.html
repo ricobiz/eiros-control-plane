@@ -51,7 +51,11 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
   const agentId=String(boot.agentId||'claude');
   const projectId=String(boot.projectId||'eiros-hub');
   const threadId=String(boot.threadId||'first-contact');
-  const widgetId='claude-pulse-v6-'+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID().slice(0,18):String(Date.now()));
+  // The server stamps the mount id into the bootstrap, so every stage below
+  // joins onto the mount-requested / resource-served rows already in the store
+  // and the whole path reads as one chain.
+  const mountId=String(boot.mountId||'');
+  const widgetId=(mountId?mountId+'-w':'claude-pulse-v6-')+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID().slice(0,8):String(Date.now()));
   set('version','v'+pulseVersion);
 
   // ---------------------------------------------------------------------
@@ -120,6 +124,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     const snapshot=Object.assign({
       boot_trace:trace.map(t=>t.stage+':'+t.state+(t.detail?'('+t.detail+')':'')),
       agent_id:agentId,
+      mount_id:mountId,
       pulse_version:pulseVersion,
       host_bridge:(window.mcp?'mcp':'')+(window.openai?'openai':'')||'none',
       call_tool_native:typeof hostBridge().callTool==='function',

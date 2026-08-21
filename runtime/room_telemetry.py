@@ -155,6 +155,59 @@ def update_locked(widget_id: str, item: dict[str, Any]) -> None:
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
+MOUNT_KIND = "claude-pulse-mount"
+
+
+def open_mount(tool_name: str, uri: str, version: str, kind: str = MOUNT_KIND) -> str:
+    """Record that a mount tool was called, and return the mount id.
+
+    The widget's own stages carry this id, so one row chain covers the whole
+    path: the model called the tool, the host fetched the resource, the script
+    ran, the first tool call landed. Without the first two links a silent
+    failure before any JavaScript runs is indistinguishable from the tool never
+    having been called.
+    """
+    mount_id = f"mount-{int(time.time())}-{os.urandom(4).hex()}"
+    record(
+        widget_id=mount_id,
+        widget_kind=kind,
+        status="mount-requested:wait",
+        snapshot={"tool_name": tool_name, "uri": uri, "version": version, "served_at": 0},
+    )
+    return mount_id
+
+
+def mark_served(uri: str, kind: str = MOUNT_KIND) -> str:
+    """Stamp the newest unserved mount row for this uri. Returns its mount id.
+
+    A fetch with no matching row means the host requested the resource without
+    a recorded tool call - a cached card re-hydrating, typically - so it is
+    recorded under its own id rather than dropped.
+    """
+    now = int(time.time())
+    rows = [
+        item for item in (read().get("widgets") or {}).values()
+        if item.get("widget_kind") == kind
+        and str((item.get("snapshot") or {}).get("uri") or "") == uri
+        and not int((item.get("snapshot") or {}).get("served_at") or 0)
+    ]
+    rows.sort(key=lambda item: int(item.get("updated_at", 0)), reverse=True)
+    if rows:
+        row = rows[0]
+        snapshot = dict(row.get("snapshot") or {})
+        snapshot["served_at"] = now
+        record(widget_id=row["widget_id"], widget_kind=kind, status="resource-served:ok", snapshot=snapshot)
+        return str(row["widget_id"])
+    orphan = f"served-{now}-{os.urandom(4).hex()}"
+    record(
+        widget_id=orphan,
+        widget_kind=kind,
+        status="resource-served:no-recorded-tool-call",
+        snapshot={"tool_name": "resource_fetch_without_recorded_tool_call", "uri": uri, "served_at": now},
+    )
+    return orphan
+
+
 def recent(limit: int = 20) -> list[dict[str, Any]]:
     widgets = list((read().get("widgets") or {}).values())
     widgets.sort(key=lambda item: int(item.get("updated_at", 0)), reverse=True)

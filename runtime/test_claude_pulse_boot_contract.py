@@ -65,12 +65,34 @@ def test_resource_substitutes_bootstrap_and_identifies_claude():
 
 
 @pytest.mark.parametrize("uri_attr", ["CLAUDE_PULSE_LEGACY_URI_V5", "CLAUDE_PULSE_LEGACY_URI", "CLAUDE_PULSE_LEGACY_URI_V3"])
-def test_previous_uris_still_resolve(uri_attr):
-    """A bumped URI must not 404 the cards already mounted in someone's chat."""
+def test_previous_uris_still_serve_the_current_widget(uri_attr):
+    """A bumped URI must not 404 the cards already mounted in someone's chat.
+
+    Not asserting byte equality: each fetch opens its own mount row and stamps
+    its own mountId into the bootstrap, so two fetches of the same resource are
+    correctly different. What must hold is that a legacy URI serves the current
+    widget rather than a stale one - the drift that turned WIDGET_TEST_LEGACY_URI
+    into a dead card while its canonical twin became a live listener.
+    """
     assert getattr(claude_server, uri_attr) != claude_server.CLAUDE_PULSE_URI
     suffix = uri_attr.split("_")[-1].lower()
     fn = getattr(claude_server, f"claude_pulse_resource_legacy_{suffix if suffix.startswith('v') else 'v4'}")
-    assert fn() == claude_server.claude_pulse_resource()
+    legacy = fn()
+    current = claude_server.claude_pulse_resource()
+
+    def boot_of(html):
+        start = html.index("window.__EIROS_BOOTSTRAP__=") + len("window.__EIROS_BOOTSTRAP__=")
+        return json.loads(html[start:html.index(";", start)])
+
+    legacy_boot, current_boot = boot_of(legacy), boot_of(current)
+    assert legacy_boot["pulseVersion"] == current_boot["pulseVersion"] == claude_server.CLAUDE_PULSE_VERSION
+    assert legacy_boot["agentId"] == current_boot["agentId"]
+    assert legacy_boot["mountId"] != current_boot["mountId"], "two fetches shared one mount row"
+
+    strip = lambda html, boot: html.replace(boot["mountId"], "")
+    assert strip(legacy, legacy_boot) == strip(current, current_boot), (
+        "the legacy URI serves different markup than the canonical one"
+    )
 
 
 def test_sdk_import_pins_zod():

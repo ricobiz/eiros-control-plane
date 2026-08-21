@@ -527,7 +527,12 @@ def open_collab_room() -> dict[str, Any]:
 )
 def claude_pulse_resource() -> str:
     html = CLAUDE_PULSE_HTML.read_text(encoding="utf-8")
+    try:
+        mount_id = room_telemetry.mark_served(CLAUDE_PULSE_URI)
+    except Exception:
+        mount_id = ""
     bootstrap = {
+        "mountId": mount_id,
         "agentId": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
         "displayName": str(COLLAB_IDENTITY.get("assistant_name") or "Claude"),
         "projectId": "eiros-hub",
@@ -602,8 +607,13 @@ def claude_pulse_resource_legacy_v4() -> str:
 def open_claude_pulse() -> dict[str, Any]:
     status = collab.hub_status()
     agent_id = str(COLLAB_IDENTITY.get("agent_id") or "claude")
+    try:
+        mount_id = room_telemetry.open_mount("open_claude_pulse", CLAUDE_PULSE_URI, CLAUDE_PULSE_VERSION)
+    except Exception:
+        mount_id = ""
     return {
         "ok": True,
+        "mount_id": mount_id,
         "resource_uri": CLAUDE_PULSE_URI,
         "agent_id": agent_id,
         "pulse_version": CLAUDE_PULSE_VERSION,
