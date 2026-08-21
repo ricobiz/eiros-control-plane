@@ -55,3 +55,11 @@ def test_operator_service_runs_live_runtime_runner() -> None:
     service = Path('deploy/eiros-claude-operator.service').read_text(encoding='utf-8')
     assert 'Environment=EIROS_DATA_DIR=/opt/eiros-control-plane' in service
     assert 'deploy/claude_operator_runtime.py' in service
+
+
+def test_operator_allows_claude_web_origins_without_disabling_rebinding_protection() -> None:
+    text = RUNNER.read_text(encoding='utf-8')
+    assert 'TransportSecuritySettings' in text
+    assert 'enable_dns_rebinding_protection=True' in text
+    assert 'https://claude.ai' in text
+    assert 'https://claude.com' in text

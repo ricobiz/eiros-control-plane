@@ -19,6 +19,7 @@ os.environ.setdefault('EIROS_DATA_DIR', str(ROOT))
 sys.path.insert(0, str(LIVE_ROOT))
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
+from mcp.server.transport_security import TransportSecuritySettings  # noqa: E402
 from runtime import server_v2 as live_server  # noqa: E402
 
 
@@ -51,6 +52,20 @@ mcp = FastMCP(
     json_response=True,
     host='127.0.0.1',
     port=8796,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=['127.0.0.1', '127.0.0.1:*', 'localhost', 'localhost:*'],
+        allowed_origins=[
+            'https://claude.ai',
+            'https://www.claude.ai',
+            'https://claude.com',
+            'https://www.claude.com',
+            'http://127.0.0.1',
+            'http://127.0.0.1:*',
+            'http://localhost',
+            'http://localhost:*',
+        ],
+    ),
     warn_on_duplicate_tools=False,
     warn_on_duplicate_resources=False,
     warn_on_duplicate_prompts=False,
