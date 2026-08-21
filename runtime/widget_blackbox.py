@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from runtime.config import RUNTIME_DIR
+from runtime.config import RUNTIME_DIR, publish_shared_file
 from runtime import widget_pairing
 
 STATE_FILE = RUNTIME_DIR / "widget-blackbox.json"
@@ -35,7 +35,7 @@ def _atomic_json(path: Path, value: Any) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(name, path)
+        publish_shared_file(name, path)
     finally:
         if os.path.exists(name):
             os.unlink(name)

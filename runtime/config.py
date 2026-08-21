@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import fcntl
+import grp
 import json
 import os
 import socket
+import stat
 import tempfile
 import uuid
 from pathlib import Path
@@ -49,6 +51,50 @@ DEFAULTS: dict[str, Any] = {
         "allow_local_shell_tasks": False,
     },
 }
+
+
+# One data directory is shared by services that run as root (the Claude
+# operator MCP, VPS Ops) and as `eiros` (SAM, the worker, the Room server).
+# tempfile.mkstemp() creates 0600 files owned by whoever is writing, so a
+# single root-side write used to leave shared state root:root 0600 and lock
+# every eiros service out of it - that is how SAM lost config/instance.json
+# and spent twelve hours logging PermissionError while systemd still reported
+# the unit as active. Shared state is therefore always published group-owned
+# by SHARED_GROUP and group-readable.
+SHARED_GROUP = "eiros"
+SHARED_FILE_MODE = 0o640
+
+
+def shared_gid() -> int:
+    """Return the gid every shared state file must be readable by, or -1."""
+    try:
+        return grp.getgrnam(SHARED_GROUP).gr_gid
+    except KeyError:
+        return -1
+
+
+def publish_shared_file(temp_name: str, target: Path, mode: int = SHARED_FILE_MODE) -> None:
+    """Atomically move a freshly written temp file into place, readable by the group.
+
+    The current owner is preserved when the target already exists so that an
+    eiros-written file does not silently become root-owned, and the group is
+    forced back to SHARED_GROUP so the other side can always read it. chown
+    fails for an unprivileged process that does not own the file; that is not
+    fatal, the mode alone still keeps the file readable.
+    """
+    try:
+        existing = target.stat()
+        uid = existing.st_uid
+        mode = stat.S_IMODE(existing.st_mode) | 0o040
+    except FileNotFoundError:
+        uid = -1
+    gid = shared_gid()
+    try:
+        os.chown(temp_name, uid, gid)
+    except (PermissionError, OSError):
+        pass
+    os.chmod(temp_name, mode)
+    os.replace(temp_name, target)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -104,8 +150,7 @@ def ensure_instance_config() -> dict[str, Any]:
                         handle.write(encoded)
                         handle.flush()
                         os.fsync(handle.fileno())
-                    os.chmod(temp_name, 0o600)
-                    os.replace(temp_name, CONFIG_FILE)
+                    publish_shared_file(temp_name, CONFIG_FILE)
                 finally:
                     if os.path.exists(temp_name):
                         os.unlink(temp_name)
