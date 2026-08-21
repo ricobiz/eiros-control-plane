@@ -15,12 +15,14 @@ from runtime import events as event_engine
 from runtime.config import CONFIG_DIR, load_config
 from runtime.version import __version__ as SERVER_VERSION
 from runtime import protocol as collab_protocol
+from runtime import room_telemetry
 
 REMOTE_CONFIG = CONFIG_DIR / "claude-remote.json"
-CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v5-wake-telemetry.html"
+CLAUDE_PULSE_URI = "ui://eiros/claude-pulse-v6-boot-trace.html"
+CLAUDE_PULSE_LEGACY_URI_V5 = "ui://eiros/claude-pulse-v5-wake-telemetry.html"
 CLAUDE_PULSE_LEGACY_URI = "ui://eiros/claude-pulse-v4-sdk-wake.html"
 CLAUDE_PULSE_LEGACY_URI_V3 = "ui://eiros/claude-pulse-v3.html"
-CLAUDE_PULSE_VERSION = "0.5.0-wake-telemetry"
+CLAUDE_PULSE_VERSION = "0.6.0-boot-trace"
 CLAUDE_PULSE_HTML = Path(__file__).with_name("claude_pulse.html")
 CLAUDE_INBOX_URI = "ui://eiros/claude-inbox-v1.html"
 CLAUDE_INBOX_VERSION = "0.1.0"
@@ -175,6 +177,38 @@ def room_heartbeat(
 ) -> dict[str, Any]:
     """Refresh one active room or pulse session for presence indicators."""
     return collab.session_heartbeat(agent_id, session_id, host, widget_version, activity)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True),
+    meta={"ui": {"visibility": ["app"]}},
+)
+def room_telemetry_update(
+    widget_id: str,
+    widget_kind: str = "claude-pulse",
+    project_id: str = "eiros-hub",
+    thread_id: str = "first-contact",
+    status: str = "unknown",
+    snapshot: dict[str, Any] | None = None,
+    error: str = "",
+) -> dict[str, Any]:
+    """Persist one boot/runtime stage of a Claude-hosted widget.
+
+    This is the only channel that survives a widget which dies before it can
+    do anything else: the host either delivers this call or it does not, and
+    either way the outcome is visible from the VPS afterwards. Read it back
+    with room_telemetry_status on the operator surface.
+    """
+    item = room_telemetry.record(
+        widget_id=widget_id,
+        widget_kind=widget_kind,
+        project_id=project_id,
+        thread_id=thread_id,
+        status=status,
+        snapshot=snapshot,
+        error=error,
+    )
+    return {"ok": True, "widget_id": item["widget_id"], "status": item["status"], "updated_at": item["updated_at"]}
 
 
 @mcp.tool(
@@ -496,10 +530,29 @@ def claude_pulse_resource() -> str:
     bootstrap = {
         "agentId": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
         "displayName": str(COLLAB_IDENTITY.get("assistant_name") or "Claude"),
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
         "serverVersion": SERVER_VERSION,
         "pulseVersion": CLAUDE_PULSE_VERSION,
     }
     return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
+@mcp.resource(
+    CLAUDE_PULSE_LEGACY_URI_V5,
+    name="EIROS Claude Pulse Legacy v5",
+    title="EIROS Claude Addressed Pulse",
+    description="Backward-compatible resource for already-mounted Claude Pulse widgets.",
+    mime_type="text/html;profile=mcp-app",
+    meta={
+        "ui": {
+            "prefersBorder": True,
+            "csp": {"connectDomains": ["esm.sh"], "resourceDomains": ["esm.sh"]},
+        }
+    },
+)
+def claude_pulse_resource_legacy_v5() -> str:
+    return claude_pulse_resource()
 
 
 @mcp.resource(

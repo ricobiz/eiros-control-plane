@@ -5,7 +5,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-*{box-sizing:border-box}body{margin:0;background:#17120d;color:#fff4e8}.card{padding:16px;border:1px solid #b86a2f;border-radius:18px;background:linear-gradient(145deg,#21160f,#3a2112)}.top{display:flex;align-items:center;justify-content:space-between;gap:12px}.title{font-weight:800}.version{font-size:10px;opacity:.65;margin-left:6px}.badge{font-size:11px;padding:5px 9px;border-radius:999px;background:#4a2a17;border:1px solid #b86a2f}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.box{padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f}.box b{display:block;font-size:16px}.box span{font-size:10px;opacity:.72}.message,.status{margin-top:10px;padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f;white-space:pre-wrap;font-size:12px;line-height:1.45}.message{max-height:160px;overflow:auto}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}button{padding:9px 12px;border-radius:10px;border:1px solid #c47738;background:#6f3a17;color:#fff4e8;font-weight:700}
+*{box-sizing:border-box}
+body{margin:0;background:#17120d;color:#fff4e8}
+.card{padding:16px;border:1px solid #b86a2f;border-radius:18px;background:linear-gradient(145deg,#21160f,#3a2112)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.title{font-weight:800}
+.version{font-size:10px;opacity:.65;margin-left:6px}
+.badge{font-size:11px;padding:5px 9px;border-radius:999px;background:#4a2a17;border:1px solid #b86a2f}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.box{padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f}
+.box b{display:block;font-size:16px}
+.box span{font-size:10px;opacity:.72}
+.message,.status{margin-top:10px;padding:10px;border-radius:11px;background:#160f0b;border:1px solid #68401f;white-space:pre-wrap;font-size:12px;line-height:1.45}
+.message{max-height:160px;overflow:auto}
+.ladder{margin-top:10px;padding:10px;border-radius:11px;background:#0f0a07;border:1px solid #68401f;font-size:11px;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;max-height:210px;overflow:auto}
+.ladder div{display:flex;gap:8px;align-items:baseline}
+.ladder .st{flex:1;min-width:0;overflow-wrap:anywhere}
+.ladder .mk{width:1.1em;flex:none;text-align:center;font-weight:800}
+.ok{color:#7fd18a}.bad{color:#ff8f7a}.wait{color:#e8c07a}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+button{padding:9px 12px;border-radius:10px;border:1px solid #c47738;background:#6f3a17;color:#fff4e8;font-weight:700}
 </style>
 </head>
 <body>
@@ -16,36 +35,52 @@
     <div class="box"><b id="pending">0</b><span>pending</span></div>
     <div class="box"><b id="attempts">0</b><span>delivery attempts</span></div>
   </div>
+  <div id="ladder" class="ladder"></div>
   <div id="message" class="message">No addressed calls yet.</div>
-  <div class="row"><button id="reconnect">Reconnect</button><button id="pause">Pause</button></div>
+  <div class="row"><button id="reconnect">Reconnect</button><button id="pause">Pause</button><button id="copy">Copy boot trace</button></div>
   <div id="status" class="status">HTML rendered. Starting Claude host bridge…</div>
 </div>
 <script>
 window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
-import('https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2').then(mod=>{window.__EIROS_APP_SDK__=mod}).catch(err=>{window.__EIROS_APP_SDK_ERROR__=String(err&&err.message||err)});
 (function(){
+  'use strict';
   const boot=window.__EIROS_BOOTSTRAP__||{};
-  const host=window.mcp||window.openai||{};
   const $=id=>document.getElementById(id);
-  const set=(id,v)=>{const node=$(id);if(node)node.textContent=String(v)};
-  const clientId='claude-pulse-'+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now());
-  let paused=false;
-  let timer=null;
-  let busy=false;
-  let attempts=0;
-  let lastEmitted='';
-  let rpcCounter=1;
-  let lastHeartbeat=0;
+  const set=(id,v)=>{const n=$(id);if(n)n.textContent=String(v)};
   const pulseVersion=String(boot.pulseVersion||'unknown');
   const agentId=String(boot.agentId||'claude');
+  const projectId=String(boot.projectId||'eiros-hub');
+  const threadId=String(boot.threadId||'first-contact');
+  const widgetId='claude-pulse-v6-'+((globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID().slice(0,18):String(Date.now()));
   set('version','v'+pulseVersion);
-  const pendingRpc=new Map();
 
+  // ---------------------------------------------------------------------
+  // Boot trace.
+  //
+  // This widget has never once registered a session on the VPS, so we do not
+  // know whether it fails to mount, fails to reach a host bridge, fails on the
+  // first tool call, or fails only at sendMessage. Every stage below is
+  // reported through TWO independent readouts: room_telemetry_update to the
+  // server (authoritative, survives the tab closing) and an on-screen ladder
+  // (needs no working tool call, so it still reads on a screenshot when the
+  // connector itself is missing). One of the two always survives.
+  // ---------------------------------------------------------------------
+  const trace=[];
+  function paintLadder(){
+    $('ladder').innerHTML=trace.map(t=>{
+      const cls=t.state==='ok'?'ok':t.state==='fail'?'bad':'wait';
+      const mark=t.state==='ok'?'✓':t.state==='fail'?'✗':'·';
+      return '<div><span class="mk '+cls+'">'+mark+'</span><span class="st '+cls+'">'+t.stage+(t.detail?' — '+t.detail:'')+'</span></div>';
+    }).join('');
+    $('ladder').scrollTop=$('ladder').scrollHeight;
+  }
+  let rpcCounter=1;
+  const pendingRpc=new Map();
   function rpcRequest(method,params){
     return new Promise((resolve,reject)=>{
       const id='eiros-claude-'+Date.now()+'-'+(rpcCounter++);
-      const timeout=setTimeout(()=>{pendingRpc.delete(id);reject(new Error(method+' timeout'))},15000);
-      pendingRpc.set(id,{resolve:value=>{clearTimeout(timeout);resolve(value)},reject:error=>{clearTimeout(timeout);reject(error)}});
+      const t=setTimeout(()=>{pendingRpc.delete(id);reject(new Error(method+' timeout'))},15000);
+      pendingRpc.set(id,{resolve:v=>{clearTimeout(t);resolve(v)},reject:e=>{clearTimeout(t);reject(e)}});
       window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
     });
   }
@@ -53,81 +88,191 @@ import('https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2').then(mod=>{window.
     if(event.source!==window.parent)return;
     const msg=event.data;
     if(!msg||msg.jsonrpc!=='2.0'||!msg.id)return;
-    const pending=pendingRpc.get(msg.id);
-    if(!pending)return;
+    const p=pendingRpc.get(msg.id);
+    if(!p)return;
     pendingRpc.delete(msg.id);
-    if(msg.error)pending.reject(new Error(msg.error.message||'RPC error'));else pending.resolve(msg.result);
+    if(msg.error)p.reject(new Error(msg.error.message||'RPC error'));else p.resolve(msg.result);
   },{passive:true});
 
+  function hostBridge(){return window.mcp||window.openai||{}}
   async function callTool(name,args){
+    const host=hostBridge();
     if(typeof host.callTool==='function')return host.callTool(name,args||{});
     return rpcRequest('tools/call',{name,arguments:args||{}});
   }
-  function unwrap(value){
-    if(!value)return{};
-    return value.structuredContent||(value.result&&value.result.structuredContent)||(value.mcp_tool_result&&value.mcp_tool_result.structuredContent)||value;
-  }
-  let lastWakeMode='none';
-  async function heartbeat(activity='online'){
-    const now=Date.now();
-    if(now-lastHeartbeat<4500)return;
-    lastHeartbeat=now;
-    try{
-      await callTool('room_heartbeat',{
-        agent_id:agentId,session_id:clientId,host:'claude-pulse',widget_version:pulseVersion,activity:activity+'·wake:'+lastWakeMode
-      });
-    }catch{}
+  function unwrap(v){
+    if(!v)return{};
+    return v.structuredContent||(v.result&&v.result.structuredContent)||(v.mcp_tool_result&&v.mcp_tool_result.structuredContent)||v;
   }
 
-  let sdkApp=null;
-  let sdkAppConnecting=null;
+  // Telemetry is itself a tool call, so it can only report while the bridge
+  // works. Failures are swallowed on purpose: the ladder is the fallback and
+  // the widget must never die because it could not narrate itself.
+  let telemetryAlive=null;
+  function stage(name,state,detail,extra){
+    const entry={stage:name,state:state||'wait',detail:String(detail||'').slice(0,160)};
+    trace.push(entry);
+    paintLadder();
+    const snapshot=Object.assign({
+      boot_trace:trace.map(t=>t.stage+':'+t.state+(t.detail?'('+t.detail+')':'')),
+      agent_id:agentId,
+      pulse_version:pulseVersion,
+      host_bridge:(window.mcp?'mcp':'')+(window.openai?'openai':'')||'none',
+      call_tool_native:typeof hostBridge().callTool==='function',
+      user_agent:String(navigator.userAgent||'').slice(0,180),
+      visibility:document.visibilityState
+    },extra||{});
+    callTool('room_telemetry_update',{
+      widget_id:widgetId,widget_kind:'claude-pulse',project_id:projectId,thread_id:threadId,
+      status:name+':'+(state||'wait'),snapshot,error:state==='fail'?String(detail||''):''
+    }).then(()=>{telemetryAlive=true}).catch(()=>{telemetryAlive=false});
+    return entry;
+  }
+  function settle(entry,state,detail){
+    entry.state=state;
+    if(detail)entry.detail=String(detail).slice(0,160);
+    paintLadder();
+    stage(entry.stage+'#'+state,state,detail);
+  }
+
+  stage('html-parsed','ok','resource rendered and script executing');
+  stage('host-bridge',(window.mcp||window.openai)?'ok':'fail',
+        (window.mcp?'window.mcp ':'')+(window.openai?'window.openai':'')||'no bridge object exposed');
+
+  $('copy').addEventListener('click',()=>{
+    const text=trace.map(t=>(t.state==='ok'?'OK  ':t.state==='fail'?'FAIL':'... ')+t.stage+(t.detail?' — '+t.detail:'')).join('\n');
+    try{navigator.clipboard.writeText(text)}catch{}
+    set('status','Boot trace copied:\n'+text);
+  });
+
+  // --- stage 1: an unconditional heartbeat BEFORE any other work -----------
+  // The old build only heartbeat after a successful dialog_peek, so a widget
+  // that died on its first tool call left no trace at all. Now presence is
+  // proven first, and everything after it is diagnosable.
+  let heartbeatProven=false;
+  let lastHeartbeat=0;
+  let lastWakeMode='none';
+  async function heartbeat(activity){
+    const now=Date.now();
+    if(heartbeatProven&&now-lastHeartbeat<4500)return;
+    lastHeartbeat=now;
+    await callTool('room_heartbeat',{
+      agent_id:agentId,session_id:widgetId,host:'claude-pulse',
+      widget_version:pulseVersion,activity:(activity||'online')+'·wake:'+lastWakeMode
+    });
+    heartbeatProven=true;
+  }
+
+  // --- stage 2: the App SDK, loaded only after presence is proven ----------
+  let sdkApp=null,sdkAppConnecting=null;
+  async function loadSdk(){
+    const st=stage('sdk-import','wait','importing @modelcontextprotocol/ext-apps from esm.sh');
+    try{
+      const mod=await import('https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2');
+      window.__EIROS_APP_SDK__=mod;
+      settle(st,'ok','module loaded');
+      return mod;
+    }catch(err){
+      settle(st,'fail',String(err&&err.message||err));
+      throw err;
+    }
+  }
   async function getSdkApp(){
     if(sdkApp)return sdkApp;
     if(sdkAppConnecting)return sdkAppConnecting;
     sdkAppConnecting=(async()=>{
-      for(let i=0;i<20 && !window.__EIROS_APP_SDK__ && !window.__EIROS_APP_SDK_ERROR__;i++){
-        await new Promise(r=>setTimeout(r,150));
+      const mod=window.__EIROS_APP_SDK__||await loadSdk();
+      const st=stage('sdk-connect','wait','App.connect()');
+      try{
+        const {App}=mod;
+        const app=new App({name:'EIROS Claude Pulse',version:pulseVersion});
+        await app.connect();
+        sdkApp=app;
+        settle(st,'ok','connected');
+        return app;
+      }catch(err){
+        settle(st,'fail',String(err&&err.message||err));
+        sdkAppConnecting=null;
+        throw err;
       }
-      if(!window.__EIROS_APP_SDK__)throw new Error(window.__EIROS_APP_SDK_ERROR__||'SDK import timed out');
-      const {App}=window.__EIROS_APP_SDK__;
-      const app=new App({name:'EIROS Claude Pulse',version:pulseVersion});
-      await app.connect();
-      sdkApp=app;
-      return app;
     })();
     return sdkAppConnecting;
   }
-  async function emitToClaude(message){
-    const prompt=[
-      `[EIROS_HUB_WAKE message_id=${message.message_id} seq=${message.seq} from=${message.from_agent}]`,
+
+  function wakePrompt(message){
+    return [
+      '[EIROS_HUB_WAKE message_id='+message.message_id+' seq='+message.seq+' from='+message.from_agent+']',
       'A new addressed call is waiting in EIROS Hub. The full dialogue stays in EIROS Room, not in this main chat.',
-      `Call dialog_inbox with agent_id="${agentId}", client_id="claude-native-turn", project_id="${message.project_id}", thread_id="${message.thread_id}", limit=1.`,
+      'Call dialog_inbox with agent_id="'+agentId+'", client_id="claude-native-turn", project_id="'+message.project_id+'", thread_id="'+message.thread_id+'", limit=1.',
       'Handle the claimed message, reply through dialog_send when appropriate, then call dialog_ack for that message.'
     ].join('\n');
+  }
+
+  async function emitToClaude(message){
+    const prompt=wakePrompt(message);
+    const st=stage('wake-sdk','wait','sendMessage for '+message.message_id);
     try{
       const app=await getSdkApp();
       await app.sendMessage({role:'user',content:[{type:'text',text:prompt}]});
       lastWakeMode='sdk-ok';
+      settle(st,'ok','user turn injected via App SDK');
       set('status','Wake sent via App SDK sendMessage().');
       return;
     }catch(err){
       lastWakeMode='sdk-fail:'+String(err&&err.message||err).slice(0,40);
-      set('status','SDK sendMessage failed ('+String(err&&err.message||err)+'), falling back to raw postMessage.');
+      settle(st,'fail',String(err&&err.message||err));
     }
-    window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
-    lastWakeMode='raw-fallback-sent';
+    const raw=stage('wake-raw-fallback','wait','postMessage ui/message');
+    try{
+      window.parent.postMessage({jsonrpc:'2.0',method:'ui/message',params:{role:'user',content:[{type:'text',text:prompt}]}},'*');
+      lastWakeMode='raw-fallback-sent';
+      // postMessage is fire-and-forget: "sent" is not "delivered". Only a turn
+      // actually arriving in the conversation proves this path, so it stays
+      // marked as unverified rather than green.
+      settle(raw,'wait','posted, delivery unverified by design');
+      set('status','SDK path failed. Raw ui/message posted; delivery cannot be confirmed from inside the iframe.');
+    }catch(err){
+      settle(raw,'fail',String(err&&err.message||err));
+      lastWakeMode='raw-fail';
+    }
   }
+
+  // --- the poll loop ------------------------------------------------------
+  let paused=false,timer=null,busy=false,attempts=0,lastEmitted='';
   function schedule(ms){clearTimeout(timer);timer=setTimeout(poll,ms)}
+
   async function poll(){
     if(paused){schedule(3000);return}
     if(busy){schedule(1000);return}
     busy=true;
     try{
       set('badge','polling');
-      const raw=await callTool('dialog_peek',{agent_id:agentId,limit:1});
-      const data=unwrap(raw);
+      if(!heartbeatProven){
+        const st=stage('first-tool-call','wait','room_heartbeat before any read');
+        try{
+          await heartbeat('online');
+          settle(st,'ok','session registered on the VPS');
+        }catch(err){
+          settle(st,'fail',String(err&&err.message||err));
+          throw err;
+        }
+      }else{
+        try{await heartbeat('online')}catch{}
+      }
+      let data;
+      if(!trace.some(t=>t.stage==='dialog-peek')){
+        const st=stage('dialog-peek','wait','first read as agent_id='+agentId);
+        try{
+          data=unwrap(await callTool('dialog_peek',{agent_id:agentId,limit:1}));
+          settle(st,'ok','pending='+(data.pending_count||0));
+        }catch(err){
+          settle(st,'fail',String(err&&err.message||err));
+          throw err;
+        }
+      }else{
+        data=unwrap(await callTool('dialog_peek',{agent_id:agentId,limit:1}));
+      }
       const messages=Array.isArray(data.messages)?data.messages:[];
-      await heartbeat(messages.length?'ringing':'online');
       set('connection','online');
       set('pending',data.pending_count||0);
       set('badge','listening');
@@ -135,29 +280,31 @@ import('https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2').then(mod=>{window.
         const message=messages[0];
         attempts+=1;
         set('attempts',attempts);
-        set('message',`#${message.seq} ${message.from_agent} → claude\n${message.content}`);
+        set('message','#'+message.seq+' '+message.from_agent+' → '+agentId+'\n'+message.content);
+        try{await heartbeat('ringing')}catch{}
         if(message.message_id!==lastEmitted){
-          const _mid=message.message_id;
+          const mid=message.message_id;
+          lastEmitted=mid;
           emitToClaude(message);
-          lastEmitted=_mid;
-          set('status',`Wake sent for ${_mid}. Full text remains in EIROS Room; waiting for Claude to claim, reply and acknowledge.`);
+          set('status','Wake sent for '+mid+'. Full text remains in EIROS Room; waiting for Claude to claim, reply and acknowledge.');
         }
         schedule(1500);
       }else{
-        set('status',`Listening as claude via ${clientId.slice(0,18)}…`);
+        set('status','Listening as '+agentId+' via '+widgetId.slice(0,26)+'…'+(telemetryAlive===false?'\nTelemetry calls are failing — the on-screen trace above is the only readout.':''));
         schedule(1500);
       }
     }catch(error){
       set('connection','offline');
       set('badge','error');
-      set('status','Pulse error: '+String(error&&error.message?error.message:error));
+      set('status','Pulse error: '+String(error&&error.message?error.message:error)+'\nBoot trace above shows the exact stage that failed.');
       schedule(4000);
     }finally{busy=false}
   }
-  $('reconnect').addEventListener('click',()=>{paused=false;lastEmitted='';set('status','Reconnecting…');poll()});
+
+  $('reconnect').addEventListener('click',()=>{paused=false;lastEmitted='';heartbeatProven=false;set('status','Reconnecting…');poll()});
   $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'Resume':'Pause';if(!paused)poll()});
   window.addEventListener('beforeunload',()=>clearTimeout(timer));
-  set('status','HTML + JavaScript rendered. Calling dialog_inbox…');
+  set('status','HTML + JavaScript rendered. Proving presence before reading…');
   poll();
 })();
 </script>
