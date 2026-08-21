@@ -71,3 +71,38 @@ def test_previous_uris_still_resolve(uri_attr):
     suffix = uri_attr.split("_")[-1].lower()
     fn = getattr(claude_server, f"claude_pulse_resource_legacy_{suffix if suffix.startswith('v') else 'v4'}")
     assert fn() == claude_server.claude_pulse_resource()
+
+
+def test_sdk_import_pins_zod():
+    """Unpinned, the App SDK cannot load in a browser at all.
+
+    esm.sh resolves @modelcontextprotocol/sdk's zod dependency to a major that
+    no longer exports z.custom, which the SDK calls at module scope. Every
+    unpinned specifier throws "t.custom is not a function" before App is
+    reachable, so app.sendMessage() has never run. Verified in headless
+    Chromium against @1.1.2, @1.1.0, @1.0.0 and the floating tag; ?deps=zod@3
+    loads and exposes App. Dropping the pin silently disables the wake path.
+    """
+    urls = re.findall(r"'(https://esm\.sh/@modelcontextprotocol/ext-apps[^']*)'", HTML)
+    assert urls, "no App SDK import left in the widget"
+    for url in urls:
+        assert "deps=zod@3" in url, f"unpinned SDK specifier would fail to load: {url}"
+
+
+def test_sdk_connect_cannot_hang_forever():
+    """A host that never answers initialize must not strand the only wake path."""
+    assert "App.connect() timed out" in HTML, "no timeout guarding App.connect()"
+    assert "Promise.race" in HTML
+
+
+def test_a_failed_wake_is_retried_rather_than_recorded_as_sent():
+    """lastEmitted must only advance once some path actually took the wake."""
+    assert "lastEmitted=mid" not in HTML.replace("if(delivered)lastEmitted=mid", ""), (
+        "the message is marked emitted before the wake resolves, so a transient "
+        "failure drops that wake permanently"
+    )
+    assert "if(delivered)lastEmitted=mid" in HTML
+
+
+def test_status_does_not_claim_delivery_before_the_wake_resolves():
+    assert "Waking Claude for" in HTML, "no in-flight status; the panel claims success too early"

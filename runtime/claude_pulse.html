@@ -113,6 +113,10 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     const entry={stage:name,state:state||'wait',detail:String(detail||'').slice(0,160)};
     trace.push(entry);
     paintLadder();
+    report(name,state,detail,extra);
+    return entry;
+  }
+  function report(name,state,detail,extra){
     const snapshot=Object.assign({
       boot_trace:trace.map(t=>t.stage+':'+t.state+(t.detail?'('+t.detail+')':'')),
       agent_id:agentId,
@@ -126,13 +130,14 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
       widget_id:widgetId,widget_kind:'claude-pulse',project_id:projectId,thread_id:threadId,
       status:name+':'+(state||'wait'),snapshot,error:state==='fail'?String(detail||''):''
     }).then(()=>{telemetryAlive=true}).catch(()=>{telemetryAlive=false});
-    return entry;
   }
   function settle(entry,state,detail){
+    // Update the row in place. Appending a second row per outcome doubled the
+    // ladder and buried the one line a screenshot needs to show.
     entry.state=state;
     if(detail)entry.detail=String(detail).slice(0,160);
     paintLadder();
-    stage(entry.stage+'#'+state,state,detail);
+    report(entry.stage,state,detail);
   }
 
   stage('html-parsed','ok','resource rendered and script executing');
@@ -165,17 +170,33 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
 
   // --- stage 2: the App SDK, loaded only after presence is proven ----------
   let sdkApp=null,sdkAppConnecting=null;
+  // esm.sh resolves @modelcontextprotocol/sdk's zod dependency to a major that
+  // no longer exports z.custom, and the SDK calls it at module scope. Every
+  // unpinned specifier - @1.1.2, @1.1.0, @1.0.0, floating - therefore throws
+  // "t.custom is not a function" before App is ever reachable, which is why
+  // app.sendMessage() has never once run here. Pinning zod to 3.x fixes it.
+  // The exact pin is tried first for reproducibility, the floating 3.x second
+  // so a yanked patch release self-heals instead of taking the wake path down.
+  const SDK_URLS=[
+    'https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2?deps=zod@3.25.76',
+    'https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2?deps=zod@3'
+  ];
   async function loadSdk(){
-    const st=stage('sdk-import','wait','importing @modelcontextprotocol/ext-apps from esm.sh');
-    try{
-      const mod=await import('https://esm.sh/@modelcontextprotocol/ext-apps@1.1.2');
-      window.__EIROS_APP_SDK__=mod;
-      settle(st,'ok','module loaded');
-      return mod;
-    }catch(err){
-      settle(st,'fail',String(err&&err.message||err));
-      throw err;
+    const st=stage('sdk-import','wait','importing ext-apps with a pinned zod');
+    let lastError=null;
+    for(let i=0;i<SDK_URLS.length;i++){
+      try{
+        const mod=await import(SDK_URLS[i]);
+        window.__EIROS_APP_SDK__=mod;
+        settle(st,'ok',(i===0?'pinned':'floating fallback')+' url loaded');
+        return mod;
+      }catch(err){
+        lastError=err;
+        if(i<SDK_URLS.length-1)stage('sdk-import-retry','wait','pinned url failed: '+String(err&&err.message||err));
+      }
     }
+    settle(st,'fail',String(lastError&&lastError.message||lastError));
+    throw lastError;
   }
   async function getSdkApp(){
     if(sdkApp)return sdkApp;
@@ -186,7 +207,13 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
       try{
         const {App}=mod;
         const app=new App({name:'EIROS Claude Pulse',version:pulseVersion});
-        await app.connect();
+        // A host that never answers the initialize handshake would otherwise
+        // leave connect() pending forever, and the raw fallback - the only
+        // other way out - would never fire. Silence has to become a failure.
+        await Promise.race([
+          app.connect(),
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error('App.connect() timed out after 8s')),8000))
+        ]);
         sdkApp=app;
         settle(st,'ok','connected');
         return app;
@@ -216,8 +243,8 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
       await app.sendMessage({role:'user',content:[{type:'text',text:prompt}]});
       lastWakeMode='sdk-ok';
       settle(st,'ok','user turn injected via App SDK');
-      set('status','Wake sent via App SDK sendMessage().');
-      return;
+      set('status','Wake delivered for '+message.message_id+' via App SDK sendMessage(). Full text stays in EIROS Room.');
+      return true;
     }catch(err){
       lastWakeMode='sdk-fail:'+String(err&&err.message||err).slice(0,40);
       settle(st,'fail',String(err&&err.message||err));
@@ -230,15 +257,21 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
       // actually arriving in the conversation proves this path, so it stays
       // marked as unverified rather than green.
       settle(raw,'wait','posted, delivery unverified by design');
-      set('status','SDK path failed. Raw ui/message posted; delivery cannot be confirmed from inside the iframe.');
+      set('status','SDK path failed. Raw ui/message posted for '+message.message_id+'; delivery cannot be confirmed from inside the iframe.');
+      // Counted as taken so the loop does not repost the same wake every
+      // 1.5s. Unconfirmed is not the same as failed, and a flood would be
+      // worse than a single unverified post.
+      return true;
     }catch(err){
       settle(raw,'fail',String(err&&err.message||err));
       lastWakeMode='raw-fail';
+      set('status','Both wake paths failed for '+message.message_id+'. Retrying.');
+      return false;
     }
   }
 
   // --- the poll loop ------------------------------------------------------
-  let paused=false,timer=null,busy=false,attempts=0,lastEmitted='';
+  let paused=false,timer=null,busy=false,attempts=0,lastEmitted='',emitInFlight='';
   function schedule(ms){clearTimeout(timer);timer=setTimeout(poll,ms)}
 
   async function poll(){
@@ -282,11 +315,19 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
         set('attempts',attempts);
         set('message','#'+message.seq+' '+message.from_agent+' → '+agentId+'\n'+message.content);
         try{await heartbeat('ringing')}catch{}
-        if(message.message_id!==lastEmitted){
+        if(message.message_id!==lastEmitted&&message.message_id!==emitInFlight){
           const mid=message.message_id;
-          lastEmitted=mid;
-          emitToClaude(message);
-          set('status','Wake sent for '+mid+'. Full text remains in EIROS Room; waiting for Claude to claim, reply and acknowledge.');
+          emitInFlight=mid;
+          set('status','Waking Claude for '+mid+'…');
+          // Deliberately not awaited: the poll loop keeps the panel live while
+          // the wake runs. emitToClaude owns the final status and only marks
+          // the message emitted once a path actually took it, so a transient
+          // SDK failure retries on the next tick instead of silently dropping
+          // that wake forever.
+          emitToClaude(message).then(delivered=>{
+            emitInFlight='';
+            if(delivered)lastEmitted=mid;
+          });
         }
         schedule(1500);
       }else{
