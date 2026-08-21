@@ -71,3 +71,11 @@ def test_operator_route_generator_uses_secret_exact_capability_route() -> None:
     assert "proxy_pass http://127.0.0.1:8796/mcp" in text
     assert "access_log off" in text
     assert "location /operator/mcp" not in text
+
+
+def test_claude_nginx_root_health_is_exact_not_oauth_catchall() -> None:
+    from pathlib import Path
+
+    text = Path("deploy/claude-sslip.nginx.template.conf").read_text(encoding="utf-8")
+    assert 'location = / {' in text
+    assert 'location / {' not in text
