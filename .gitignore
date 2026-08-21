@@ -77,3 +77,6 @@ deploy/test_private_route.py
 deploy/test_private_route_https.py
 
 .worktrees/
+
+# Runtime config locks
+config/*.lock

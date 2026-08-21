@@ -1,6 +1,6 @@
-"""Run the nine `test_*.py` files that pytest silently ignores.
+"""Run legacy script-style `test_*.py` files that pytest silently ignores.
 
-runtime/ contains nine files named test_* that hold roughly 117 assertions
+runtime/ contains legacy script-style test_* files whose assertions
 between them and contribute exactly zero to every green run: they were written
 as standalone scripts with a `main()` under `if __name__ == "__main__"`, and no
 `def test_*` or `class Test*` for pytest to collect. `pytest -q` prints a
@@ -41,24 +41,13 @@ SCRIPT_SUITES = [
     "test_snapshot",
     "test_ui_contract",
     "test_watchdog",
-    "test_widget",
 ]
 
 # Suites that fail against current main for a real, already-reported defect
 # rather than test rot. strict=True on purpose: the day the defect is fixed
 # this turns red and the entry has to be removed, so the list cannot quietly
 # become a place where failures go to be forgotten.
-KNOWN_BROKEN = {
-    "test_widget": (
-        "widget_test_resource_legacy() serves a 1.7KB static card while "
-        "widget_test_resource() serves the 57KB SUM v5.8 listener: the legacy "
-        "URI stopped aliasing the canonical one and no longer calls "
-        "_mark_widget_resource_served, so a client holding the legacy URI "
-        "renders a dead card and the mount ledger reports "
-        "HOST_DID_NOT_REQUEST_RESOURCE. Lives in server_v2 (owned elsewhere); "
-        "reported, not patched here."
-    ),
-}
+KNOWN_BROKEN: dict[str, str] = {}
 
 
 def _is_script_suite(path: Path) -> bool:
