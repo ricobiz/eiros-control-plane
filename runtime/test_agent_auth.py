@@ -1,0 +1,283 @@
+"""Negative-test matrix for runtime/agent_auth.py - pure auth-domain cases.
+
+Covers threat_model_matrix_v1 cases 1-6, 11-12, 15-18 (project_state,
+eiros-hub). Lease/generation-fencing cases (7-10, 13) and the watchdog
+credential-file case (14) are out of scope here - those are the
+complementary test_authenticated_collab.py / lease-primitive slice
+(chatgpt, cycle 2).
+
+STATUS 2026-08-22: this file is expected to be fully RED right now.
+runtime/agent_auth.py is a tests-only contract skeleton - every method,
+including AuthStore.__init__ and PrincipalRegistry.register_principal,
+raises NotImplementedError. So every test below currently fails with a
+NotImplementedError traceback pointing at the specific unimplemented
+method, not an assertion failure and not an ImportError. That is the
+correct RED state for this cycle: it proves the API shape is import-able
+and each test exercises the right entry point, before any real decision
+logic exists. Do not "fix" these tests to pass against the stub - the
+tests encode the intended contract; agent_auth.py is what changes next.
+
+Every test is intentionally a plain, unguarded call sequence (no
+try/except-skip around setup) so the whole file fails uniformly for the
+same reason right now - construction failing is itself informative and
+matches every other test's failure mode instead of hiding behind a
+skip that can never actually trigger before AuthStore exists.
+"""
+from __future__ import annotations
+
+import pytest
+
+from runtime.agent_auth import (
+    ALLOWED_CLOCK_SKEW_SECONDS,
+    AgentNumberMismatch,
+    AuthContext,
+    AuthStore,
+    ClockSkewExceeded,
+    ConnectorBinding,
+    IdentityMismatch,
+    InvalidCredential,
+    NoAuthProvided,
+    PayloadTampered,
+    PrincipalRegistry,
+    PrincipalRevoked,
+    PrincipalType,
+    ReplayedRequest,
+    TokenExpired,
+    UnknownAgentNumber,
+    UnregisteredConnectorClaim,
+    require_identity_match,
+)
+
+NOW = 1_800_000_000.0
+
+
+def _registry_with_one_principal(
+    principal_id: str = "principal-a",
+    agent_number: str = "AGN-0001",
+    principal_type: "PrincipalType" = PrincipalType.INTERACTIVE_INSTALLATION,
+    credential: bytes = b"secret-a",
+) -> "PrincipalRegistry":
+    registry = PrincipalRegistry()
+    registry.register_principal(principal_id, agent_number, principal_type, credential)
+    return registry
+
+
+# --- Case 1: no auth at all -------------------------------------------------
+
+def test_case1_no_auth_provided_is_rejected():
+    store = AuthStore(_registry_with_one_principal())
+    with pytest.raises(NoAuthProvided):
+        store.verify_bearer_token(None, now=NOW)
+
+
+# --- Case 2: forged agent_number (claims a number with no backing principal)
+
+def test_case2_forged_agent_number_is_rejected():
+    store = AuthStore(_registry_with_one_principal())
+    with pytest.raises(UnknownAgentNumber):
+        store.verify_signed_request(
+            principal_id="principal-does-not-exist",
+            agent_number_claim="AGN-9999",
+            payload=b"do-the-thing",
+            signature=b"whatever",
+            timestamp=NOW,
+            request_id="req-1",
+            now=NOW,
+        )
+
+
+# --- Case 3: wrong principal key/credential ---------------------------------
+
+def test_case3_wrong_principal_credential_is_rejected():
+    registry = _registry_with_one_principal(credential=b"real-secret")
+    store = AuthStore(registry)
+    with pytest.raises(InvalidCredential):
+        store.verify_signed_request(
+            principal_id="principal-a",
+            agent_number_claim="AGN-0001",
+            payload=b"do-the-thing",
+            signature=b"signed-with-the-wrong-key",
+            timestamp=NOW,
+            request_id="req-2",
+            now=NOW,
+        )
+
+
+# --- Case 4: replayed signed request / replayed request_id -----------------
+
+def test_case4_replayed_request_id_is_rejected_on_second_use():
+    registry = _registry_with_one_principal()
+    store = AuthStore(registry)
+    kwargs = dict(
+        principal_id="principal-a",
+        agent_number_claim="AGN-0001",
+        payload=b"do-the-thing-once",
+        signature=b"a-genuinely-valid-signature",
+        timestamp=NOW,
+        request_id="req-3-used-twice",
+    )
+    # First use must succeed (positive control) before the second use is
+    # exercised as the actual case-4 assertion.
+    store.verify_signed_request(now=NOW, **kwargs)
+    with pytest.raises(ReplayedRequest):
+        store.verify_signed_request(now=NOW + 1, **kwargs)
+
+
+# --- Case 5: revoked principal via the signature path -----------------------
+
+def test_case5_revoked_principal_rejected_via_signature_path():
+    registry = _registry_with_one_principal()
+    registry.revoke_principal("principal-a")
+    store = AuthStore(registry)
+    with pytest.raises(PrincipalRevoked):
+        store.verify_signed_request(
+            principal_id="principal-a",
+            agent_number_claim="AGN-0001",
+            payload=b"do-the-thing",
+            signature=b"a-genuinely-valid-signature",
+            timestamp=NOW,
+            request_id="req-4",
+            now=NOW,
+        )
+
+
+# --- Case 6: revoked principal via a still-unexpired CACHED bearer token ---
+# The critical revocation-propagation-latency case: TTL alone must not be
+# trusted once revocation_epoch has moved past what the token was issued
+# against.
+
+def test_case6_revoked_principal_rejected_even_with_unexpired_cached_token():
+    registry = _registry_with_one_principal()
+    store = AuthStore(registry)
+    token = store.issue_bearer_token("principal-a", ttl_seconds=3600.0, now=NOW)
+    registry.revoke_principal("principal-a")
+    # Still well within the token's TTL window - only revocation_epoch changed.
+    with pytest.raises(PrincipalRevoked):
+        store.verify_bearer_token(token.token, now=NOW + 5.0)
+
+
+# --- Case 11: clock-skew boundary, exercised exactly at the edge -----------
+
+def test_case11_clock_skew_exactly_at_boundary_is_accepted_not_rejected():
+    registry = _registry_with_one_principal()
+    store = AuthStore(registry)
+    timestamp = NOW
+    now = NOW + ALLOWED_CLOCK_SKEW_SECONDS  # exactly at the edge, inclusive
+    # Should simply not raise - positive control at the accepted boundary.
+    store.verify_signed_request(
+        principal_id="principal-a",
+        agent_number_claim="AGN-0001",
+        payload=b"do-the-thing",
+        signature=b"a-genuinely-valid-signature",
+        timestamp=timestamp,
+        request_id="req-5-boundary",
+        now=now,
+    )
+
+
+def test_case11_clock_skew_one_second_past_boundary_is_rejected():
+    registry = _registry_with_one_principal()
+    store = AuthStore(registry)
+    timestamp = NOW
+    now = NOW + ALLOWED_CLOCK_SKEW_SECONDS + 1.0  # one second past the edge
+    with pytest.raises(ClockSkewExceeded):
+        store.verify_signed_request(
+            principal_id="principal-a",
+            agent_number_claim="AGN-0001",
+            payload=b"do-the-thing",
+            signature=b"a-genuinely-valid-signature",
+            timestamp=timestamp,
+            request_id="req-6-past-boundary",
+            now=now,
+        )
+
+
+# --- Case 12: cross-agent_number substitution -------------------------------
+# Valid signature/token for principal P under agent_number A, payload claims
+# agent_number B.
+
+def test_case12_cross_agent_number_substitution_is_rejected():
+    registry = _registry_with_one_principal(agent_number="AGN-0001")
+    store = AuthStore(registry)
+    with pytest.raises(AgentNumberMismatch):
+        store.verify_signed_request(
+            principal_id="principal-a",
+            agent_number_claim="AGN-9999-not-principal-as-own-number",
+            payload=b"do-the-thing",
+            signature=b"a-genuinely-valid-signature",
+            timestamp=NOW,
+            request_id="req-7",
+            now=NOW,
+        )
+
+
+# --- Case 15: valid signature/token but tampered payload -------------------
+
+def test_case15_tampered_payload_is_rejected_even_with_valid_signature():
+    registry = _registry_with_one_principal()
+    store = AuthStore(registry)
+    # A signature produced over one payload must not verify for another,
+    # even though the signature bytes themselves are "genuine" in shape.
+    with pytest.raises(PayloadTampered):
+        store.verify_signed_request(
+            principal_id="principal-a",
+            agent_number_claim="AGN-0001",
+            payload=b"mutated-after-signing",
+            signature=b"signature-was-computed-over-a-different-payload",
+            timestamp=NOW,
+            request_id="req-8",
+            now=NOW,
+        )
+
+
+# --- Case 16: expired bearer/session token used past TTL -------------------
+
+def test_case16_expired_bearer_token_is_rejected():
+    registry = _registry_with_one_principal()
+    store = AuthStore(registry)
+    token = store.issue_bearer_token("principal-a", ttl_seconds=60.0, now=NOW)
+    with pytest.raises(TokenExpired):
+        store.verify_bearer_token(token.token, now=NOW + 61.0)
+
+
+def test_case16_expired_is_distinct_from_revoked_same_principal_never_revoked():
+    """Guards against collapsing TokenExpired and PrincipalRevoked into one
+    code path - this principal is never revoked, only its token ages out."""
+    registry = _registry_with_one_principal()
+    store = AuthStore(registry)
+    token = store.issue_bearer_token("principal-a", ttl_seconds=60.0, now=NOW)
+    with pytest.raises(TokenExpired):
+        store.verify_bearer_token(token.token, now=NOW + 61.0)
+    # revocation_epoch must be unchanged - nothing revoked this principal.
+    assert registry.current_revocation_epoch("principal-a") == 0
+
+
+# --- Case 17: agent_id/from_agent body field mismatched vs AuthContext -----
+
+def test_case17_body_identity_mismatch_against_auth_context_is_rejected():
+    auth_context = AuthContext(
+        principal_id="principal-a",
+        agent_number="AGN-0001",
+        principal_type=PrincipalType.INTERACTIVE_INSTALLATION,
+        revocation_epoch=0,
+        authenticated_at=NOW,
+    )
+    with pytest.raises(IdentityMismatch):
+        require_identity_match("AGN-0002-claimed-in-body", auth_context)
+
+
+# --- Case 18: connector auth succeeds but claims an unregistered principal -
+
+def test_case18_connector_claims_unregistered_agent_number_is_rejected():
+    binding = ConnectorBinding()
+    binding.bind("chatgpt-tunnel-connector", {"AGN-0001", "AGN-0002"})
+    with pytest.raises(UnregisteredConnectorClaim):
+        binding.verify_claim("chatgpt-tunnel-connector", "AGN-9999-not-bound")
+
+
+def test_case18_connector_claims_registered_agent_number_is_accepted():
+    binding = ConnectorBinding()
+    binding.bind("chatgpt-tunnel-connector", {"AGN-0001", "AGN-0002"})
+    # Should simply not raise - no assertion beyond that, matching
+    # verify_claim's documented contract (raises only on an unbound claim).
+    binding.verify_claim("chatgpt-tunnel-connector", "AGN-0001")
