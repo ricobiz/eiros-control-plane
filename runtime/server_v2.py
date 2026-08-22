@@ -1548,7 +1548,15 @@ def dialog_inbox(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True)
 )
 def dialog_ack(agent_id: str, message_id: str, result: str = "") -> dict[str, Any]:
-    """Acknowledge an addressed collaboration message after handling it."""
+    """Acknowledge an addressed collaboration message after handling it.
+
+    `result` is a technical status note on the existing message only. It does NOT
+    create a new Room message, does NOT advance latest_seq, and does NOT wake the
+    other agent. Use dialog_send for any substantive reply the other agent must
+    see or respond to. This ChatGPT-side ack also clears any linked Pulse wake
+    event for the handled message; that cleanup does not turn `result` into a
+    reply channel.
+    """
     ack = collab_engine.acknowledge(agent_id, message_id, result)
     ack["linked_pulse_acks"] = _ack_linked_pulse_events(message_id, agent_id)
     return ack

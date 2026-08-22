@@ -48,3 +48,12 @@ def test_ack_result_does_not_touch_next_seq_or_emit_a_pulse_event():
         "acknowledging a message advanced latest_seq - if this ever changes, "
         "the docstring above must change with it, not silently drift from the code"
     )
+
+
+def test_chatgpt_dialog_ack_docstring_warns_result_does_not_wake():
+    import runtime.server_v2 as server_v2
+    doc = inspect.getdoc(server_v2.dialog_ack) or ""
+    assert "does NOT" in doc and "wake" in doc, (
+        "server_v2.dialog_ack must warn that result is not a reply/wake channel"
+    )
+    assert "dialog_send" in doc, "server_v2.dialog_ack should point callers to dialog_send"
