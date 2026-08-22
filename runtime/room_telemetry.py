@@ -102,13 +102,36 @@ def _quarantine() -> Path | None:
 
     Returns the new path, or None when it could not be moved - in which case the
     caller must not write, because writing would destroy whatever is there.
+
+    The destination must never collide: two corruptions in the same wall-clock
+    second both used to resolve to ...corrupt-<int(time.time())>, and the second
+    os.replace() silently overwrote the first quarantined file - destroying the
+    exact evidence this function exists to preserve.
+
+    First attempt at a fix used os.rename() expecting FileExistsError on a
+    present destination. That distinction is Windows-only: on POSIX, rename(2)
+    - and therefore os.rename() - overwrites an existing destination exactly
+    like os.replace() does, so it did not fix anything. The actual fix is an
+    explicit pre-check: this function only ever runs while update_locked()
+    holds the exclusive flock on LOCK_FILE, so there is no other writer that
+    could create the candidate between the check and the move, and a plain
+    .exists() loop is sufficient. A random fallback below is defense in depth
+    for a future caller that quarantines outside that lock.
     """
-    target = TELEMETRY_FILE.with_name(f"{TELEMETRY_FILE.name}.corrupt-{int(time.time())}")
+    base = f"{TELEMETRY_FILE.name}.corrupt-{int(time.time())}"
+    candidate = TELEMETRY_FILE.with_name(base)
+    suffix = 1
+    while candidate.exists():
+        candidate = TELEMETRY_FILE.with_name(f"{base}-{suffix}")
+        suffix += 1
+        if suffix > 10_000:
+            candidate = TELEMETRY_FILE.with_name(f"{base}-{os.urandom(6).hex()}")
+            break
     try:
-        os.replace(TELEMETRY_FILE, target)
+        os.replace(TELEMETRY_FILE, candidate)
     except OSError:
         return None
-    return target
+    return candidate
 
 
 def _write(store: dict[str, Any]) -> None:
