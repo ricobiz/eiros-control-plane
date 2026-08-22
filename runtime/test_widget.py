@@ -65,8 +65,8 @@ def test_current_room_contract_and_legacy_aliases():
     assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
     assert "initialSystem" in room_rendered
     assert len(room_rendered.encode("utf-8")) < 50000
-    assert server_v2.ROOM_URI == "ui://eiros/collab-room-v9-24-inline-isolated.html"
-    assert server_v2.ROOM_VERSION == "0.9.24-inline-isolated"
+    assert server_v2.ROOM_URI == "ui://eiros/collab-room-v9-25-listener-safe.html"
+    assert server_v2.ROOM_VERSION == "0.9.25-listener-safe"
     assert "EIROS Control" in room_rendered
     assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
     assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered
@@ -77,12 +77,31 @@ def test_current_room_contract_and_legacy_aliases():
     assert "noticeUntil" in room_rendered and "Refreshed ·" in room_rendered
     assert "lampShort" in room_rendered and "lastSig=null" in room_rendered
     assert "room_telemetry_update" in room_rendered and "Both agents" in room_rendered
+    assert server_v2.ROOM_LEGACY_V924_URI == "ui://eiros/collab-room-v9-24-inline-isolated.html"
+    assert server_v2.ROOM_VERSION in server_v2.room_resource_legacy_v924()
 
     assert server_v2.ROOM_VERSION in server_v2.room_resource_legacy_v914()
     assert server_v2.ROOM_VERSION in server_v2.room_resource_legacy_v916()
     assert server_v2.ROOM_LEGACY_V919_URI == "ui://eiros/collab-room-v9-19-clean-start.html"
     assert server_v2.ROOM_LEGACY_V94_LOCALWAKE_URI == "ui://eiros/collab-room-v9-4-localwake.html"
     assert server_v2.ROOM_VERSION in server_v2.room_resource_legacy_v94_localwake()
+
+
+def test_room_boot_does_not_broadcast_global_kill_to_listener():
+    room_template = (ROOT / "runtime" / "collab_room.html").read_text(encoding="utf-8")
+    boot_start = room_template.index("async function bootRoom()")
+    boot_end = room_template.index("bootRoom();", boot_start)
+    boot = room_template[boot_start:boot_end]
+
+    # A Room refresh may take the Room lease, but it must never broadcast the
+    # operator-only global kill key because Pulse listens to that key too.
+    assert "localStorage.setItem(killKey" not in boot
+    assert "claimLease()" in boot
+
+    # Explicit GLOBAL KILL must still be honored when the operator invokes it.
+    assert "if(e.key===killKey){stale();return}" in room_template
+    assert "eiros-ui-kill" in room_template
+    assert "lease_key:'v925'" in room_template
 
 
 def test_current_connector_boot_and_launcher_contract():

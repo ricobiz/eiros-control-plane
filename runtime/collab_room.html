@@ -54,5 +54,5 @@ window.addEventListener('freeze',()=>lifecycle('FREEZE'));
 window.addEventListener('resume',()=>lifecycle('RESUME'));
 window.addEventListener('focus',()=>lifecycle('FOCUS'));
 window.addEventListener('blur',()=>lifecycle('BLUR'));
-async function bootRoom(){for(let i=0;i<24&&!frameVisible();i++)await new Promise(r=>setTimeout(r,100));if(!frameVisible()){stale();return}try{localStorage.setItem(killKey,sessionId+':'+Date.now())}catch{}claimLease();await trace('BOOT_READY',{inline_only:true,lease_key:'v924'});refresh();if(boot.pulseEnabled!==false)pollPulse()}bootRoom();})();
+async function bootRoom(){for(let i=0;i<24&&!frameVisible();i++)await new Promise(r=>setTimeout(r,100));if(!frameVisible()){stale();return}claimLease();await trace('BOOT_READY',{inline_only:true,lease_key:'v925'});refresh();if(boot.pulseEnabled!==false)pollPulse()}bootRoom();})();
 </script></body></html>
