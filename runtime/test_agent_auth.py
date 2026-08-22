@@ -11,28 +11,24 @@ runtime/agent_auth.py is a tests-only contract skeleton - every method,
 including AuthStore.__init__ and PrincipalRegistry.register_principal,
 raises NotImplementedError. So every test below currently fails with a
 NotImplementedError traceback pointing at the specific unimplemented
-method, not an assertion failure and not an ImportError. That is the
-correct RED state for this cycle.
+method, not an assertion failure and not an ImportError.
 
-Every test is intentionally a plain, unguarded call sequence (no
-try/except-skip around setup) so the whole file fails uniformly for the
-same reason right now - construction failing is itself informative and
-matches every other test's failure mode instead of hiding behind a
-skip that can never actually trigger before AuthStore exists.
+Revision 2: amended per chatgpt's independent review (seq193) of the
+first RED SHA 0f0056d. Cases 3/4/5/11/12/15 now use a deterministic
+test-only HMAC-SHA256 signer over a real canonical envelope instead of
+arbitrary placeholder signature bytes. Case 2 redesigned to isolate
+"claimed agent_number belongs to nobody" from case 12's "claimed
+agent_number belongs to a different real principal".
 
-Revision 2 (same day): amended per chatgpt's independent review (seq193)
-of the first RED SHA 0f0056d. The signed-request cases (3, 4, 5, 11, 12,
-15) previously used arbitrary placeholder signature bytes like
-b"a-genuinely-valid-signature" that could never actually verify once
-real signing exists, and case 2 conflated "unknown agent_number" with
-"unknown principal_id" instead of isolating it from case 12's
-substitution scenario. Both fixed below using a deterministic,
-test-only HMAC-SHA256 signer injected into AuthStore via its `verifier`
-parameter (agent_auth.SignatureVerifier) - NOT the product's eventual
-asymmetric scheme, just enough real cryptographic self-consistency for
-these tests to encode meaningful, unambiguous fixtures. See
-agent_auth.py's module docstring "revision 2" note for the one design
-question this does NOT resolve (case 3 vs case 15 precedence mechanism).
+Revision 3: amended per chatgpt's seq195 design decision resolving the
+case 3 vs case 15 precedence question left open in revision 2.
+verify_signed_request now takes an explicit payload_hash_claim (the hash
+declared inside the signed envelope) separate from payload (the bytes
+actually submitted). test_case15 now signs a real payload, then swaps in
+different payload bytes while keeping the ORIGINAL payload_hash_claim -
+exactly what a real tamper-in-transit looks like: the attacker can change
+payload bytes, but cannot forge a new payload_hash_claim without
+invalidating the signature over it.
 """
 from __future__ import annotations
 
@@ -107,23 +103,27 @@ def _signed_request_kwargs(
     timestamp: float = NOW,
     request_id: str,
     payload: bytes,
-    payload_hash_override: "str | None" = None,
 ) -> dict:
-    """Builds a genuinely self-consistent, correctly-signed request. Pass
-    payload_hash_override to sign over a DIFFERENT hash than the payload's
-    own (case 15's tamper fixture); everything else stays realistic."""
+    """Builds a genuinely self-consistent, correctly-signed request:
+    signs a real canonical envelope (which embeds payload's own hash as
+    the declared payload_hash_claim) with a real HMAC over the given
+    credential. Callers wanting a tampered fixture should mutate the
+    returned dict's "payload" key afterward - "payload_hash_claim" stays
+    as what was actually signed, exactly like a real tamper-in-transit."""
+    payload_hash_claim = hash_payload(payload)
     envelope = canonical_envelope(
         principal_id=principal_id,
         agent_number=agent_number_claim,
         timestamp=timestamp,
         request_id=request_id,
-        payload_hash=payload_hash_override or hash_payload(payload),
+        payload_hash=payload_hash_claim,
     )
     signature = _DeterministicTestSigner().sign(envelope, credential)
     return dict(
         principal_id=principal_id,
         agent_number_claim=agent_number_claim,
         payload=payload,
+        payload_hash_claim=payload_hash_claim,
         signature=signature,
         timestamp=timestamp,
         request_id=request_id,
@@ -162,16 +162,16 @@ def test_case2_forged_agent_number_belonging_to_nobody_is_rejected():
 
 
 # --- Case 3: wrong principal key/credential ---------------------------------
+# payload_hash_claim genuinely matches payload (no tampering) - only the
+# signature itself is wrong, isolating InvalidCredential from PayloadTampered.
 
 def test_case3_wrong_principal_credential_is_rejected():
     registry = _registry_with_one_principal(agent_number="AGN-0001", credential=CREDENTIAL_A)
     store = _store(registry)
-    # Otherwise fully well-formed request (right principal, right number),
-    # signed with a key that is NOT principal-a's registered credential.
     kwargs = _signed_request_kwargs(
         principal_id="principal-a",
         agent_number_claim="AGN-0001",
-        credential=WRONG_CREDENTIAL,
+        credential=WRONG_CREDENTIAL,  # signed with the wrong key
         request_id="req-2",
         payload=b"do-the-thing",
     )
@@ -200,7 +200,8 @@ def test_case4_replayed_request_id_is_rejected_on_second_use():
 
 # --- Case 5: revoked principal via the signature path -----------------------
 # Everything about the request is otherwise legitimate (right key, right
-# number, right signature) - only revocation should cause the rejection.
+# number, right signature, untampered payload) - only revocation should
+# cause the rejection.
 
 def test_case5_revoked_principal_rejected_via_signature_path():
     registry = _registry_with_one_principal(agent_number="AGN-0001", credential=CREDENTIAL_A)
@@ -286,23 +287,26 @@ def test_case12_cross_agent_number_substitution_is_rejected():
         store.verify_signed_request(now=NOW, **kwargs)
 
 
-# --- Case 15: valid signature/token but tampered payload -------------------
-# Right key, self-consistent envelope - EXCEPT the payload actually
-# submitted doesn't match the hash the (valid) signature covers.
+# --- Case 15: valid signature but tampered payload --------------------------
+# Real HMAC signature over a REAL envelope (whose payload_hash_claim is the
+# ORIGINAL payload's hash) - then the actually-submitted payload is swapped.
+# hash_payload(submitted payload) != payload_hash_claim, so this must be
+# rejected BEFORE signature verification even runs (chatgpt seq195 order).
 
 def test_case15_tampered_payload_is_rejected_even_with_valid_signature():
     registry = _registry_with_one_principal(agent_number="AGN-0001", credential=CREDENTIAL_A)
     store = _store(registry)
-    original_payload = b"original-payload-that-was-actually-signed"
     kwargs = _signed_request_kwargs(
         principal_id="principal-a",
         agent_number_claim="AGN-0001",
         credential=CREDENTIAL_A,
         request_id="req-8",
-        payload=original_payload,
+        payload=b"original-payload-that-was-actually-signed",
     )
-    # Swap the payload after signing - signature still covers the ORIGINAL
-    # payload's hash, but a different payload is now being submitted.
+    # Swap the ACTUAL payload after signing. payload_hash_claim is left
+    # untouched - it's still the hash of the ORIGINAL payload, exactly
+    # like a genuine tamper-in-transit (attacker can't forge a new claim
+    # without invalidating the signature that covers it).
     kwargs["payload"] = b"mutated-after-signing-different-bytes"
     with pytest.raises(PayloadTampered):
         store.verify_signed_request(now=NOW, **kwargs)

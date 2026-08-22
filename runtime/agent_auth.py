@@ -12,32 +12,26 @@ yet - this file exists so runtime/test_agent_auth.py can import a stable
 API and fail RED for the right reason (contract exists, not implemented)
 instead of ImportError (contract itself is wrong-shaped).
 
-Revision 2 (same day): amended per chatgpt's independent review (seq193,
-dialog eiros-hub/first-contact) of the first tests-only SHA 0f0056d.
-Changes in this revision, all still zero-behavior:
-  - AuthContext gained `scopes` and `auth_method` fields - chatgpt's point:
-    without scopes, bootstrap/register/operator/control cannot stay
-    separate authorities from plain collab mutation once a facade tries
-    to enforce them, since principal_type alone is too coarse.
-  - Added SignatureVerifier (a typing.Protocol, no implementation) plus
-    canonical_envelope()/hash_payload() pure data-transform helpers, so
-    tests can inject a deterministic signer instead of asserting against
-    arbitrary placeholder signature bytes that could never actually
-    verify once real signing exists. AuthStore.__init__ now accepts an
-    optional `verifier` to inject that backend - product code will inject
-    a real asymmetric verifier at the same call site later.
-  - OPEN DESIGN QUESTION, not resolved here (flagged to chatgpt, not
-    quietly assumed): the exact mechanism by which a real implementation
-    distinguishes InvalidCredential (case 3, wrong key) from
-    PayloadTampered (case 15, right key, mismatched payload) at
-    verification time. A naive single HMAC/signature check over a
-    freshly-recomputed envelope cannot tell the two apart - it just
-    fails once, either way. Resolving this (e.g. request-id-scoped
-    envelope-hash pre-registration at issuance, or a detached declared-
-    hash-plus-payload design) is real implementation work for the GREEN
-    phase, not a test-authoring detail. test_agent_auth.py constructs
-    both fixtures unambiguously (wrong key vs. right key/wrong payload)
-    so whichever mechanism is chosen has a precise contract to satisfy.
+Revision 2: amended per chatgpt's independent review (seq193) of the first
+tests-only SHA 0f0056d. AuthContext gained `scopes`/`auth_method`. Added
+SignatureVerifier (typing.Protocol, no implementation) plus
+canonical_envelope()/hash_payload() pure helpers, and an optional
+`verifier` param on AuthStore.__init__, so tests inject a deterministic
+signer instead of asserting against placeholder bytes that could never
+actually verify.
+
+Revision 3: amended per chatgpt's seq195 design decision, resolving
+revision 2's open question (how to distinguish InvalidCredential/case3
+from PayloadTampered/case15 at verification time). verify_signed_request
+now takes an explicit `payload_hash_claim` - the hash declared inside the
+signed envelope - separate from `payload`, the bytes actually received.
+Verification precedence (documented on verify_signed_request itself):
+hash(received payload) vs payload_hash_claim is checked FIRST or before
+signature verification; a mismatch is PayloadTampered regardless of
+whether the signature would otherwise verify. Only once the hashes match
+does signature verification run, where failure is InvalidCredential. This
+gives the two failure modes a real observable basis instead of one
+ambiguous signature-check failure standing in for both.
 
 Threat-matrix case numbers below match threat_model_matrix_v1 verbatim.
 """
@@ -82,8 +76,10 @@ class UnknownAgentNumber(AuthError):
 
 
 class InvalidCredential(AuthError):
-    """Case 3: signature or bearer token does not match the claimed
-    principal's own key/secret (wrong principal key/credential)."""
+    """Case 3: the signature does not verify against the claimed
+    principal's own key, for an envelope whose declared payload_hash_claim
+    DOES match the actually-received payload (see verify_signed_request's
+    docstring for the full precedence rule vs PayloadTampered/case 15)."""
 
 
 class ReplayedRequest(AuthError):
@@ -111,13 +107,13 @@ class AgentNumberMismatch(AuthError):
 
 
 class PayloadTampered(AuthError):
-    """Case 15: the signature/token itself verifies for THIS principal's
-    key, but the covered/declared payload does not match the payload bytes
-    actually submitted alongside it (payload swapped after signing).
-    Distinct from InvalidCredential (case 3): here the KEY is right, only
-    the payload disagrees with what was signed. See this module's revision
-    2 docstring note for the open question of how an implementation tells
-    the two apart at verification time."""
+    """Case 15: hash_payload(the ACTUALLY RECEIVED payload bytes) does not
+    match payload_hash_claim - the hash declared inside the envelope that
+    was signed. Checked BEFORE signature verification (see
+    verify_signed_request), so this fires regardless of whether the
+    signature would otherwise verify. Distinct from InvalidCredential
+    (case 3): here the declared/received payload hashes disagree; there,
+    the hashes agree but the signature itself doesn't verify."""
 
 
 class TokenExpired(AuthError):
@@ -132,7 +128,8 @@ class IdentityMismatch(AuthError):
     NEVER trusted as identity on its own, only as a value to cross-check.
     NOTE for collab-layer callers (e.g. runtime/authenticated_collab.py):
     reuse THIS class rather than defining a parallel identity-mismatch
-    exception - single source of truth for the auth-domain error taxonomy."""
+    exception - single source of truth for the auth-domain error taxonomy
+    (chatgpt agreed, seq195: authenticated_collab.py will unify onto this)."""
 
 
 class UnregisteredConnectorClaim(AuthError):
@@ -155,7 +152,9 @@ class AuthContext:
     interactive_installation principals could need different allowed
     scopes. auth_method records which verification path produced this
     context (e.g. "bearer_token" | "signed_request"), for audit/future
-    higher-assurance-path enforcement.
+    higher-assurance-path enforcement. Confirmed sufficient for slice 1 by
+    chatgpt (seq195) - a separate credential/session identifier is
+    deferred to transport adapters/session binding, not blocking here.
     """
 
     principal_id: str
@@ -194,8 +193,8 @@ class SignatureVerifier(typing.Protocol):
 def hash_payload(payload: bytes) -> str:
     """Single canonical definition of "payload hash" - both test fixtures
     and any real implementation must use this, not hand-rolled hashing, so
-    a signed envelope's declared hash is comparable to a freshly-received
-    payload's hash. Pure data transform, not a decision."""
+    a declared payload_hash_claim is comparable to a freshly-received
+    payload's hash (see verify_signed_request). Pure data transform."""
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -208,10 +207,11 @@ def canonical_envelope(
     payload_hash: str,
 ) -> bytes:
     """The exact bytes a SignatureVerifier signs/verifies over. Binds
-    principal_id, agent_number, timestamp, request_id and the payload's
-    hash together, so a signature cannot be silently replayed against a
-    different payload, principal, or agent_number claim. Pure data
-    transform - no crypto, no decision logic."""
+    principal_id, agent_number, timestamp, request_id and the DECLARED
+    payload hash together (this `payload_hash` is what verify_signed_request
+    calls payload_hash_claim once it arrives over the wire), so a signature
+    cannot be silently replayed against a different payload, principal, or
+    agent_number claim. Pure data transform - no crypto, no decision logic."""
     return f"{principal_id}|{agent_number}|{timestamp}|{request_id}|{payload_hash}".encode("utf-8")
 
 
@@ -280,6 +280,7 @@ class AuthStore:
         principal_id: str,
         agent_number_claim: str,
         payload: bytes,
+        payload_hash_claim: str,
         signature: bytes,
         timestamp: float,
         request_id: str,
@@ -287,9 +288,25 @@ class AuthStore:
     ) -> "AuthContext":
         """Optional SignedRequestAdapter path for capable headless clients
         (NOT the required baseline - see transport_reality_2026_08_22).
+
+        Verification precedence (revision 3, chatgpt seq195 - resolves the
+        case 3 vs case 15 ambiguity that revision 2 left open):
+          1. Compare hash_payload(payload) - the bytes ACTUALLY RECEIVED -
+             against payload_hash_claim - the hash DECLARED inside the
+             envelope that was signed. Mismatch -> PayloadTampered,
+             regardless of whether the signature would otherwise verify.
+          2. Only once they match, reconstruct
+             canonical_envelope(..., payload_hash=payload_hash_claim) and
+             verify the signature against it. Failure here ->
+             InvalidCredential.
+        This ordering means "the payload isn't what was signed" and "this
+        wasn't signed by the right key" are always distinguishable, instead
+        of collapsing into one ambiguous verification failure.
+
         Raises InvalidCredential / PayloadTampered / ClockSkewExceeded /
         ReplayedRequest / AgentNumberMismatch / UnknownAgentNumber /
-        PrincipalRevoked as appropriate."""
+        PrincipalRevoked as appropriate.
+        """
         raise NotImplementedError
 
 
