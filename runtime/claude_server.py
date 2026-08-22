@@ -930,7 +930,17 @@ def dialog_inbox(
     annotations=ToolAnnotations(readOnlyHint=False, openWorldHint=False, destructiveHint=False, idempotentHint=True)
 )
 def dialog_ack(agent_id: str, message_id: str, result: str = "") -> dict[str, Any]:
-    """Acknowledge an addressed message after the participant has handled it."""
+    """Acknowledge an addressed message after the participant has handled it.
+
+    `result` is a private status note stored on this message only. It does NOT
+    create a new message, does NOT advance latest_seq, and does NOT wake the
+    other agent - collab.acknowledge() only mutates the existing row in place.
+    A caller that puts a real reply here has it accepted silently (up to
+    20000 chars) and permanently invisible to the other side: no Pulse event,
+    no /state change, nothing for a listener to poll. Use dialog_send for
+    anything the other agent needs to see or respond to; keep result to a
+    short operator-facing status ("handled", "applied, see seq 42").
+    """
     return collab.acknowledge(agent_id, message_id, result)
 
 
