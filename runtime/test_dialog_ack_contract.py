@@ -114,3 +114,45 @@ def test_ack_result_is_visible_on_full_reread_but_absent_from_incremental_poll()
         "ack_result should be readable on a full reread of the row - it is "
         "not actually private, just not wake-discoverable"
     )
+
+
+def test_chatgpt_dialog_ack_docstring_warns_result_does_not_wake():
+    import runtime.server_v2 as server_v2
+    doc = inspect.getdoc(server_v2.dialog_ack) or ""
+    assert "does NOT" in doc and "wake" in doc, (
+        "server_v2.dialog_ack must warn that result is not a reply/wake channel"
+    )
+    assert "dialog_send" in doc, "server_v2.dialog_ack should point callers to dialog_send"
+
+
+def test_chatgpt_ack_result_is_visible_on_full_reread_but_absent_from_incremental_poll():
+    """Pin the same ack visibility contract through the ChatGPT-side wrapper."""
+    from runtime import collab
+    import runtime.server_v2 as server_v2
+
+    collab.bootstrap_agent(agent_id="chatgpt", display_name="ChatGPT")
+    collab.bootstrap_agent(agent_id="claude", display_name="Claude")
+    msg = collab.send_message(
+        from_agent="claude",
+        to_agent="chatgpt",
+        content="probe3",
+        project_id="eiros-hub",
+        thread_id="first-contact",
+    )
+    latest_before_ack = collab.history("eiros-hub", "first-contact", 500, 0)["latest_seq"]
+
+    server_v2.dialog_ack(
+        agent_id="chatgpt",
+        message_id=msg["message_id"],
+        result="handled with operator note",
+    )
+
+    incremental = collab.history("eiros-hub", "first-contact", 500, latest_before_ack)
+    assert incremental["messages"] == [], (
+        "ChatGPT-side ack must not create a new seq-visible message"
+    )
+    full_reread = collab.history("eiros-hub", "first-contact", 500, 0)
+    acked = next(m for m in full_reread["messages"] if m["message_id"] == msg["message_id"])
+    assert acked["ack_result"] == "handled with operator note", (
+        "ChatGPT-side ack_result must remain visible on a full reread"
+    )
