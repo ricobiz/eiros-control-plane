@@ -89,7 +89,17 @@ def test_previous_uris_still_serve_the_current_widget(uri_attr):
     assert legacy_boot["agentId"] == current_boot["agentId"]
     assert legacy_boot["mountId"] != current_boot["mountId"], "two fetches shared one mount row"
 
-    strip = lambda html, boot: html.replace(boot["mountId"], "")
+    # requestedUri is supposed to differ - that is the diagnostic-integrity fix:
+    # the widget now reports which URI actually served it, so a legacy fetch
+    # cannot be mistaken for a canonical one. mountId differs for the same
+    # reason each fetch opens its own row. Strip both, then the two documents
+    # must be the same widget otherwise.
+    assert legacy_boot["requestedUri"] == getattr(claude_server, uri_attr)
+    assert current_boot["requestedUri"] == claude_server.CLAUDE_PULSE_URI
+
+    def strip(html, boot):
+        return html.replace(boot["mountId"], "").replace(boot["requestedUri"], "")
+
     assert strip(legacy, legacy_boot) == strip(current, current_boot), (
         "the legacy URI serves different markup than the canonical one"
     )
