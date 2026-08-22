@@ -93,6 +93,40 @@ def test_unmovable_unreadable_store_fails_closed(monkeypatch):
     )
 
 
+def test_two_corruptions_in_the_same_clock_second_both_survive():
+    """The bug this guards against: room_telemetry.json.corrupt-<int(time.time())>
+    collided when two corruptions landed in the same wall-clock second, and the
+    second os.replace() silently destroyed the first quarantined file.
+    """
+    import time
+    from unittest import mock
+
+    with mock.patch.object(time, "time", return_value=1234567890.0):
+        room_telemetry.record(widget_id="first-good", status="ok")
+        room_telemetry.TELEMETRY_FILE.write_text("FIRST_CORRUPT", encoding="utf-8")
+        room_telemetry.record(widget_id="r1", status="ok")
+
+        room_telemetry.TELEMETRY_FILE.write_text("SECOND_CORRUPT", encoding="utf-8")
+        room_telemetry.record(widget_id="r2", status="ok")
+
+    quarantined = sorted(room_telemetry.TELEMETRY_FILE.parent.glob(room_telemetry.TELEMETRY_FILE.name + ".corrupt-*"))
+    assert len(quarantined) == 2, (
+        f"two corruptions in the same second produced {len(quarantined)} quarantine "
+        f"file(s), not 2 - one payload was overwritten"
+    )
+    payloads = {q.read_text(encoding="utf-8") for q in quarantined}
+    assert payloads == {"FIRST_CORRUPT", "SECOND_CORRUPT"}, (
+        f"both corrupt payloads must survive distinctly, got {payloads}"
+    )
+    # r1's own store was itself overwritten by the second corruption (that is
+    # the scenario: two independent corruption events, not one accumulating
+    # store), so r1 does not persist as live state - the invariant under test
+    # is that neither corrupt PAYLOAD was destroyed, which the check above
+    # covers. The live store only has to reflect the write that follows the
+    # most recent recovery.
+    assert "r2" in room_telemetry.read()["widgets"]
+
+
 def test_a_parse_error_is_never_persisted_as_state():
     room_telemetry.TELEMETRY_FILE.write_text("[]", encoding="utf-8")
     room_telemetry.record(widget_id="after", widget_kind="claude-pulse", status="html-parsed:ok")

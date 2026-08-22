@@ -28,6 +28,7 @@ runtime/*.sock
 runtime/*.log
 runtime/*.root-bak
 runtime/*.tmp
+runtime/*.corrupt-*
 runtime/phase.txt
 runtime/probe-fired.txt
 runtime/worker.launch.pid
