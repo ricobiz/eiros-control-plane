@@ -512,6 +512,34 @@ def open_collab_room() -> dict[str, Any]:
     }
 
 
+def _render_claude_pulse(requested_uri: str) -> str:
+    """Render the widget for whichever URI the host actually asked for.
+
+    The URI matters: mark_served correlates a fetch back to the open_claude_pulse
+    call that expected it. Rendering every legacy alias through the canonical URI
+    let a cached legacy card re-hydrating close a fresh canonical mount that the
+    host had not fetched yet - which corrupts the one correlation this whole
+    diagnostic exists to establish. Each handler passes its own URI, so a legacy
+    fetch with no matching legacy tool call becomes an orphan instead.
+    """
+    html = CLAUDE_PULSE_HTML.read_text(encoding="utf-8")
+    try:
+        mount_id = room_telemetry.mark_served(requested_uri)
+    except Exception:
+        mount_id = ""
+    bootstrap = {
+        "mountId": mount_id,
+        "requestedUri": requested_uri,
+        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
+        "displayName": str(COLLAB_IDENTITY.get("assistant_name") or "Claude"),
+        "projectId": "eiros-hub",
+        "threadId": "first-contact",
+        "serverVersion": SERVER_VERSION,
+        "pulseVersion": CLAUDE_PULSE_VERSION,
+    }
+    return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+
+
 @mcp.resource(
     CLAUDE_PULSE_URI,
     name="EIROS Claude Pulse",
@@ -526,21 +554,7 @@ def open_collab_room() -> dict[str, Any]:
     },
 )
 def claude_pulse_resource() -> str:
-    html = CLAUDE_PULSE_HTML.read_text(encoding="utf-8")
-    try:
-        mount_id = room_telemetry.mark_served(CLAUDE_PULSE_URI)
-    except Exception:
-        mount_id = ""
-    bootstrap = {
-        "mountId": mount_id,
-        "agentId": str(COLLAB_IDENTITY.get("agent_id") or "claude"),
-        "displayName": str(COLLAB_IDENTITY.get("assistant_name") or "Claude"),
-        "projectId": "eiros-hub",
-        "threadId": "first-contact",
-        "serverVersion": SERVER_VERSION,
-        "pulseVersion": CLAUDE_PULSE_VERSION,
-    }
-    return html.replace("__EIROS_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
+    return _render_claude_pulse(CLAUDE_PULSE_URI)
 
 
 @mcp.resource(
@@ -557,7 +571,7 @@ def claude_pulse_resource() -> str:
     },
 )
 def claude_pulse_resource_legacy_v5() -> str:
-    return claude_pulse_resource()
+    return _render_claude_pulse(CLAUDE_PULSE_LEGACY_URI_V5)
 
 
 @mcp.resource(
@@ -574,7 +588,7 @@ def claude_pulse_resource_legacy_v5() -> str:
     },
 )
 def claude_pulse_resource_legacy_v3() -> str:
-    return claude_pulse_resource()
+    return _render_claude_pulse(CLAUDE_PULSE_LEGACY_URI_V3)
 
 
 @mcp.resource(
@@ -591,7 +605,7 @@ def claude_pulse_resource_legacy_v3() -> str:
     },
 )
 def claude_pulse_resource_legacy_v4() -> str:
-    return claude_pulse_resource()
+    return _render_claude_pulse(CLAUDE_PULSE_LEGACY_URI)
 
 
 @mcp.tool(

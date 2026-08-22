@@ -28,7 +28,15 @@ from runtime.config import RUNTIME_DIR, publish_shared_file, shared_gid
 TELEMETRY_FILE = RUNTIME_DIR / "room_telemetry.json"
 LOCK_FILE = RUNTIME_DIR / "room_telemetry.lock"
 SHARED_MODE = 0o660
+# Room/pulse widgets re-report every couple of seconds, so an hour of history
+# for them is plenty. Boot-trace rows are the opposite: a mount happens once,
+# and the whole point is to read it back afterwards - possibly hours later,
+# possibly after the session that produced it is gone. Pruning those on the
+# same clock silently destroys the only copy of the evidence, which is exactly
+# what happened to this file once already.
 RETENTION_SECONDS = 3600
+DIAGNOSTIC_RETENTION_SECONDS = 24 * 3600
+DIAGNOSTIC_KINDS = ("claude-pulse", "claude-pulse-mount")
 SCHEMA_VERSION = 1
 
 
@@ -69,16 +77,61 @@ def _empty() -> dict[str, Any]:
     return {"schema_version": SCHEMA_VERSION, "widgets": {}}
 
 
+class TelemetryUnreadable(RuntimeError):
+    """The store could not be read, so it must not be overwritten."""
+
+
 def read() -> dict[str, Any]:
     try:
         raw = json.loads(TELEMETRY_FILE.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else _empty()
     except FileNotFoundError:
         return _empty()
     except Exception as exc:  # unreadable => report, never mask
         store = _empty()
         store["read_error"] = str(exc)
         return store
+    if not isinstance(raw, dict):
+        store = _empty()
+        store["read_error"] = f"store root is {type(raw).__name__}, not an object"
+        return store
+    return raw
+
+
+def _quarantine() -> Path | None:
+    """Move an unreadable store aside so a write can proceed without erasing it.
+
+    Returns the new path, or None when it could not be moved - in which case the
+    caller must not write, because writing would destroy whatever is there.
+
+    The destination must never collide: two corruptions in the same wall-clock
+    second both used to resolve to ...corrupt-<int(time.time())>, and the second
+    os.replace() silently overwrote the first quarantined file - destroying the
+    exact evidence this function exists to preserve.
+
+    First attempt at a fix used os.rename() expecting FileExistsError on a
+    present destination. That distinction is Windows-only: on POSIX, rename(2)
+    - and therefore os.rename() - overwrites an existing destination exactly
+    like os.replace() does, so it did not fix anything. The actual fix is an
+    explicit pre-check: this function only ever runs while update_locked()
+    holds the exclusive flock on LOCK_FILE, so there is no other writer that
+    could create the candidate between the check and the move, and a plain
+    .exists() loop is sufficient. A random fallback below is defense in depth
+    for a future caller that quarantines outside that lock.
+    """
+    base = f"{TELEMETRY_FILE.name}.corrupt-{int(time.time())}"
+    candidate = TELEMETRY_FILE.with_name(base)
+    suffix = 1
+    while candidate.exists():
+        candidate = TELEMETRY_FILE.with_name(f"{base}-{suffix}")
+        suffix += 1
+        if suffix > 10_000:
+            candidate = TELEMETRY_FILE.with_name(f"{base}-{os.urandom(6).hex()}")
+            break
+    try:
+        os.replace(TELEMETRY_FILE, candidate)
+    except OSError:
+        return None
+    return candidate
 
 
 def _write(store: dict[str, Any]) -> None:
@@ -88,8 +141,11 @@ def _write(store: dict[str, Any]) -> None:
     store["updated_at"] = now
     widgets = store.setdefault("widgets", {})
     cutoff = now - RETENTION_SECONDS
+    diagnostic_cutoff = now - DIAGNOSTIC_RETENTION_SECONDS
     for key in list(widgets.keys()):
-        if int((widgets.get(key) or {}).get("updated_at", 0)) < cutoff:
+        row = widgets.get(key) or {}
+        limit = diagnostic_cutoff if str(row.get("widget_kind") or "") in DIAGNOSTIC_KINDS else cutoff
+        if int(row.get("updated_at", 0)) < limit:
             widgets.pop(key, None)
     fd, temp_name = tempfile.mkstemp(prefix="room-telemetry-", suffix=".json", dir=str(TELEMETRY_FILE.parent))
     published = False
@@ -149,6 +205,21 @@ def update_locked(widget_id: str, item: dict[str, Any]) -> None:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
             store = read()
+            error = str(store.pop("read_error", "") or "")
+            if error:
+                # Never blind-overwrite a store we could not read. The old
+                # behaviour silently reset it to a single row and wrote the
+                # error back in as state, so one corrupt byte erased the whole
+                # ledger - the worst possible failure for a channel whose only
+                # job is to preserve evidence of what went wrong.
+                quarantined = _quarantine()
+                if quarantined is None:
+                    raise TelemetryUnreadable(
+                        f"telemetry store is unreadable and could not be moved aside: {error}"
+                    )
+                store = _empty()
+                store["recovered_from"] = quarantined.name
+                store["recovered_reason"] = error[:500]
             store.setdefault("widgets", {})[widget_id] = item
             _write(store)
         finally:
