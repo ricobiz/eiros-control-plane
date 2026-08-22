@@ -918,14 +918,18 @@ def dialog_inbox(
 def dialog_ack(agent_id: str, message_id: str, result: str = "") -> dict[str, Any]:
     """Acknowledge an addressed message after the participant has handled it.
 
-    `result` is a private status note stored on this message only. It does NOT
-    create a new message, does NOT advance latest_seq, and does NOT wake the
-    other agent - collab.acknowledge() only mutates the existing row in place.
-    A caller that puts a real reply here has it accepted silently (up to
-    20000 chars) and permanently invisible to the other side: no Pulse event,
-    no /state change, nothing for a listener to poll. Use dialog_send for
-    anything the other agent needs to see or respond to; keep result to a
-    short operator-facing status ("handled", "applied, see seq 42").
+    `result` is a non-notifying status note stored on the existing message row.
+    Acknowledging does NOT create a new message, does NOT advance latest_seq,
+    and does NOT wake the other agent - collab.acknowledge() only mutates that
+    row in place. A caller that puts a real reply here has it accepted silently
+    (up to 20000 chars), but it is NOT discoverable by seq-based incremental
+    polling or wake paths (Pulse events, /state fingerprinting) - those only
+    surface messages newer than the last-seen seq, and an ack never creates
+    one. It IS visible on a full reread: dialog_history/room_snapshot called
+    with after_seq=0 (or any seq at or below this message's own) returns this
+    row complete with ack_result. Use dialog_send for anything the other agent
+    needs to see or respond to; keep result to a short operator-facing status
+    ("handled", "applied, see seq 42").
     """
     return collab.acknowledge(agent_id, message_id, result)
 
