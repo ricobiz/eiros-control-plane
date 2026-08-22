@@ -10,9 +10,34 @@ STATUS: tests-only contract skeleton (cycle 2, 2026-08-22, claude). Every
 function below raises NotImplementedError. No auth decision logic exists
 yet - this file exists so runtime/test_agent_auth.py can import a stable
 API and fail RED for the right reason (contract exists, not implemented)
-instead of ImportError (contract itself is wrong-shaped). Do not add real
-logic here until chatgpt has reviewed this shape - see dialog thread
-eiros-hub/first-contact, REPORT_READY message.
+instead of ImportError (contract itself is wrong-shaped).
+
+Revision 2 (same day): amended per chatgpt's independent review (seq193,
+dialog eiros-hub/first-contact) of the first tests-only SHA 0f0056d.
+Changes in this revision, all still zero-behavior:
+  - AuthContext gained `scopes` and `auth_method` fields - chatgpt's point:
+    without scopes, bootstrap/register/operator/control cannot stay
+    separate authorities from plain collab mutation once a facade tries
+    to enforce them, since principal_type alone is too coarse.
+  - Added SignatureVerifier (a typing.Protocol, no implementation) plus
+    canonical_envelope()/hash_payload() pure data-transform helpers, so
+    tests can inject a deterministic signer instead of asserting against
+    arbitrary placeholder signature bytes that could never actually
+    verify once real signing exists. AuthStore.__init__ now accepts an
+    optional `verifier` to inject that backend - product code will inject
+    a real asymmetric verifier at the same call site later.
+  - OPEN DESIGN QUESTION, not resolved here (flagged to chatgpt, not
+    quietly assumed): the exact mechanism by which a real implementation
+    distinguishes InvalidCredential (case 3, wrong key) from
+    PayloadTampered (case 15, right key, mismatched payload) at
+    verification time. A naive single HMAC/signature check over a
+    freshly-recomputed envelope cannot tell the two apart - it just
+    fails once, either way. Resolving this (e.g. request-id-scoped
+    envelope-hash pre-registration at issuance, or a detached declared-
+    hash-plus-payload design) is real implementation work for the GREEN
+    phase, not a test-authoring detail. test_agent_auth.py constructs
+    both fixtures unambiguously (wrong key vs. right key/wrong payload)
+    so whichever mechanism is chosen has a precise contract to satisfy.
 
 Threat-matrix case numbers below match threat_model_matrix_v1 verbatim.
 """
@@ -20,6 +45,8 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import hashlib
+import typing
 
 # Resolved design constants (agreed 2026-08-22, see project_state
 # identity_and_auth_2026_08_22.claude_refinements_2026_08_22_resolved item 2).
@@ -47,7 +74,11 @@ class NoAuthProvided(AuthError):
 
 
 class UnknownAgentNumber(AuthError):
-    """Case 2: agent_number does not correspond to any registered principal."""
+    """Case 2: the claimed agent_number has NO backing registered principal
+    at all (threat_model_matrix_v1's own wording). Must be distinguishable
+    from AgentNumberMismatch (case 12): case 2 is "this number belongs to
+    nobody"; case 12 is "this number belongs to someone else, and the
+    caller's own credential is genuinely valid for a DIFFERENT number"."""
 
 
 class InvalidCredential(AuthError):
@@ -74,13 +105,19 @@ class ClockSkewExceeded(AuthError):
 
 class AgentNumberMismatch(AuthError):
     """Case 12: signature/token is genuinely valid for principal P, and P is
-    bound to agent_number A, but the request payload claims agent_number B."""
+    bound to agent_number A, but the request payload claims agent_number B,
+    where B is a real, registered number belonging to a DIFFERENT principal.
+    See UnknownAgentNumber for the "B belongs to nobody" case (case 2)."""
 
 
 class PayloadTampered(AuthError):
-    """Case 15: the signature/token itself verifies in isolation, but is not
-    actually bound to the method+payload being executed (payload mutated
-    after signing, or reused against a different call)."""
+    """Case 15: the signature/token itself verifies for THIS principal's
+    key, but the covered/declared payload does not match the payload bytes
+    actually submitted alongside it (payload swapped after signing).
+    Distinct from InvalidCredential (case 3): here the KEY is right, only
+    the payload disagrees with what was signed. See this module's revision
+    2 docstring note for the open question of how an implementation tells
+    the two apart at verification time."""
 
 
 class TokenExpired(AuthError):
@@ -92,7 +129,10 @@ class TokenExpired(AuthError):
 class IdentityMismatch(AuthError):
     """Case 17: the body-supplied agent_id/from_agent field does not match
     the server-derived AuthContext for this request. The body claim is
-    NEVER trusted as identity on its own, only as a value to cross-check."""
+    NEVER trusted as identity on its own, only as a value to cross-check.
+    NOTE for collab-layer callers (e.g. runtime/authenticated_collab.py):
+    reuse THIS class rather than defining a parallel identity-mismatch
+    exception - single source of truth for the auth-domain error taxonomy."""
 
 
 class UnregisteredConnectorClaim(AuthError):
@@ -107,13 +147,24 @@ class UnregisteredConnectorClaim(AuthError):
 class AuthContext:
     """Server-derived identity for one request. Constructed ONLY by
     AuthStore/adapters from a verified credential - never constructed from
-    client-supplied body fields directly (see IdentityMismatch / case 17)."""
+    client-supplied body fields directly (see IdentityMismatch / case 17).
+
+    scopes/auth_method added in revision 2 (chatgpt seq193 review): without
+    scopes, principal_type alone cannot keep bootstrap/register/operator/
+    control as separate authorities from plain collab mutation - two
+    interactive_installation principals could need different allowed
+    scopes. auth_method records which verification path produced this
+    context (e.g. "bearer_token" | "signed_request"), for audit/future
+    higher-assurance-path enforcement.
+    """
 
     principal_id: str
     agent_number: str
     principal_type: "PrincipalType"
     revocation_epoch: int
     authenticated_at: float
+    scopes: "tuple[str, ...]" = ()
+    auth_method: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -126,6 +177,42 @@ class BearerToken:
     issued_epoch: int
     issued_at: float
     expires_at: float
+
+
+class SignatureVerifier(typing.Protocol):
+    """Pluggable signature backend, injected into AuthStore (revision 2).
+    The product path injects a real asymmetric verifier; tests inject a
+    deterministic HMAC-based one (see test_agent_auth.py). Purely
+    structural typing - no implementation lives here, matching this
+    file's tests-only-skeleton status."""
+
+    def sign(self, envelope: bytes, credential: bytes) -> bytes: ...
+
+    def verify(self, envelope: bytes, signature: bytes, credential: bytes) -> bool: ...
+
+
+def hash_payload(payload: bytes) -> str:
+    """Single canonical definition of "payload hash" - both test fixtures
+    and any real implementation must use this, not hand-rolled hashing, so
+    a signed envelope's declared hash is comparable to a freshly-received
+    payload's hash. Pure data transform, not a decision."""
+    return hashlib.sha256(payload).hexdigest()
+
+
+def canonical_envelope(
+    *,
+    principal_id: str,
+    agent_number: str,
+    timestamp: float,
+    request_id: str,
+    payload_hash: str,
+) -> bytes:
+    """The exact bytes a SignatureVerifier signs/verifies over. Binds
+    principal_id, agent_number, timestamp, request_id and the payload's
+    hash together, so a signature cannot be silently replayed against a
+    different payload, principal, or agent_number claim. Pure data
+    transform - no crypto, no decision logic."""
+    return f"{principal_id}|{agent_number}|{timestamp}|{request_id}|{payload_hash}".encode("utf-8")
 
 
 class PrincipalRegistry:
@@ -159,6 +246,13 @@ class PrincipalRegistry:
     def credential_for(self, principal_id: str) -> bytes:
         raise NotImplementedError
 
+    def principal_for_agent_number(self, agent_number: str) -> "str | None":
+        """Reverse lookup used to distinguish case 2 from case 12: returns
+        None if nobody is registered under agent_number (case 2 territory),
+        or the owning principal_id if somebody is (case 12 territory when
+        that owner isn't the caller)."""
+        raise NotImplementedError
+
 
 class AuthStore:
     """Issues and verifies bearer tokens and signed requests against a
@@ -166,7 +260,7 @@ class AuthStore:
     they received (header value, stdio payload field, ...) and get back an
     AuthContext, or an AuthError subclass is raised."""
 
-    def __init__(self, registry: "PrincipalRegistry") -> None:
+    def __init__(self, registry: "PrincipalRegistry", *, verifier: "SignatureVerifier | None" = None) -> None:
         raise NotImplementedError
 
     def issue_bearer_token(self, principal_id: str, ttl_seconds: float, now: float) -> "BearerToken":
@@ -194,8 +288,8 @@ class AuthStore:
         """Optional SignedRequestAdapter path for capable headless clients
         (NOT the required baseline - see transport_reality_2026_08_22).
         Raises InvalidCredential / PayloadTampered / ClockSkewExceeded /
-        ReplayedRequest / AgentNumberMismatch / PrincipalRevoked as
-        appropriate."""
+        ReplayedRequest / AgentNumberMismatch / UnknownAgentNumber /
+        PrincipalRevoked as appropriate."""
         raise NotImplementedError
 
 
