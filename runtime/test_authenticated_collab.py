@@ -1,32 +1,23 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from runtime import collab
-
-
-@dataclass(frozen=True)
-class FakeAuthContext:
-    agent_number: str
-    principal_id: str = "principal-test"
-    principal_type: str = "interactive_installation"
-    revocation_epoch: int = 1
-    scopes: tuple[str, ...] = ("collab:mutate",)
+from runtime.agent_auth import AuthContext, IdentityMismatch, PrincipalType
 
 
 def _import_facade():
-    from runtime.authenticated_collab import AuthenticatedCollab, AuthIdentityMismatch
+    from runtime.authenticated_collab import AuthenticatedCollab
 
-    return AuthenticatedCollab, AuthIdentityMismatch
+    return AuthenticatedCollab, IdentityMismatch
 
 
 def test_send_uses_authenticated_identity_and_rejects_forged_from_agent(monkeypatch):
     """Production change: send_message must derive sender from AuthContext, never body fields."""
-    AuthenticatedCollab, AuthIdentityMismatch = _import_facade()
+    AuthenticatedCollab, IdentityMismatch = _import_facade()
     recorded: dict[str, object] = {}
 
     def fake_send_message(**kwargs):
@@ -35,9 +26,9 @@ def test_send_uses_authenticated_identity_and_rejects_forged_from_agent(monkeypa
 
     monkeypatch.setattr(collab, "send_message", fake_send_message)
     facade = AuthenticatedCollab(collab)
-    auth = FakeAuthContext(agent_number="chatgpt")
+    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
 
-    with pytest.raises(AuthIdentityMismatch):
+    with pytest.raises(IdentityMismatch):
         facade.send_message(auth, from_agent="claude", to_agent="rico", content="forged")
 
     result = facade.send_message(auth, from_agent="chatgpt", to_agent="rico", content="ok")
@@ -47,7 +38,7 @@ def test_send_uses_authenticated_identity_and_rejects_forged_from_agent(monkeypa
 
 def test_inbox_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypatch):
     """Production change: claims must be limited to the authenticated agent_number."""
-    AuthenticatedCollab, AuthIdentityMismatch = _import_facade()
+    AuthenticatedCollab, IdentityMismatch = _import_facade()
     recorded: dict[str, object] = {}
 
     def fake_inbox(agent_id, client_id, limit=10, claim_seconds=180, project_id="", thread_id=""):
@@ -56,9 +47,9 @@ def test_inbox_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypatc
 
     monkeypatch.setattr(collab, "inbox", fake_inbox)
     facade = AuthenticatedCollab(collab)
-    auth = FakeAuthContext(agent_number="claude")
+    auth = AuthContext(principal_id="principal-claude", agent_number="claude", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
 
-    with pytest.raises(AuthIdentityMismatch):
+    with pytest.raises(IdentityMismatch):
         facade.inbox(auth, agent_id="chatgpt", client_id="ui")
 
     result = facade.inbox(auth, agent_id="claude", client_id="ui")
@@ -68,7 +59,7 @@ def test_inbox_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypatc
 
 def test_acknowledge_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypatch):
     """Production change: ack authority must come from AuthContext, not agent_id argument."""
-    AuthenticatedCollab, AuthIdentityMismatch = _import_facade()
+    AuthenticatedCollab, IdentityMismatch = _import_facade()
     recorded: dict[str, object] = {}
 
     def fake_ack(agent_id, message_id, result=""):
@@ -77,9 +68,9 @@ def test_acknowledge_uses_authenticated_identity_and_rejects_agent_mismatch(monk
 
     monkeypatch.setattr(collab, "acknowledge", fake_ack)
     facade = AuthenticatedCollab(collab)
-    auth = FakeAuthContext(agent_number="chatgpt")
+    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
 
-    with pytest.raises(AuthIdentityMismatch):
+    with pytest.raises(IdentityMismatch):
         facade.acknowledge(auth, agent_id="claude", message_id="m-1")
 
     result = facade.acknowledge(auth, agent_id="chatgpt", message_id="m-1", result="handled")
@@ -88,7 +79,7 @@ def test_acknowledge_uses_authenticated_identity_and_rejects_agent_mismatch(monk
 
 def test_release_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypatch):
     """Production change: release authority must come from AuthContext, not agent_id argument."""
-    AuthenticatedCollab, AuthIdentityMismatch = _import_facade()
+    AuthenticatedCollab, IdentityMismatch = _import_facade()
     recorded: dict[str, object] = {}
 
     def fake_release(agent_id, message_id, reason=""):
@@ -97,9 +88,9 @@ def test_release_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypa
 
     monkeypatch.setattr(collab, "release", fake_release)
     facade = AuthenticatedCollab(collab)
-    auth = FakeAuthContext(agent_number="claude")
+    auth = AuthContext(principal_id="principal-claude", agent_number="claude", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
 
-    with pytest.raises(AuthIdentityMismatch):
+    with pytest.raises(IdentityMismatch):
         facade.release(auth, agent_id="chatgpt", message_id="m-2")
 
     result = facade.release(auth, agent_id="claude", message_id="m-2", reason="retry")
@@ -108,7 +99,7 @@ def test_release_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypa
 
 def test_project_state_set_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypatch):
     """Production change: project writes must be attributed to the authenticated agent."""
-    AuthenticatedCollab, AuthIdentityMismatch = _import_facade()
+    AuthenticatedCollab, IdentityMismatch = _import_facade()
     recorded: dict[str, object] = {}
 
     def fake_set_project(agent_id, project_id, state, expected_revision=-1):
@@ -122,9 +113,9 @@ def test_project_state_set_uses_authenticated_identity_and_rejects_agent_mismatc
 
     monkeypatch.setattr(collab, "set_project", fake_set_project)
     facade = AuthenticatedCollab(collab)
-    auth = FakeAuthContext(agent_number="chatgpt")
+    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
 
-    with pytest.raises(AuthIdentityMismatch):
+    with pytest.raises(IdentityMismatch):
         facade.set_project(auth, agent_id="claude", project_id="p", state={})
 
     result = facade.set_project(auth, agent_id="chatgpt", project_id="p", state={"x": 1})
@@ -167,6 +158,7 @@ def test_collaboration_mutation_entrypoints_are_enumerated_for_auth_migration():
             "dialog_release",
             "project_state_set",
             "room_heartbeat",
+            "room_telemetry_update",
             "room_cleanup_stale",
             "operator_send",
             "operator_call_contact",
@@ -196,3 +188,28 @@ def test_collaboration_mutation_entrypoints_are_enumerated_for_auth_migration():
         actual = _mutating_collab_tool_names(path)
         missing = required - actual
         assert not missing, f"{path} missing expected mutating entrypoints: {sorted(missing)}"
+
+
+DELIVERY_PLANE_SLICE_1_5 = {
+    "ack_event",
+    "emit_event",
+    "pulse_mark_delivered",
+    "pulse_poll",
+    "sam_room",
+    "sam_wake",
+    "sum_controller_set",
+    "sum_controller_tick",
+    "sum_host_signal",
+    "sum_turn_complete_current",
+    "sum_wake_ack",
+    "sum_wake_ack_current",
+    "sum_wake_sent",
+    "widget_watchdog_ack",
+}
+
+
+def test_delivery_plane_mutators_are_explicitly_tracked_as_slice_1_5():
+    """Activation gate must not silently omit the wake/Pulse/SAM mutation plane."""
+    actual = _mutating_collab_tool_names("runtime/server_v2.py")
+    missing = DELIVERY_PLANE_SLICE_1_5 - actual
+    assert not missing, f"delivery-plane slice 1.5 missing current mutators: {sorted(missing)}"
