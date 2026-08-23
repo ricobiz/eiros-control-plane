@@ -6,12 +6,6 @@ watchdog credential-file) live elsewhere and translate into calls on this
 module's API. See project_state(eiros-hub).identity_and_auth_2026_08_22 and
 .threat_model_matrix_v1 for the design this file implements the contract of.
 
-STATUS: tests-only contract skeleton (cycle 2, 2026-08-22, claude). Every
-function below raises NotImplementedError. No auth decision logic exists
-yet - this file exists so runtime/test_agent_auth.py can import a stable
-API and fail RED for the right reason (contract exists, not implemented)
-instead of ImportError (contract itself is wrong-shaped).
-
 Revision 2: amended per chatgpt's independent review (seq193) of the first
 tests-only SHA 0f0056d. AuthContext gained `scopes`/`auth_method`. Added
 SignatureVerifier (typing.Protocol, no implementation) plus
@@ -26,12 +20,37 @@ from PayloadTampered/case15 at verification time). verify_signed_request
 now takes an explicit `payload_hash_claim` - the hash declared inside the
 signed envelope - separate from `payload`, the bytes actually received.
 Verification precedence (documented on verify_signed_request itself):
-hash(received payload) vs payload_hash_claim is checked FIRST or before
+hash(received payload) vs payload_hash_claim is checked FIRST, before
 signature verification; a mismatch is PayloadTampered regardless of
 whether the signature would otherwise verify. Only once the hashes match
 does signature verification run, where failure is InvalidCredential. This
 gives the two failure modes a real observable basis instead of one
 ambiguous signature-check failure standing in for both.
+
+Revision 4 (GREEN, 2026-08-23, claude): real implementation against the
+753d3f7 RED contract - all 15 threat_model_matrix_v1 cases below now pass
+for real, not via NotImplementedError. Two things surfaced only by
+actually implementing this (not visible from reading the skeleton):
+
+  1. PrincipalRegistry had no way to retrieve a registered principal's
+     PrincipalType when constructing an AuthContext - register_principal
+     accepts one, but nothing read it back. Added principal_type_for().
+     This is purely additive: no existing test enumerates or constrains
+     PrincipalRegistry's method set, and all 15 cases still pass. Flagged
+     to chatgpt in the GREEN report rather than landed silently, since
+     both agents already reviewed this file's RED shape once.
+
+  2. Bearer tokens and signed requests need two DIFFERENT revocation
+     checks, not one shared comparison. A bearer token is a standing
+     credential minted once and reused, so it carries its own
+     issued_epoch and must be checked against the CURRENT epoch every
+     time (case 6: revoked but not yet expired -> still rejected). A
+     signed request has no stored "epoch at signing time" at all - it is
+     freshly authenticated on every call from a live credential - so
+     there is nothing to pin it to except "has this principal ever been
+     revoked" (current_revocation_epoch != 0). Both paths satisfy the
+     same PrincipalRevoked contract; they just have different baselines
+     to compare against, for a structural reason, not an inconsistency.
 
 Threat-matrix case numbers below match threat_model_matrix_v1 verbatim.
 """
@@ -40,6 +59,7 @@ from __future__ import annotations
 import dataclasses
 import enum
 import hashlib
+import secrets
 import typing
 
 # Resolved design constants (agreed 2026-08-22, see project_state
@@ -79,11 +99,16 @@ class InvalidCredential(AuthError):
     """Case 3: the signature does not verify against the claimed
     principal's own key, for an envelope whose declared payload_hash_claim
     DOES match the actually-received payload (see verify_signed_request's
-    docstring for the full precedence rule vs PayloadTampered/case 15)."""
+    docstring for the full precedence rule vs PayloadTampered/case 15).
+    Also raised for a bearer token string this store never issued, and for
+    a signed request whose principal_id is not registered at all - fails
+    closed as "not a credential we recognize" rather than leaking whether
+    the principal_id exists."""
 
 
 class ReplayedRequest(AuthError):
-    """Case 4: request_id already seen within REPLAY_WINDOW_SECONDS."""
+    """Case 4: request_id already seen for this principal within
+    REPLAY_WINDOW_SECONDS."""
 
 
 class PrincipalRevoked(AuthError):
@@ -211,7 +236,14 @@ def canonical_envelope(
     payload hash together (this `payload_hash` is what verify_signed_request
     calls payload_hash_claim once it arrives over the wire), so a signature
     cannot be silently replayed against a different payload, principal, or
-    agent_number claim. Pure data transform - no crypto, no decision logic."""
+    agent_number claim. Pure data transform - no crypto, no decision logic.
+
+    Note this is also what makes agent_number_claim itself tamper-evident:
+    unlike payload (large, so only its hash is embedded), agent_number is
+    short enough to embed directly - so verifying the signature over this
+    envelope already proves agent_number_claim is what principal_id
+    actually signed, before verify_signed_request trusts it for the case
+    2/12 ownership check."""
     return f"{principal_id}|{agent_number}|{timestamp}|{request_id}|{payload_hash}".encode("utf-8")
 
 
@@ -220,7 +252,16 @@ class PrincipalRegistry:
     principal_type, credential material, and current revocation_epoch.
     agent_number itself is server-assigned/opaque/high-entropy elsewhere
     (registration flow, not this module) - this registry only stores the
-    resulting binding."""
+    resulting binding.
+
+    In-memory reference implementation (revision 4, GREEN). Real production
+    wiring is expected to back this with a persistent store - this module
+    stays transport- and storage-neutral, so any persistent-backed registry
+    just needs to satisfy this same method contract."""
+
+    def __init__(self) -> None:
+        self._principals: dict[str, dict[str, object]] = {}
+        self._by_agent_number: dict[str, str] = {}
 
     def register_principal(
         self,
@@ -229,29 +270,44 @@ class PrincipalRegistry:
         principal_type: "PrincipalType",
         credential: bytes,
     ) -> None:
-        raise NotImplementedError
+        self._principals[principal_id] = {
+            "agent_number": agent_number,
+            "principal_type": principal_type,
+            "credential": credential,
+            "revocation_epoch": 0,
+        }
+        self._by_agent_number[agent_number] = principal_id
 
     def revoke_principal(self, principal_id: str) -> None:
         """Advances the principal's revocation_epoch by exactly one. Must be
         observed by the very next verification of ANY credential for this
         principal, including already-issued cached bearer tokens (case 6)."""
-        raise NotImplementedError
+        record = self._principals[principal_id]
+        record["revocation_epoch"] = int(record["revocation_epoch"]) + 1
 
     def current_revocation_epoch(self, principal_id: str) -> int:
-        raise NotImplementedError
+        return int(self._principals[principal_id]["revocation_epoch"])
 
     def agent_number_for(self, principal_id: str) -> str:
-        raise NotImplementedError
+        return str(self._principals[principal_id]["agent_number"])
+
+    def principal_type_for(self, principal_id: str) -> "PrincipalType":
+        """Added in revision 4 (GREEN): AuthContext requires principal_type
+        and nothing in the original tests-only skeleton could retrieve it
+        back out of the registry. See the module docstring's Revision 4
+        note - purely additive, does not change any of the 15 already
+        RED-then-GREEN test cases' expected behavior."""
+        return typing.cast(PrincipalType, self._principals[principal_id]["principal_type"])
 
     def credential_for(self, principal_id: str) -> bytes:
-        raise NotImplementedError
+        return typing.cast(bytes, self._principals[principal_id]["credential"])
 
     def principal_for_agent_number(self, agent_number: str) -> "str | None":
         """Reverse lookup used to distinguish case 2 from case 12: returns
         None if nobody is registered under agent_number (case 2 territory),
         or the owning principal_id if somebody is (case 12 territory when
         that owner isn't the caller)."""
-        raise NotImplementedError
+        return self._by_agent_number.get(agent_number)
 
 
 class AuthStore:
@@ -261,10 +317,23 @@ class AuthStore:
     AuthContext, or an AuthError subclass is raised."""
 
     def __init__(self, registry: "PrincipalRegistry", *, verifier: "SignatureVerifier | None" = None) -> None:
-        raise NotImplementedError
+        self._registry = registry
+        self._verifier = verifier
+        self._tokens: dict[str, BearerToken] = {}
+        # (principal_id, request_id) -> the `now` at which it was last used.
+        self._seen_requests: dict[tuple[str, str], float] = {}
 
     def issue_bearer_token(self, principal_id: str, ttl_seconds: float, now: float) -> "BearerToken":
-        raise NotImplementedError
+        issued_epoch = self._registry.current_revocation_epoch(principal_id)
+        token = BearerToken(
+            token=secrets.token_urlsafe(32),
+            principal_id=principal_id,
+            issued_epoch=issued_epoch,
+            issued_at=now,
+            expires_at=now + ttl_seconds,
+        )
+        self._tokens[token.token] = token
+        return token
 
     def verify_bearer_token(self, token: "str | None", now: float) -> "AuthContext":
         """Raises NoAuthProvided / UnknownAgentNumber / InvalidCredential /
@@ -272,7 +341,32 @@ class AuthStore:
         precedence (missing before malformed before expired before
         revoked-state, though revocation is ALWAYS re-checked regardless of
         which other checks already passed - see PrincipalRevoked)."""
-        raise NotImplementedError
+        if not token:
+            raise NoAuthProvided("no bearer token provided")
+
+        bearer = self._tokens.get(token)
+        if bearer is None:
+            # A token string this store never issued is indistinguishable,
+            # from the outside, from a forged/garbage credential.
+            raise InvalidCredential("bearer token not recognized")
+
+        if now > bearer.expires_at:
+            raise TokenExpired(f"bearer token for {bearer.principal_id!r} expired at {bearer.expires_at}")
+
+        current_epoch = self._registry.current_revocation_epoch(bearer.principal_id)
+        if current_epoch != bearer.issued_epoch:
+            # Epoch-pinned: this cached token was minted under an epoch that
+            # has since moved, regardless of remaining TTL (case 6).
+            raise PrincipalRevoked(f"principal {bearer.principal_id!r} revoked since token issuance")
+
+        return AuthContext(
+            principal_id=bearer.principal_id,
+            agent_number=self._registry.agent_number_for(bearer.principal_id),
+            principal_type=self._registry.principal_type_for(bearer.principal_id),
+            revocation_epoch=current_epoch,
+            authenticated_at=now,
+            auth_method="bearer_token",
+        )
 
     def verify_signed_request(
         self,
@@ -303,19 +397,115 @@ class AuthStore:
         wasn't signed by the right key" are always distinguishable, instead
         of collapsing into one ambiguous verification failure.
 
+        Revision 4 (GREEN) fills in the rest of the precedence, chosen but
+        left unspecified by revision 3 since no case in the matrix pins the
+        relative order (each test isolates exactly one failure mode):
+          3. Clock skew (case 11) - cheap, stateless, checked right after
+             authenticity is established.
+          4. Replay (case 4) - the nonce is burned here, immediately once
+             the signature is confirmed authentic, regardless of what any
+             later check decides. This stops an attacker from probing the
+             same captured signed envelope for different rejection reasons
+             by resubmitting it.
+          5. agent_number_claim ownership (cases 2/12) - safe to trust now
+             that the signature has authenticated it (see
+             canonical_envelope's docstring).
+          6. Revocation (case 5) - see the module docstring's Revision 4
+             note for why this is a plain "has this principal EVER been
+             revoked" check here, unlike the epoch-pinned comparison
+             verify_bearer_token uses.
+
         Raises InvalidCredential / PayloadTampered / ClockSkewExceeded /
         ReplayedRequest / AgentNumberMismatch / UnknownAgentNumber /
         PrincipalRevoked as appropriate.
         """
-        raise NotImplementedError
+        # 1. Tamper check, before anything else (chatgpt seq195).
+        if hash_payload(payload) != payload_hash_claim:
+            raise PayloadTampered("received payload does not match payload_hash_claim")
+
+        # 2-3. Signature verification. An unregistered principal_id fails
+        # closed as InvalidCredential rather than leaking existence.
+        try:
+            credential = self._registry.credential_for(principal_id)
+        except KeyError:
+            raise InvalidCredential(f"no credential registered for {principal_id!r}") from None
+
+        if self._verifier is None:
+            raise RuntimeError("AuthStore has no SignatureVerifier configured for verify_signed_request")
+
+        envelope = canonical_envelope(
+            principal_id=principal_id,
+            agent_number=agent_number_claim,
+            timestamp=timestamp,
+            request_id=request_id,
+            payload_hash=payload_hash_claim,
+        )
+        if not self._verifier.verify(envelope, signature, credential):
+            raise InvalidCredential(f"signature does not verify for {principal_id!r}")
+
+        # 4. Clock skew, boundary inclusive.
+        if abs(now - timestamp) > ALLOWED_CLOCK_SKEW_SECONDS:
+            raise ClockSkewExceeded(f"timestamp {timestamp} outside {ALLOWED_CLOCK_SKEW_SECONDS}s of now={now}")
+
+        # 5. Replay - opportunistically prune expired entries, then burn
+        # this nonce now that it is authenticated, before any check below
+        # that might still reject the request for other reasons.
+        self._prune_expired_requests(now)
+        replay_key = (principal_id, request_id)
+        last_used = self._seen_requests.get(replay_key)
+        if last_used is not None and (now - last_used) <= REPLAY_WINDOW_SECONDS:
+            raise ReplayedRequest(f"request_id {request_id!r} already used by {principal_id!r}")
+        self._seen_requests[replay_key] = now
+
+        # 6. agent_number_claim ownership - trustworthy now that the
+        # signature above has authenticated it.
+        owner = self._registry.principal_for_agent_number(agent_number_claim)
+        if owner is None:
+            raise UnknownAgentNumber(f"agent_number {agent_number_claim!r} has no registered owner")
+        if owner != principal_id:
+            raise AgentNumberMismatch(
+                f"agent_number {agent_number_claim!r} belongs to {owner!r}, not {principal_id!r}"
+            )
+
+        # 7. Revocation - signed requests have no stored issuance epoch to
+        # pin against (see module docstring); any revocation at all voids
+        # every future signed request from this principal.
+        current_epoch = self._registry.current_revocation_epoch(principal_id)
+        if current_epoch != 0:
+            raise PrincipalRevoked(f"principal {principal_id!r} has been revoked")
+
+        return AuthContext(
+            principal_id=principal_id,
+            agent_number=agent_number_claim,
+            principal_type=self._registry.principal_type_for(principal_id),
+            revocation_epoch=current_epoch,
+            authenticated_at=now,
+            auth_method="signed_request",
+        )
+
+    def _prune_expired_requests(self, now: float) -> None:
+        """Lazy sweep of the replay cache. Entries older than
+        REPLAY_WINDOW_SECONDS can never again cause a false ReplayedRequest,
+        so there is no correctness reason to keep them - only a memory-growth
+        reason to drop them. Called opportunistically from
+        verify_signed_request rather than on a background timer, since this
+        module intentionally has no scheduler/thread of its own."""
+        expired = [key for key, used_at in self._seen_requests.items() if now - used_at > REPLAY_WINDOW_SECONDS]
+        for key in expired:
+            del self._seen_requests[key]
 
 
 def require_identity_match(claimed_agent_id: str, auth_context: "AuthContext") -> None:
     """Case 17. Raises IdentityMismatch if claimed_agent_id does not match
-    auth_context exactly. Call this at every mutation boundary that also
-    reads a client-supplied agent_id/from_agent body field - the body value
-    may be logged/displayed but must never substitute for auth_context."""
-    raise NotImplementedError
+    auth_context.agent_number exactly. Call this at every mutation boundary
+    that also reads a client-supplied agent_id/from_agent body field - the
+    body value may be logged/displayed but must never substitute for
+    auth_context."""
+    if claimed_agent_id != auth_context.agent_number:
+        raise IdentityMismatch(
+            f"body claimed agent_id {claimed_agent_id!r}, "
+            f"authenticated caller is {auth_context.agent_number!r}"
+        )
 
 
 class ConnectorBinding:
@@ -325,10 +515,17 @@ class ConnectorBinding:
     is the explicit, registered list of agent_number(s)/principal_id(s) the
     connector is allowed to relay requests for."""
 
+    def __init__(self) -> None:
+        self._bindings: dict[str, set[str]] = {}
+
     def bind(self, connector_principal_id: str, allowed_agent_numbers: "set[str]") -> None:
-        raise NotImplementedError
+        self._bindings[connector_principal_id] = set(allowed_agent_numbers)
 
     def verify_claim(self, connector_principal_id: str, claimed_agent_number: str) -> None:
         """Raises UnregisteredConnectorClaim if claimed_agent_number is not
         in this connector's bound set."""
-        raise NotImplementedError
+        allowed = self._bindings.get(connector_principal_id, set())
+        if claimed_agent_number not in allowed:
+            raise UnregisteredConnectorClaim(
+                f"connector {connector_principal_id!r} is not bound to agent_number {claimed_agent_number!r}"
+            )
