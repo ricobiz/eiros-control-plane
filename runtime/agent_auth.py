@@ -52,6 +52,105 @@ actually implementing this (not visible from reading the skeleton):
      same PrincipalRevoked contract; they just have different baselines
      to compare against, for a structural reason, not an inconsistency.
 
+Revision 5 (2026-08-23, claude): fixes six real defects chatgpt's
+independent execution-based review of GREEN SHA 7e70a7a found (seq206,
+the operative consolidated review after an overlapping seq205 - see
+seq207's correction). Not cosmetic: findings 1 and 2 below are genuine
+auth-bypass classes, reproduced by execution before being fixed, not
+merely inspected.
+
+  1. agent_number -> principal_id was single-owner (_by_agent_number:
+     dict[str, str]). The approved identity model (project_state
+     identity_and_auth_2026_08_22.vocabulary) is that one stable
+     agent_number identifies one AGENT, and several principals
+     (browser/app/watchdog/...) may legitimately share it. The old model
+     let a second legitimate registration silently DISPLACE the first
+     (last-write-wins on a dict key) instead of coexisting, breaking the
+     first principal's own genuinely-valid requests. NOTE: seq205 (a
+     since-superseded, overlapping review message) initially recommended
+     the OPPOSITE fix - rejecting duplicate agent_number registration
+     outright. seq207 explicitly corrected this: that recommendation was
+     wrong and was NOT implemented. Reverse lookup is now agent_number ->
+     set-of-principal_ids (membership); a principal_id itself is still
+     bound to exactly one agent_number (unchanged) - only the reverse
+     direction is many-valued. verify_signed_request's case 2/12 check
+     changed from "is this the sole owner" to "is this principal a member
+     of this agent_number's set".
+
+  2. Revocation was bypassable two ways. (a) issue_bearer_token did not
+     check revocation at issuance time at all: minting a token for an
+     already-revoked principal stamped the token's own issued_epoch from
+     the (already-revoked) current epoch, so the existing epoch-pinned
+     check in verify_bearer_token (current_epoch != issued_epoch) held
+     trivially true forever - epoch-pinning only ever detected revocation
+     that happened AFTER issuance, never revocation already in effect AT
+     issuance. Fixed: issuance itself now refuses a currently-revoked
+     principal. (b) register_principal unconditionally overwrote any
+     existing record, silently resetting revocation_epoch back to 0 on
+     re-registration - so ANY caller able to invoke register_principal
+     again (accidentally or otherwise) could undo a revocation. Fixed:
+     register_principal is now idempotent for an EXACT repeat of the same
+     principal_id's (agent_number, principal_type, credential, scopes) -
+     a harmless no-op that leaves revocation_epoch untouched - and raises
+     ConflictingPrincipalRegistration for any re-registration attempt that
+     changes those fields. Deliberate non-goal: neither fix adds
+     revoked-principal reactivation/credential-rotation semantics - there
+     is no agreed design for that yet, and silently allowing it via
+     re-registration or re-issuance is exactly the bypass being closed,
+     not a shortcut to it.
+
+  3. The replay-request cache (_seen_requests) was a private dict owned
+     directly by one AuthStore instance, so replay protection evaporated
+     on every AuthStore reconstruction (e.g. process restart) - a
+     resubmitted request_id was rejected by the instance that first saw
+     it, but accepted by a fresh instance over the same registry. Fixed:
+     replay state now lives behind an injectable ReplayStore protocol
+     (default InMemoryReplayStore preserves the old zero-config
+     behaviour for tests/single-process use); two AuthStore instances
+     constructed with the SAME ReplayStore instance now correctly observe
+     each other's burned nonces, and a real deployment can inject a
+     persistent-backed implementation of the same protocol instead.
+
+  4. AuthContext.scopes was structurally present since revision 2 but no
+     code path ever populated it - always (). Fixed: PrincipalRegistry
+     now stores a scopes grant per principal (registration-time input,
+     default empty, backward compatible); verify_signed_request resolves
+     scopes LIVE from the registry on every call (a grant/revocation
+     change takes effect on the very next signed request, matching
+     revocation_epoch's own freshness model); issue_bearer_token bakes
+     scopes into the BearerToken snapshot at issuance time and
+     verify_bearer_token returns exactly that snapshot, never re-read
+     afterward (matching the point-in-time model epoch-pinning already
+     uses for bearer tokens). AuthContext.scopes and BearerToken.scopes
+     changed type from tuple[str, ...] to frozenset[str] - scopes are an
+     unordered capability set, not a sequence.
+
+  5. canonical_envelope() did not bind the MCP/tool method being called,
+     despite the frozen signed-request model covering
+     "method + canonical payload hash + timestamp/request_id + identity".
+     A signature was therefore transferable verbatim between two
+     different methods sharing the same payload bytes, timestamp and
+     request_id - the signature said "this payload, this principal, this
+     moment" but never "this specific operation". Fixed: canonical_envelope
+     and verify_signed_request both gained a required `method` parameter,
+     bound into the signed bytes; resubmitting a genuinely-valid signed
+     envelope under a different method now fails signature verification
+     (InvalidCredential) rather than succeeding.
+
+  6. The envelope encoding was delimiter-joined
+     (f"{a}|{b}|{c}|{d}|{e}"), which is ambiguous whenever a field itself
+     may contain the delimiter - e.g. principal_id="a|b", agent_number="c"
+     and principal_id="a", agent_number="b|c" both serialized to the
+     identical bytes b"a|b|c|...", making two DIFFERENT logical envelopes
+     mutually forgeable under the same signature. Reproduced as an actual
+     byte-for-byte collision before fixing. Fixed: fields are now
+     length-prefixed (4-byte big-endian length + raw UTF-8 bytes) rather
+     than delimiter-joined, and `timestamp` is frozen to an integer
+     number of milliseconds since the epoch rather than interpolated as a
+     raw float - float repr is not a stable cross-language canonical
+     format, and any future non-Python signer must reproduce these exact
+     bytes from the same wall-clock instant.
+
 Threat-matrix case numbers below match threat_model_matrix_v1 verbatim.
 """
 from __future__ import annotations
@@ -89,10 +188,11 @@ class NoAuthProvided(AuthError):
 
 class UnknownAgentNumber(AuthError):
     """Case 2: the claimed agent_number has NO backing registered principal
-    at all (threat_model_matrix_v1's own wording). Must be distinguishable
-    from AgentNumberMismatch (case 12): case 2 is "this number belongs to
-    nobody"; case 12 is "this number belongs to someone else, and the
-    caller's own credential is genuinely valid for a DIFFERENT number"."""
+    at all (threat_model_matrix_v1's own wording) - i.e. its membership set
+    is empty. Must be distinguishable from AgentNumberMismatch (case 12):
+    case 2 is "this number belongs to nobody"; case 12 is "this number has
+    one or more legitimate members, and the caller's own credential is
+    genuinely valid, but the caller isn't among them"."""
 
 
 class InvalidCredential(AuthError):
@@ -100,22 +200,34 @@ class InvalidCredential(AuthError):
     principal's own key, for an envelope whose declared payload_hash_claim
     DOES match the actually-received payload (see verify_signed_request's
     docstring for the full precedence rule vs PayloadTampered/case 15).
-    Also raised for a bearer token string this store never issued, and for
-    a signed request whose principal_id is not registered at all - fails
+    Also raised for a bearer token string this store never issued, for a
+    signed request whose principal_id is not registered at all (fails
     closed as "not a credential we recognize" rather than leaking whether
-    the principal_id exists."""
+    the principal_id exists), and - since revision 5 - for a genuinely
+    valid signature resubmitted under a DIFFERENT method than the one it
+    was actually signed for (canonical_envelope binds method; a mismatched
+    method changes the signed bytes, so verification fails the same way a
+    wrong key would)."""
 
 
 class ReplayedRequest(AuthError):
     """Case 4: request_id already seen for this principal within
-    REPLAY_WINDOW_SECONDS."""
+    REPLAY_WINDOW_SECONDS. Since revision 5, "seen" is answered by the
+    AuthStore's injected ReplayStore, which may be shared across multiple
+    AuthStore instances (see ReplayStore/InMemoryReplayStore below) -
+    replay protection is no longer scoped to one process's lifetime by
+    construction."""
 
 
 class PrincipalRevoked(AuthError):
     """Cases 5 and 6: the principal's CURRENT revocation_epoch is ahead of
     the epoch bound to the credential/token being verified. Must be checked
     fresh on every verification, including for an otherwise-still-valid
-    cached bearer token (case 6) - never deferred to TTL expiry."""
+    cached bearer token (case 6) - never deferred to TTL expiry. Since
+    revision 5, also raised by issue_bearer_token itself when the
+    principal is ALREADY revoked at issuance time (epoch-pinning alone
+    cannot catch that case - see the module docstring's Revision 5 note
+    #2)."""
 
 
 class ClockSkewExceeded(AuthError):
@@ -125,10 +237,12 @@ class ClockSkewExceeded(AuthError):
 
 
 class AgentNumberMismatch(AuthError):
-    """Case 12: signature/token is genuinely valid for principal P, and P is
-    bound to agent_number A, but the request payload claims agent_number B,
-    where B is a real, registered number belonging to a DIFFERENT principal.
-    See UnknownAgentNumber for the "B belongs to nobody" case (case 2)."""
+    """Case 12: signature/token is genuinely valid for principal P, but P
+    is not among the principals bound to the claimed agent_number B (B may
+    be legitimately bound to one or more OTHER principals - see the module
+    docstring's Revision 5 note #1 on the multi-principal-per-agent_number
+    model). See UnknownAgentNumber for the case where B has no bound
+    principals at all (case 2)."""
 
 
 class PayloadTampered(AuthError):
@@ -154,7 +268,8 @@ class IdentityMismatch(AuthError):
     NOTE for collab-layer callers (e.g. runtime/authenticated_collab.py):
     reuse THIS class rather than defining a parallel identity-mismatch
     exception - single source of truth for the auth-domain error taxonomy
-    (chatgpt agreed, seq195: authenticated_collab.py will unify onto this)."""
+    (chatgpt agreed, seq195: authenticated_collab.py will unify onto this).
+    """
 
 
 class UnregisteredConnectorClaim(AuthError):
@@ -180,6 +295,10 @@ class AuthContext:
     higher-assurance-path enforcement. Confirmed sufficient for slice 1 by
     chatgpt (seq195) - a separate credential/session identifier is
     deferred to transport adapters/session binding, not blocking here.
+
+    Revision 5: scopes is now actually populated (see module docstring
+    Revision 5 note #4) and changed type from tuple[str, ...] to
+    frozenset[str] - an unordered capability set, not a sequence.
     """
 
     principal_id: str
@@ -187,20 +306,27 @@ class AuthContext:
     principal_type: "PrincipalType"
     revocation_epoch: int
     authenticated_at: float
-    scopes: "tuple[str, ...]" = ()
+    scopes: "frozenset[str]" = frozenset()
     auth_method: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
 class BearerToken:
     """Minted after asymmetric principal-keypair proof; used for ongoing
-    per-request auth on the Claude HTTP path (FastMCP token_verifier)."""
+    per-request auth on the Claude HTTP path (FastMCP token_verifier).
+
+    Revision 5: gained `scopes`, a snapshot of the principal's granted
+    scopes taken at issuance time (see module docstring Revision 5 note
+    #4) - deliberately NOT re-read from the registry on every verification,
+    matching the same point-in-time model issued_epoch already uses.
+    """
 
     token: str
     principal_id: str
     issued_epoch: int
     issued_at: float
     expires_at: float
+    scopes: "frozenset[str]" = frozenset()
 
 
 class SignatureVerifier(typing.Protocol):
@@ -215,6 +341,53 @@ class SignatureVerifier(typing.Protocol):
     def verify(self, envelope: bytes, signature: bytes, credential: bytes) -> bool: ...
 
 
+class ReplayStore(typing.Protocol):
+    """Pluggable request-replay backend (revision 5, chatgpt seq206 finding
+    #3). AuthStore no longer owns replay state as an unconditionally
+    private instance dict - that made replay protection evaporate on every
+    AuthStore reconstruction, which is not "replay protection" for a
+    credential meant to survive process restarts. Two AuthStore instances
+    constructed with the SAME ReplayStore instance (or, in a real
+    deployment, the same persistent-backed implementation of this
+    protocol) observe each other's burned nonces. Purely structural
+    typing, matching SignatureVerifier's style."""
+
+    def seen(self, principal_id: str, request_id: str, now: float, window_seconds: float) -> bool: ...
+
+    def mark(self, principal_id: str, request_id: str, now: float) -> None: ...
+
+    def prune(self, now: float, window_seconds: float) -> None: ...
+
+
+class InMemoryReplayStore:
+    """Default ReplayStore (revision 5) - process-local dict, exactly what
+    AuthStore used to hardcode internally as a private attribute. Fine for
+    tests and single-process deployments, and for sharing across multiple
+    AuthStore instances IN THE SAME PROCESS when the same
+    InMemoryReplayStore instance is injected into each. NOT restart-safe by
+    itself - a real multi-process/restart-safe deployment must inject a
+    persistent-backed implementation of the same ReplayStore protocol
+    instead."""
+
+    def __init__(self) -> None:
+        self._seen: dict[tuple[str, str], float] = {}
+
+    def seen(self, principal_id: str, request_id: str, now: float, window_seconds: float) -> bool:
+        last_used = self._seen.get((principal_id, request_id))
+        return last_used is not None and (now - last_used) <= window_seconds
+
+    def mark(self, principal_id: str, request_id: str, now: float) -> None:
+        self._seen[(principal_id, request_id)] = now
+
+    def prune(self, now: float, window_seconds: float) -> None:
+        """Lazy sweep. Entries older than window_seconds can never again
+        cause a false ReplayedRequest, so there is no correctness reason to
+        keep them - only a memory-growth reason to drop them."""
+        expired = [key for key, used_at in self._seen.items() if now - used_at > window_seconds]
+        for key in expired:
+            del self._seen[key]
+
+
 def hash_payload(payload: bytes) -> str:
     """Single canonical definition of "payload hash" - both test fixtures
     and any real implementation must use this, not hand-rolled hashing, so
@@ -227,41 +400,119 @@ def canonical_envelope(
     *,
     principal_id: str,
     agent_number: str,
+    method: str,
     timestamp: float,
     request_id: str,
     payload_hash: str,
 ) -> bytes:
     """The exact bytes a SignatureVerifier signs/verifies over. Binds
-    principal_id, agent_number, timestamp, request_id and the DECLARED
-    payload hash together (this `payload_hash` is what verify_signed_request
-    calls payload_hash_claim once it arrives over the wire), so a signature
-    cannot be silently replayed against a different payload, principal, or
-    agent_number claim. Pure data transform - no crypto, no decision logic.
+    principal_id, agent_number, method, timestamp, request_id and the
+    DECLARED payload hash together (this `payload_hash` is what
+    verify_signed_request calls payload_hash_claim once it arrives over
+    the wire), so a signature cannot be silently replayed against a
+    different payload, principal, agent_number claim, or - since revision
+    5 - a different method. Pure data transform - no crypto, no decision
+    logic.
 
     Note this is also what makes agent_number_claim itself tamper-evident:
     unlike payload (large, so only its hash is embedded), agent_number is
     short enough to embed directly - so verifying the signature over this
     envelope already proves agent_number_claim is what principal_id
     actually signed, before verify_signed_request trusts it for the case
-    2/12 ownership check."""
-    return f"{principal_id}|{agent_number}|{timestamp}|{request_id}|{payload_hash}".encode("utf-8")
+    2/12 membership check.
+
+    Revision 5 encoding change (chatgpt seq206 findings #5 and #6):
+      - `method` (the MCP/tool method this envelope authorizes) is now a
+        bound field. Without it, a valid signature for one method's call
+        was transferable verbatim to any other method sharing the same
+        payload bytes, timestamp and request_id - the signature said
+        "this payload, this principal, this moment" but never "this
+        operation". A caller resubmitting a captured envelope under a
+        different method must now fail verification.
+      - Fields are length-prefixed (4-byte big-endian length + raw UTF-8
+        bytes) rather than delimiter-joined. A delimiter-joined
+        f"{a}|{b}|..." string is ambiguous whenever a field itself may
+        contain the delimiter - reproduced as a real collision:
+        principal_id="a|b", agent_number="c" and principal_id="a",
+        agent_number="b|c" both serialized to the identical bytes
+        b"a|b|c|...", making two DIFFERENT logical envelopes mutually
+        forgeable under the same signature. Length-prefixing makes the
+        byte boundary between fields unambiguous regardless of content.
+      - `timestamp` is frozen to an integer number of milliseconds since
+        the epoch (round(timestamp * 1000)) rather than interpolated as a
+        raw float: float repr is not a stable cross-language canonical
+        format (formatting, trailing zeros and precision differ across
+        runtimes), and any future non-Python signer must be able to
+        reproduce these exact bytes from the same wall-clock instant.
+        Millisecond precision is finer than this module's whole-second
+        clock-skew/replay granularity, so it does not lose information
+        those checks depend on.
+    """
+    fields = (
+        principal_id.encode("utf-8"),
+        agent_number.encode("utf-8"),
+        method.encode("utf-8"),
+        str(int(round(timestamp * 1000))).encode("ascii"),
+        request_id.encode("utf-8"),
+        payload_hash.encode("utf-8"),
+    )
+    parts: list[bytes] = []
+    for field in fields:
+        parts.append(len(field).to_bytes(4, "big"))
+        parts.append(field)
+    return b"".join(parts)
+
+
+class ConflictingPrincipalRegistration(AuthError):
+    """Not a threat_model_matrix_v1 case - a PrincipalRegistry data-
+    integrity error (revision 5, chatgpt seq206 finding #2b). Raised by
+    register_principal when principal_id is already registered with a
+    DIFFERENT agent_number, principal_type, credential or scopes than the
+    incoming call. Re-registering the SAME principal_id with IDENTICAL
+    data is a no-op (idempotent) and does NOT raise - this lets a caller
+    safely retry registration without accidentally resetting
+    revocation_epoch back to 0, while still catching a genuine attempt to
+    silently rebind an existing principal_id to different material."""
 
 
 class PrincipalRegistry:
     """Source of truth for registered principals: agent_number binding,
-    principal_type, credential material, and current revocation_epoch.
-    agent_number itself is server-assigned/opaque/high-entropy elsewhere
-    (registration flow, not this module) - this registry only stores the
-    resulting binding.
+    principal_type, credential material, granted scopes, and current
+    revocation_epoch. agent_number itself is server-assigned/opaque/
+    high-entropy elsewhere (registration flow, not this module) - this
+    registry only stores the resulting binding.
 
     In-memory reference implementation (revision 4, GREEN). Real production
     wiring is expected to back this with a persistent store - this module
     stays transport- and storage-neutral, so any persistent-backed registry
-    just needs to satisfy this same method contract."""
+    just needs to satisfy this same method contract.
+
+    Revision 5 (2026-08-23, claude, per chatgpt seq206/207 review of GREEN
+    SHA 7e70a7a): two structural fixes, both described in full in the
+    module docstring's Revision 5 note - summarized here:
+
+      1. agent_number -> principal_id was single-owner. The approved
+         identity model allows several principals to legitimately share
+         one agent_number. Reverse lookup is now agent_number ->
+         set-of-principal_ids (see agent_number_members, which replaces
+         the removed single-owner principal_for_agent_number).
+
+      2. register_principal unconditionally overwrote any existing
+         record, including silently resetting revocation_epoch back to 0
+         on re-registration - a real revocation-bypass path, not a
+         cosmetic gap. register_principal is now idempotent for an exact
+         repeat of the same principal_id's data (no-op, revocation_epoch
+         untouched) and raises ConflictingPrincipalRegistration for a
+         conflicting re-registration attempt.
+
+    Also gained scopes_for() (Revision 5 note #4): the principal's
+    currently-granted scopes, read live by verify_signed_request on every
+    call, and baked into a BearerToken snapshot once at issuance time.
+    """
 
     def __init__(self) -> None:
         self._principals: dict[str, dict[str, object]] = {}
-        self._by_agent_number: dict[str, str] = {}
+        self._by_agent_number: dict[str, set[str]] = {}
 
     def register_principal(
         self,
@@ -269,19 +520,41 @@ class PrincipalRegistry:
         agent_number: str,
         principal_type: "PrincipalType",
         credential: bytes,
+        scopes: "frozenset[str]" = frozenset(),
     ) -> None:
+        existing = self._principals.get(principal_id)
+        if existing is not None:
+            unchanged = (
+                existing["agent_number"] == agent_number
+                and existing["principal_type"] == principal_type
+                and existing["credential"] == credential
+                and existing["scopes"] == scopes
+            )
+            if unchanged:
+                # Idempotent no-op - revocation_epoch is deliberately left
+                # untouched (see ConflictingPrincipalRegistration docstring
+                # and module docstring Revision 5 note #2b).
+                return
+            raise ConflictingPrincipalRegistration(
+                f"principal_id {principal_id!r} is already registered with a "
+                f"different agent_number/principal_type/credential/scopes"
+            )
         self._principals[principal_id] = {
             "agent_number": agent_number,
             "principal_type": principal_type,
             "credential": credential,
+            "scopes": scopes,
             "revocation_epoch": 0,
         }
-        self._by_agent_number[agent_number] = principal_id
+        self._by_agent_number.setdefault(agent_number, set()).add(principal_id)
 
     def revoke_principal(self, principal_id: str) -> None:
         """Advances the principal's revocation_epoch by exactly one. Must be
         observed by the very next verification of ANY credential for this
-        principal, including already-issued cached bearer tokens (case 6)."""
+        principal, including already-issued cached bearer tokens (case 6),
+        and - since revision 5 - blocks issuance of any NEW bearer token
+        for this principal until the caller re-registers/rotates in an
+        explicit, not-yet-designed reactivation flow."""
         record = self._principals[principal_id]
         record["revocation_epoch"] = int(record["revocation_epoch"]) + 1
 
@@ -302,35 +575,74 @@ class PrincipalRegistry:
     def credential_for(self, principal_id: str) -> bytes:
         return typing.cast(bytes, self._principals[principal_id]["credential"])
 
-    def principal_for_agent_number(self, agent_number: str) -> "str | None":
-        """Reverse lookup used to distinguish case 2 from case 12: returns
-        None if nobody is registered under agent_number (case 2 territory),
-        or the owning principal_id if somebody is (case 12 territory when
-        that owner isn't the caller)."""
-        return self._by_agent_number.get(agent_number)
+    def scopes_for(self, principal_id: str) -> "frozenset[str]":
+        """Added revision 5 (chatgpt seq206 finding #4): the principal's
+        currently-granted scopes. Read LIVE by verify_signed_request on
+        every call (a scope grant/revocation change takes effect on the
+        very next signed request, same freshness model as revocation_epoch
+        itself); baked into the BearerToken snapshot at issuance time by
+        issue_bearer_token and NOT re-read afterward (same point-in-time
+        model epoch-pinning already uses for bearer tokens - see AuthStore
+        Revision 4/5 notes)."""
+        return typing.cast("frozenset[str]", self._principals[principal_id]["scopes"])
+
+    def agent_number_members(self, agent_number: str) -> "frozenset[str]":
+        """Added revision 5, replaces the removed principal_for_agent_number
+        (its single-owner return type was structurally incompatible with
+        the approved multi-principal-per-agent_number model - see class
+        docstring Revision 5 note #1). An empty result means case 2
+        territory (nobody bound to this agent_number); a non-empty result
+        not containing the caller's own principal_id means case 12
+        territory. Returns a fresh frozenset snapshot - callers cannot
+        mutate registry state through the return value."""
+        return frozenset(self._by_agent_number.get(agent_number, ()))
 
 
 class AuthStore:
     """Issues and verifies bearer tokens and signed requests against a
     PrincipalRegistry. Transport-neutral: adapters call in with whatever
     they received (header value, stdio payload field, ...) and get back an
-    AuthContext, or an AuthError subclass is raised."""
+    AuthContext, or an AuthError subclass is raised.
 
-    def __init__(self, registry: "PrincipalRegistry", *, verifier: "SignatureVerifier | None" = None) -> None:
+    Revision 5: gained an injectable `replay_store` (see ReplayStore /
+    InMemoryReplayStore above and module docstring Revision 5 note #3) -
+    replay state is no longer unconditionally private to one AuthStore
+    instance.
+    """
+
+    def __init__(
+        self,
+        registry: "PrincipalRegistry",
+        *,
+        verifier: "SignatureVerifier | None" = None,
+        replay_store: "ReplayStore | None" = None,
+    ) -> None:
         self._registry = registry
         self._verifier = verifier
         self._tokens: dict[str, BearerToken] = {}
-        # (principal_id, request_id) -> the `now` at which it was last used.
-        self._seen_requests: dict[tuple[str, str], float] = {}
+        self._replay_store: "ReplayStore" = replay_store if replay_store is not None else InMemoryReplayStore()
 
     def issue_bearer_token(self, principal_id: str, ttl_seconds: float, now: float) -> "BearerToken":
         issued_epoch = self._registry.current_revocation_epoch(principal_id)
+        if issued_epoch != 0:
+            # Revision 5 (chatgpt seq206 finding #2a): minting a token for
+            # an already-revoked principal previously succeeded, and then
+            # VERIFIED successfully too - the token's own issued_epoch
+            # snapshot was taken from the already-revoked current epoch, so
+            # current_epoch == issued_epoch held trivially at verify time.
+            # Epoch-pinning only ever detects revocation that happens AFTER
+            # issuance; this closes the "already revoked before issuance"
+            # gap by refusing to mint at all. See module docstring Revision
+            # 5 note #2 for why this deliberately does not add
+            # reactivation/credential-rotation semantics.
+            raise PrincipalRevoked(f"principal {principal_id!r} is revoked; refusing to issue a new bearer token")
         token = BearerToken(
             token=secrets.token_urlsafe(32),
             principal_id=principal_id,
             issued_epoch=issued_epoch,
             issued_at=now,
             expires_at=now + ttl_seconds,
+            scopes=self._registry.scopes_for(principal_id),
         )
         self._tokens[token.token] = token
         return token
@@ -365,6 +677,7 @@ class AuthStore:
             principal_type=self._registry.principal_type_for(bearer.principal_id),
             revocation_epoch=current_epoch,
             authenticated_at=now,
+            scopes=bearer.scopes,
             auth_method="bearer_token",
         )
 
@@ -373,6 +686,7 @@ class AuthStore:
         *,
         principal_id: str,
         agent_number_claim: str,
+        method: str,
         payload: bytes,
         payload_hash_claim: str,
         signature: bytes,
@@ -383,6 +697,11 @@ class AuthStore:
         """Optional SignedRequestAdapter path for capable headless clients
         (NOT the required baseline - see transport_reality_2026_08_22).
 
+        `method` (revision 5, chatgpt seq206 finding #5): the MCP/tool
+        method this signed request authorizes, bound into the canonical
+        envelope - see canonical_envelope's docstring. A genuinely valid
+        signature resubmitted under a different method fails verification.
+
         Verification precedence (revision 3, chatgpt seq195 - resolves the
         case 3 vs case 15 ambiguity that revision 2 left open):
           1. Compare hash_payload(payload) - the bytes ACTUALLY RECEIVED -
@@ -390,12 +709,13 @@ class AuthStore:
              envelope that was signed. Mismatch -> PayloadTampered,
              regardless of whether the signature would otherwise verify.
           2. Only once they match, reconstruct
-             canonical_envelope(..., payload_hash=payload_hash_claim) and
-             verify the signature against it. Failure here ->
-             InvalidCredential.
+             canonical_envelope(..., method=method,
+             payload_hash=payload_hash_claim) and verify the signature
+             against it. Failure here -> InvalidCredential.
         This ordering means "the payload isn't what was signed" and "this
-        wasn't signed by the right key" are always distinguishable, instead
-        of collapsing into one ambiguous verification failure.
+        wasn't signed by the right key (or the right method)" are always
+        distinguishable, instead of collapsing into one ambiguous
+        verification failure.
 
         Revision 4 (GREEN) fills in the rest of the precedence, chosen but
         left unspecified by revision 3 since no case in the matrix pins the
@@ -406,14 +726,21 @@ class AuthStore:
              the signature is confirmed authentic, regardless of what any
              later check decides. This stops an attacker from probing the
              same captured signed envelope for different rejection reasons
-             by resubmitting it.
-          5. agent_number_claim ownership (cases 2/12) - safe to trust now
+             by resubmitting it. Since revision 5, "seen"/"mark" go through
+             the injected ReplayStore (see module docstring Revision 5
+             note #3), not a private instance dict.
+          5. agent_number_claim MEMBERSHIP (cases 2/12) - safe to trust now
              that the signature has authenticated it (see
-             canonical_envelope's docstring).
+             canonical_envelope's docstring). Revision 5: changed from a
+             single-owner check to a membership check - see module
+             docstring Revision 5 note #1.
           6. Revocation (case 5) - see the module docstring's Revision 4
              note for why this is a plain "has this principal EVER been
              revoked" check here, unlike the epoch-pinned comparison
              verify_bearer_token uses.
+
+        On success, AuthContext.scopes is resolved LIVE from the registry
+        (revision 5, finding #4) - not cached anywhere on this AuthStore.
 
         Raises InvalidCredential / PayloadTampered / ClockSkewExceeded /
         ReplayedRequest / AgentNumberMismatch / UnknownAgentNumber /
@@ -423,8 +750,9 @@ class AuthStore:
         if hash_payload(payload) != payload_hash_claim:
             raise PayloadTampered("received payload does not match payload_hash_claim")
 
-        # 2-3. Signature verification. An unregistered principal_id fails
-        # closed as InvalidCredential rather than leaking existence.
+        # 2-3. Signature verification, now including method (revision 5).
+        # An unregistered principal_id fails closed as InvalidCredential
+        # rather than leaking existence.
         try:
             credential = self._registry.credential_for(principal_id)
         except KeyError:
@@ -436,6 +764,7 @@ class AuthStore:
         envelope = canonical_envelope(
             principal_id=principal_id,
             agent_number=agent_number_claim,
+            method=method,
             timestamp=timestamp,
             request_id=request_id,
             payload_hash=payload_hash_claim,
@@ -449,22 +778,24 @@ class AuthStore:
 
         # 5. Replay - opportunistically prune expired entries, then burn
         # this nonce now that it is authenticated, before any check below
-        # that might still reject the request for other reasons.
-        self._prune_expired_requests(now)
-        replay_key = (principal_id, request_id)
-        last_used = self._seen_requests.get(replay_key)
-        if last_used is not None and (now - last_used) <= REPLAY_WINDOW_SECONDS:
+        # that might still reject the request for other reasons. Goes
+        # through the injected ReplayStore (revision 5).
+        self._replay_store.prune(now, REPLAY_WINDOW_SECONDS)
+        if self._replay_store.seen(principal_id, request_id, now, REPLAY_WINDOW_SECONDS):
             raise ReplayedRequest(f"request_id {request_id!r} already used by {principal_id!r}")
-        self._seen_requests[replay_key] = now
+        self._replay_store.mark(principal_id, request_id, now)
 
-        # 6. agent_number_claim ownership - trustworthy now that the
-        # signature above has authenticated it.
-        owner = self._registry.principal_for_agent_number(agent_number_claim)
-        if owner is None:
-            raise UnknownAgentNumber(f"agent_number {agent_number_claim!r} has no registered owner")
-        if owner != principal_id:
+        # 6. agent_number_claim MEMBERSHIP - trustworthy now that the
+        # signature above has authenticated it. Revision 5: changed from a
+        # single-owner check to a membership check (see PrincipalRegistry
+        # Revision 5 note #1) - an agent_number may legitimately have
+        # several bound principals.
+        members = self._registry.agent_number_members(agent_number_claim)
+        if not members:
+            raise UnknownAgentNumber(f"agent_number {agent_number_claim!r} has no registered principals")
+        if principal_id not in members:
             raise AgentNumberMismatch(
-                f"agent_number {agent_number_claim!r} belongs to {owner!r}, not {principal_id!r}"
+                f"principal {principal_id!r} is not bound to agent_number {agent_number_claim!r}"
             )
 
         # 7. Revocation - signed requests have no stored issuance epoch to
@@ -480,20 +811,9 @@ class AuthStore:
             principal_type=self._registry.principal_type_for(principal_id),
             revocation_epoch=current_epoch,
             authenticated_at=now,
+            scopes=self._registry.scopes_for(principal_id),
             auth_method="signed_request",
         )
-
-    def _prune_expired_requests(self, now: float) -> None:
-        """Lazy sweep of the replay cache. Entries older than
-        REPLAY_WINDOW_SECONDS can never again cause a false ReplayedRequest,
-        so there is no correctness reason to keep them - only a memory-growth
-        reason to drop them. Called opportunistically from
-        verify_signed_request rather than on a background timer, since this
-        module intentionally has no scheduler/thread of its own."""
-        expired = [key for key, used_at in self._seen_requests.items() if now - used_at > REPLAY_WINDOW_SECONDS]
-        for key in expired:
-            del self._seen_requests[key]
-
 
 def require_identity_match(claimed_agent_id: str, auth_context: "AuthContext") -> None:
     """Case 17. Raises IdentityMismatch if claimed_agent_id does not match
