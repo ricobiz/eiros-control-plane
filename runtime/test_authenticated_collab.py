@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from runtime import collab
-from runtime.agent_auth import AuthContext, IdentityMismatch, PrincipalType
+from runtime.agent_auth import AuthContext, AuthError, IdentityMismatch, PrincipalType
 
 
 def _import_facade():
@@ -121,6 +121,37 @@ def test_project_state_set_uses_authenticated_identity_and_rejects_agent_mismatc
     result = facade.set_project(auth, agent_id="chatgpt", project_id="p", state={"x": 1})
     assert result["agent_id"] == "chatgpt"
     assert result["state"] == {"x": 1}
+
+
+def test_service_principal_is_rejected_before_subscriber_only_mutation(monkeypatch):
+    """Spec §8.6: an infrastructure principal must not become a human subscriber actor."""
+    AuthenticatedCollab, _ = _import_facade()
+    engine_called = False
+
+    def fake_send_message(**kwargs):
+        nonlocal engine_called
+        engine_called = True
+        return dict(kwargs)
+
+    monkeypatch.setattr(collab, "send_message", fake_send_message)
+    facade = AuthenticatedCollab(collab)
+    service_auth = AuthContext(
+        principal_id="worker-1",
+        agent_number="",
+        principal_type=PrincipalType.HEADLESS_SERVICE,
+        revocation_epoch=0,
+        authenticated_at=1.0,
+        scopes=frozenset({"internal:work"}),
+        auth_method="test",
+    )
+
+    # RED against 011ecad: _actor() currently returns auth.agent_number for
+    # every PrincipalType, so a service context reaches the collaboration
+    # engine as the empty-string actor instead of being stopped at the facade.
+    with pytest.raises(AuthError):
+        facade.send_message(service_auth, to_agent="rico", content="must not enter")
+
+    assert engine_called is False
 
 
 def _mutating_collab_tool_names(path: str) -> set[str]:
