@@ -26,7 +26,7 @@ def test_send_uses_authenticated_identity_and_rejects_forged_from_agent(monkeypa
 
     monkeypatch.setattr(collab, "send_message", fake_send_message)
     facade = AuthenticatedCollab(collab)
-    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
+    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test", subscriber_number="chatgpt")
 
     with pytest.raises(IdentityMismatch):
         facade.send_message(auth, from_agent="claude", to_agent="rico", content="forged")
@@ -47,7 +47,7 @@ def test_inbox_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypatc
 
     monkeypatch.setattr(collab, "inbox", fake_inbox)
     facade = AuthenticatedCollab(collab)
-    auth = AuthContext(principal_id="principal-claude", agent_number="claude", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
+    auth = AuthContext(principal_id="principal-claude", agent_number="claude", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test", subscriber_number="claude")
 
     with pytest.raises(IdentityMismatch):
         facade.inbox(auth, agent_id="chatgpt", client_id="ui")
@@ -68,7 +68,7 @@ def test_acknowledge_uses_authenticated_identity_and_rejects_agent_mismatch(monk
 
     monkeypatch.setattr(collab, "acknowledge", fake_ack)
     facade = AuthenticatedCollab(collab)
-    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
+    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test", subscriber_number="chatgpt")
 
     with pytest.raises(IdentityMismatch):
         facade.acknowledge(auth, agent_id="claude", message_id="m-1")
@@ -88,7 +88,7 @@ def test_release_uses_authenticated_identity_and_rejects_agent_mismatch(monkeypa
 
     monkeypatch.setattr(collab, "release", fake_release)
     facade = AuthenticatedCollab(collab)
-    auth = AuthContext(principal_id="principal-claude", agent_number="claude", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
+    auth = AuthContext(principal_id="principal-claude", agent_number="claude", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test", subscriber_number="claude")
 
     with pytest.raises(IdentityMismatch):
         facade.release(auth, agent_id="chatgpt", message_id="m-2")
@@ -113,7 +113,7 @@ def test_project_state_set_uses_authenticated_identity_and_rejects_agent_mismatc
 
     monkeypatch.setattr(collab, "set_project", fake_set_project)
     facade = AuthenticatedCollab(collab)
-    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test")
+    auth = AuthContext(principal_id="principal-chatgpt", agent_number="chatgpt", principal_type=PrincipalType.INTERACTIVE_INSTALLATION, revocation_epoch=1, authenticated_at=1.0, scopes=("collab:mutate",), auth_method="test", subscriber_number="chatgpt")
 
     with pytest.raises(IdentityMismatch):
         facade.set_project(auth, agent_id="claude", project_id="p", state={})

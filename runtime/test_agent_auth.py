@@ -393,6 +393,7 @@ def test_case17_body_identity_mismatch_against_auth_context_is_rejected():
         principal_type=PrincipalType.INTERACTIVE_INSTALLATION,
         revocation_epoch=0,
         authenticated_at=NOW,
+        subscriber_number="AGN-0001",
     )
     with pytest.raises(IdentityMismatch):
         require_identity_match("AGN-0002-claimed-in-body", auth_context)
@@ -795,3 +796,36 @@ def test_interactive_auth_context_exposes_public_subscriber_number():
     ctx = store.verify_bearer_token(token.token, now=NOW + 1.0)
 
     assert ctx.subscriber_number == "SUB-A"
+
+
+# --- Review hardening: authority must never be inferred from legacy fields --
+
+def test_direct_interactive_auth_context_does_not_infer_subscriber_authority():
+    """Only verified adapters may populate subscriber_number; agent_number alone is legacy data."""
+    ctx = AuthContext(
+        principal_id="manual-context",
+        agent_number="SUB-ARBITRARY",
+        principal_type=PrincipalType.INTERACTIVE_INSTALLATION,
+        revocation_epoch=0,
+        authenticated_at=NOW,
+    )
+    assert ctx.subscriber_number is None
+
+
+def test_non_dialable_policy_precedes_same_principal_rebinding_conflict():
+    """Changing an existing subscriber principal into a service with a public number is a policy failure."""
+    registry = PrincipalRegistry()
+    registry.register_principal(
+        "principal-a",
+        "SUB-A",
+        PrincipalType.INTERACTIVE_INSTALLATION,
+        CREDENTIAL_A,
+    )
+
+    with pytest.raises(NonDialablePrincipalRegistration):
+        registry.register_principal(
+            "principal-a",
+            "SUB-A",
+            PrincipalType.HEADLESS_SERVICE,
+            CREDENTIAL_A,
+        )

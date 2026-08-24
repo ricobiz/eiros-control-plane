@@ -369,14 +369,6 @@ class AuthContext:
     auth_method: str = ""
     subscriber_number: str | None = None
 
-    def __post_init__(self) -> None:
-        if (
-            self.subscriber_number is None
-            and self.principal_type is PrincipalType.INTERACTIVE_INSTALLATION
-            and self.agent_number
-        ):
-            object.__setattr__(self, "subscriber_number", self.agent_number)
-
 
 @dataclasses.dataclass(frozen=True)
 class BearerToken:
@@ -593,7 +585,7 @@ class ConflictingPrincipalRegistration(AuthError):
     silently rebind an existing principal_id to different material."""
 
 
-class NonDialablePrincipalRegistration(ConflictingPrincipalRegistration):
+class NonDialablePrincipalRegistration(AuthError):
     """Policy error: an infrastructure principal attempted to acquire a public SubscriberNumber."""
 
 
@@ -650,6 +642,11 @@ class PrincipalRegistry:
         credential: bytes,
         scopes: "frozenset[str]" = frozenset(),
     ) -> None:
+        if principal_type is not PrincipalType.INTERACTIVE_INSTALLATION and agent_number:
+            raise NonDialablePrincipalRegistration(
+                f"principal type {principal_type.value!r} cannot bind public subscriber number {agent_number!r}"
+            )
+
         existing = self._principals.get(principal_id)
         if existing is not None:
             unchanged = (
@@ -667,11 +664,6 @@ class PrincipalRegistry:
                 f"principal_id {principal_id!r} is already registered with a "
                 f"different agent_number/principal_type/credential/scopes"
             )
-        if principal_type is not PrincipalType.INTERACTIVE_INSTALLATION and agent_number:
-            raise NonDialablePrincipalRegistration(
-                f"principal type {principal_type.value!r} cannot bind public subscriber number {agent_number!r}"
-            )
-
         if principal_type is PrincipalType.INTERACTIVE_INSTALLATION and agent_number:
             existing_members = self._by_agent_number.get(agent_number, set())
             if existing_members and principal_id not in existing_members:
