@@ -136,7 +136,8 @@ def summarize_events(events: list[dict[str, Any]], timestamp: int) -> dict[str, 
     return counts
 
 def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = '',
-         leader_lease_seconds: int = 25, claim_seconds: int = 45, agent_id: str = '') -> dict[str, Any]:
+         leader_lease_seconds: int = 25, claim_seconds: int = 45, agent_id: str = '',
+         handover_ready: bool = False) -> dict[str, Any]:
     identity = str(widget_id or '').strip()[:200]
     if not identity:
         raise ValueError('widget_id is required')
@@ -153,7 +154,8 @@ def poll(widget_id: str, cursor: int = 0, channel: str = '', instance_id: str = 
         incoming_generation = widget_generation(identity)
         leader_generation = int((leader or {}).get('generation') or widget_generation(str((leader or {}).get('widget_id') or '')))
         newer_widget = bool(incoming_generation and incoming_generation > leader_generation)
-        if not leader_alive(leader, timestamp) or (leader or {}).get('widget_id') == identity or newer_widget:
+        newer_ready_widget = bool(newer_widget and handover_ready)
+        if not leader_alive(leader, timestamp) or (leader or {}).get('widget_id') == identity or newer_ready_widget:
             leaders[target] = {
                 'widget_id': identity,
                 'generation': incoming_generation,
