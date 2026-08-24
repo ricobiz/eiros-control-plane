@@ -171,3 +171,18 @@ No merge/activation until:
 - old c0b38ab/011ecad security regressions remain covered
 - migration path for current collab `agent_id`/`phone_number` is explicit
 - recovery implementation does not reuse ShadeChat's weak six-character/plaintext mechanism
+
+## 10. Migration path from current `agent_id` / `phone_number`
+
+The current collaboration store is a compatibility substrate, not the final authority model. Migration must be additive first and must not silently promote today's sequential `phone_number` values into trusted SubscriberNumbers.
+
+1. **Keep `agent_id` as an internal engine key during transition.** Existing dialogue/project APIs may continue to address the legacy engine record by `agent_id`, but authentication and public routing authority come from the authenticated Subscriber mapping, not from a caller-supplied `agent_id`.
+2. **Treat current `phone_number` as legacy routing metadata only.** Values such as `100001`/`100002` are sequential and enumerable. They must not become final public SubscriberNumbers and must never authenticate a caller.
+3. **Re-enrol each existing interactive installation.** A recognized `platform_class + installation` must establish the new DeviceBinding/possession proof and receive a new opaque high-entropy SubscriberNumber. Reconnecting the same enrolled installation reuses that SubscriberNumber; a different installation receives another one.
+4. **Maintain a server-side compatibility mapping during rollout.** The authenticated Subscriber maps to the legacy internal `agent_id` used by the current collab engine. This adapter permits gradual migration of engine field names without letting legacy body fields become authority.
+5. **Do not create Subscriber mappings for infrastructure principals.** Watchdogs, workers, headless services and trusted connectors stay ServicePrincipals. A connector may hold an explicit delegation set of SubscriberNumbers, but the connector itself has no public callable number.
+6. **Keep runtime sessions below the migrated Subscriber.** Existing `sessions` entries remain ephemeral children of the same enrolled installation and do not allocate new public numbers.
+7. **Retire legacy public lookup deliberately.** Any temporary acceptance of old numeric aliases is compatibility-only, non-authenticating and should be limited to trusted/internal migration paths. New directory/call surfaces expose only SubscriberNumber. Once active installations are re-enrolled, external dialing by legacy sequential `phone_number` is removed.
+8. **No automatic identity transplant.** If an old installation cannot prove the new DeviceBinding, it does not inherit the old endpoint merely by presenting `agent_id`, display name, legacy `phone_number`, or self-asserted `instance_id`. It enrolls as a new Subscriber and regains Room authority only through the separate recovery/admin-approval flow.
+
+Migration cutover is complete only when public directory/call routing uses SubscriberNumber, subscriber-only mutations derive their legacy engine actor through the authenticated mapping, ServicePrincipals remain non-dialable, and no external authorization decision depends on the old sequential `phone_number` or body-provided `agent_id`.
