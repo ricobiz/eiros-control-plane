@@ -78,6 +78,13 @@ class StableUiMountContractTests(unittest.TestCase):
         self.assertIn('id="launchPip"', self.anchor)
         self.assertNotIn(".pipMedia{position:absolute", self.anchor)
 
+    def test_compact_listener_has_direct_labeled_pip_control(self) -> None:
+        self.assertRegex(self.anchor, r'<button id="pin"[^>]*>PiP</button>')
+        self.assertIn("pin.addEventListener('click',requestSystemPiP)", self.anchor)
+        self.assertIn('.rld.pin{width:36px', self.anchor)
+        self.assertIn("pin.textContent='PiP'", self.anchor)
+        self.assertNotIn("pin.textContent=videoPipState==='active'?'●':(floating?'◉':'◫')", self.anchor)
+
     def test_ios_pip_arms_video_before_click(self) -> None:
         self.assertIn("function armCompanionVideo", self.anchor)
         self.assertIn("['pointerdown','touchstart']", self.anchor)
