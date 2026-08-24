@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from runtime import collab
-from runtime.agent_auth import AuthContext, IdentityMismatch, PrincipalType
+from runtime.agent_auth import AuthContext, IdentityMismatch, PrincipalType, SubscriberActorRequired
 
 
 def _import_facade():
@@ -213,3 +213,31 @@ def test_delivery_plane_mutators_are_explicitly_tracked_as_slice_1_5():
     actual = _mutating_collab_tool_names("runtime/server_v2.py")
     missing = DELIVERY_PLANE_SLICE_1_5 - actual
     assert not missing, f"delivery-plane slice 1.5 missing current mutators: {sorted(missing)}"
+
+
+
+def test_service_principal_cannot_enter_subscriber_only_collaboration_mutation(monkeypatch):
+    """Spec §8 #6: a service AuthContext must be rejected before the collab engine is called."""
+    AuthenticatedCollab, _ = _import_facade()
+    called = False
+
+    def fake_send_message(**kwargs):
+        nonlocal called
+        called = True
+        return dict(kwargs)
+
+    monkeypatch.setattr(collab, "send_message", fake_send_message)
+    facade = AuthenticatedCollab(collab)
+    service_auth = AuthContext(
+        principal_id="worker-1",
+        agent_number="internal-worker",
+        principal_type=PrincipalType.HEADLESS_SERVICE,
+        revocation_epoch=0,
+        authenticated_at=1.0,
+        scopes=frozenset({"internal:work"}),
+        auth_method="test",
+    )
+
+    with pytest.raises(SubscriberActorRequired):
+        facade.send_message(service_auth, to_agent="rico", content="must not reach engine")
+    assert called is False

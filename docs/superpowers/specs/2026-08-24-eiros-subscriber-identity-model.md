@@ -84,6 +84,8 @@ Recovery plaintext must never be written to prompts, Room history, telemetry or 
 
 ## 3. DDCHAT1 / ShadeChat source audit
 
+Evidence status (2026-08-24): the behaviors below were recovered from stored source artifacts from the prior DDCHAT1/ShadeChat work, but neither current reviewer has a live clone of the private repo in this session. Treat the security conclusion as reliable and corroborated; treat exact legacy function/key names and polling timings as stored-artifact evidence rather than a fresh byte-for-byte live-repo verification.
+
 Observed legacy source behavior:
 - `getSessionId()` reads `localStorage['shade-session-id']`; absent => `crypto.randomUUID()` and stores it locally.
 - Room ownership/membership is keyed by session id (`ownerId=sessionId`, `members[sessionId]`).
@@ -148,6 +150,13 @@ Current production bootstrap already allocates distinct `phone_number` records w
 - presence/session tracking is widget/runtime-oriented, not semantic subscriber presence
 
 Do not mistake the current phone-number field for the final SubscriberNumber security model.
+
+Explicit migration path for this reconciliation slice:
+1. `AuthContext.agent_number` remains as a legacy transport/routing field so reviewed callers do not break; new subscriber-only authority is taken from `AuthContext.subscriber_number`.
+2. `PrincipalRegistry._by_agent_number` remains temporarily for signature/routing compatibility, but a non-empty public number is exclusive to one `INTERACTIVE_INSTALLATION`; non-dialable service principals may authenticate only without a public number.
+3. Current `collab.py` `phone_number` remains the storage/UI alias for the future SubscriberNumber during this slice. Same `platform_class + instance_id` reuses that record and its runtime sessions; a new installation remains a separate record/number.
+4. Current `agent_id/from_agent` engine parameters remain legacy adapter names. `AuthenticatedCollab` supplies them only after deriving the trusted subscriber actor; body values are assertion-only.
+5. A later storage/bootstrap migration replaces sequential `phone_number` allocation and self-asserted `instance_id` with opaque high-entropy SubscriberNumber allocation plus cryptographic DeviceBinding. That later step is not hidden inside this auth-only slice.
 
 ## 8. RED contract to write before implementation
 

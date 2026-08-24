@@ -327,6 +327,10 @@ class IdentityMismatch(AuthError):
     """
 
 
+class SubscriberActorRequired(AuthError):
+    """A subscriber-only mutation was attempted with a non-dialable service context."""
+
+
 class UnregisteredConnectorClaim(AuthError):
     """Case 18: connector-level transport auth succeeded (e.g. the ChatGPT
     tunnel-client's own service credential verified), but the request
@@ -363,6 +367,15 @@ class AuthContext:
     authenticated_at: float
     scopes: "frozenset[str]" = frozenset()
     auth_method: str = ""
+    subscriber_number: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.subscriber_number is None
+            and self.principal_type is PrincipalType.INTERACTIVE_INSTALLATION
+            and self.agent_number
+        ):
+            object.__setattr__(self, "subscriber_number", self.agent_number)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -580,6 +593,10 @@ class ConflictingPrincipalRegistration(AuthError):
     silently rebind an existing principal_id to different material."""
 
 
+class NonDialablePrincipalRegistration(ConflictingPrincipalRegistration):
+    """Policy error: an infrastructure principal attempted to acquire a public SubscriberNumber."""
+
+
 class PrincipalRegistry:
     """Source of truth for registered principals: agent_number binding,
     principal_type, credential material, granted scopes, and current
@@ -613,6 +630,12 @@ class PrincipalRegistry:
     Also gained scopes_for() (Revision 5 note #4): the principal's
     currently-granted scopes, read live by verify_signed_request on every
     call, and baked into a BearerToken snapshot once at issuance time.
+
+    Subscriber reconciliation (2026-08-24): the Revision-5 heterogeneous
+    multi-principal model is retained only as a legacy reverse-index shape.
+    A non-empty public number is now exclusive to one interactive installation,
+    while infrastructure principal types must authenticate without a public
+    SubscriberNumber.
     """
 
     def __init__(self) -> None:
@@ -644,6 +667,18 @@ class PrincipalRegistry:
                 f"principal_id {principal_id!r} is already registered with a "
                 f"different agent_number/principal_type/credential/scopes"
             )
+        if principal_type is not PrincipalType.INTERACTIVE_INSTALLATION and agent_number:
+            raise NonDialablePrincipalRegistration(
+                f"principal type {principal_type.value!r} cannot bind public subscriber number {agent_number!r}"
+            )
+
+        if principal_type is PrincipalType.INTERACTIVE_INSTALLATION and agent_number:
+            existing_members = self._by_agent_number.get(agent_number, set())
+            if existing_members and principal_id not in existing_members:
+                raise ConflictingPrincipalRegistration(
+                    f"public subscriber number {agent_number!r} is already bound to another installation"
+                )
+
         self._principals[principal_id] = {
             "agent_number": agent_number,
             "principal_type": principal_type,
@@ -692,14 +727,13 @@ class PrincipalRegistry:
         return typing.cast("frozenset[str]", self._principals[principal_id]["scopes"])
 
     def agent_number_members(self, agent_number: str) -> "frozenset[str]":
-        """Added revision 5, replaces the removed principal_for_agent_number
-        (its single-owner return type was structurally incompatible with
-        the approved multi-principal-per-agent_number model - see class
-        docstring Revision 5 note #1). An empty result means case 2
-        territory (nobody bound to this agent_number); a non-empty result
-        not containing the caller's own principal_id means case 12
-        territory. Returns a fresh frozenset snapshot - callers cannot
-        mutate registry state through the return value."""
+        """Legacy reverse-index query used by signed-request verification.
+
+        After Subscriber reconciliation, a non-empty public SubscriberNumber
+        has at most one interactive installation member. The set return type
+        remains temporarily for migration compatibility and for non-public
+        service routing such as the empty internal agent-number slot.
+        """
         return frozenset(self._by_agent_number.get(agent_number, ()))
 
 
@@ -776,14 +810,19 @@ class AuthStore:
             # has since moved, regardless of remaining TTL (case 6).
             raise PrincipalRevoked(f"principal {bearer.principal_id!r} revoked since token issuance")
 
+        agent_number = self._registry.agent_number_for(bearer.principal_id)
+        principal_type = self._registry.principal_type_for(bearer.principal_id)
         return AuthContext(
             principal_id=bearer.principal_id,
-            agent_number=self._registry.agent_number_for(bearer.principal_id),
-            principal_type=self._registry.principal_type_for(bearer.principal_id),
+            agent_number=agent_number,
+            principal_type=principal_type,
             revocation_epoch=current_epoch,
             authenticated_at=now,
             scopes=bearer.scopes,
             auth_method="bearer_token",
+            subscriber_number=(
+                agent_number if principal_type is PrincipalType.INTERACTIVE_INSTALLATION else None
+            ),
         )
 
     def verify_signed_request(
@@ -922,35 +961,42 @@ class AuthStore:
         if current_epoch != 0:
             raise PrincipalRevoked(f"principal {principal_id!r} has been revoked")
 
+        principal_type = self._registry.principal_type_for(principal_id)
         return AuthContext(
             principal_id=principal_id,
             agent_number=agent_number_claim,
-            principal_type=self._registry.principal_type_for(principal_id),
+            principal_type=principal_type,
             revocation_epoch=current_epoch,
             authenticated_at=now,
             scopes=self._registry.scopes_for(principal_id),
             auth_method="signed_request",
+            subscriber_number=(
+                agent_number_claim if principal_type is PrincipalType.INTERACTIVE_INSTALLATION else None
+            ),
         )
 
 def require_identity_match(claimed_agent_id: str, auth_context: "AuthContext") -> None:
-    """Case 17. Raises IdentityMismatch if claimed_agent_id does not match
-    auth_context.agent_number exactly. Call this at every mutation boundary
-    that also reads a client-supplied agent_id/from_agent body field - the
-    body value may be logged/displayed but must never substitute for
-    auth_context."""
-    if claimed_agent_id != auth_context.agent_number:
+    """Validate a legacy body identity assertion against the trusted subscriber actor."""
+    subscriber = auth_context.subscriber_number
+    if subscriber is None:
+        raise SubscriberActorRequired(
+            f"principal {auth_context.principal_id!r} has no callable subscriber actor"
+        )
+    if claimed_agent_id != subscriber:
         raise IdentityMismatch(
             f"body claimed agent_id {claimed_agent_id!r}, "
-            f"authenticated caller is {auth_context.agent_number!r}"
+            f"authenticated subscriber is {subscriber!r}"
         )
 
 
 class ConnectorBinding:
-    """Case 18. A trusted_connector principal (e.g. the ChatGPT tunnel-client
-    process) authenticates itself at the transport level via its own local
-    service credential - that proves ONLY connector identity. This binding
-    is the explicit, registered list of agent_number(s)/principal_id(s) the
-    connector is allowed to relay requests for."""
+    """Case 18. A trusted connector proves only connector identity.
+
+    This binding is the explicit delegated set of public subscriber routing
+    identities it may relay for. Connector identity itself never becomes the
+    human subscriber actor. The legacy method/field names remain during the
+    migration slice.
+    """
 
     def __init__(self) -> None:
         self._bindings: dict[str, set[str]] = {}

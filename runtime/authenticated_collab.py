@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from runtime.agent_auth import AuthContext, require_identity_match
+from runtime.agent_auth import AuthContext, SubscriberActorRequired, require_identity_match
 
 
 class AuthenticatedCollab:
@@ -28,10 +28,14 @@ class AuthenticatedCollab:
 
     @staticmethod
     def _actor(auth: AuthContext, claimed_agent: str | None) -> str:
-        """Return the server-authenticated actor after validating any body claim."""
+        """Return the server-authenticated callable subscriber actor."""
+        if auth.subscriber_number is None:
+            raise SubscriberActorRequired(
+                f"principal {auth.principal_id!r} is non-dialable and cannot mutate subscriber collaboration"
+            )
         if claimed_agent is not None:
             require_identity_match(claimed_agent, auth)
-        return auth.agent_number
+        return auth.subscriber_number
 
     def send_message(
         self,

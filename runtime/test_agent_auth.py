@@ -75,6 +75,7 @@ from runtime.agent_auth import (
     ALLOWED_CLOCK_SKEW_SECONDS,
     AgentNumberMismatch,
     AuthContext,
+    AuthError,
     AuthStore,
     ClockSkewExceeded,
     ConflictingPrincipalRegistration,
@@ -83,6 +84,7 @@ from runtime.agent_auth import (
     InMemoryReplayStore,
     InvalidCredential,
     NoAuthProvided,
+    NonDialablePrincipalRegistration,
     PayloadTampered,
     PrincipalRegistry,
     PrincipalRevoked,
@@ -745,3 +747,51 @@ def test_canonical_envelope_rejects_float_timestamp_ms():
             principal_id="p", agent_number="a", method="m",
             timestamp_ms=1000.0, request_id="r", payload_hash="h",
         )
+
+
+@pytest.mark.parametrize(
+    "principal_type",
+    [
+        PrincipalType.HEADLESS_SERVICE,
+        PrincipalType.WATCHDOG,
+        PrincipalType.SERVER_WORKER,
+        PrincipalType.TRUSTED_CONNECTOR,
+    ],
+)
+def test_non_dialable_principal_cannot_register_with_public_subscriber_number(principal_type):
+    """Spec §8 #2: infrastructure principals authenticate without a callable public address."""
+    registry = PrincipalRegistry()
+    with pytest.raises(NonDialablePrincipalRegistration):
+        registry.register_principal(
+            f"service-{principal_type.value}",
+            "SUB-PUBLIC-001",
+            principal_type,
+            CREDENTIAL_B,
+        )
+
+
+def test_connector_relay_is_limited_to_explicit_delegated_subscriber_set():
+    """Spec §8 #7 survivor: trusted connector transport identity does not widen subscriber authority."""
+    binding = ConnectorBinding()
+    binding.bind("connector-chatgpt", {"SUB-A"})
+
+    binding.verify_claim("connector-chatgpt", "SUB-A")
+    with pytest.raises(UnregisteredConnectorClaim):
+        binding.verify_claim("connector-chatgpt", "SUB-B")
+
+
+
+def test_interactive_auth_context_exposes_public_subscriber_number():
+    """Subscriber authentication exposes the trusted callable address separately from principal identity."""
+    registry = PrincipalRegistry()
+    registry.register_principal(
+        "principal-subscriber-a",
+        "SUB-A",
+        PrincipalType.INTERACTIVE_INSTALLATION,
+        CREDENTIAL_A,
+    )
+    store = _store(registry)
+    token = store.issue_bearer_token("principal-subscriber-a", ttl_seconds=60.0, now=NOW)
+    ctx = store.verify_bearer_token(token.token, now=NOW + 1.0)
+
+    assert ctx.subscriber_number == "SUB-A"
