@@ -75,6 +75,7 @@ from runtime.agent_auth import (
     ALLOWED_CLOCK_SKEW_SECONDS,
     AgentNumberMismatch,
     AuthContext,
+    AuthError,
     AuthStore,
     ClockSkewExceeded,
     ConflictingPrincipalRegistration,
@@ -418,6 +419,44 @@ def test_case18_connector_claims_registered_agent_number_is_accepted():
 # exactly one user x platform x device/installation subscriber. Independent
 # principals do not coexist behind that public address; service principals are
 # non-dialable infrastructure identities.
+
+
+@pytest.mark.parametrize(
+    "principal_type",
+    [
+        PrincipalType.HEADLESS_SERVICE,
+        PrincipalType.WATCHDOG,
+        PrincipalType.SERVER_WORKER,
+        PrincipalType.TRUSTED_CONNECTOR,
+    ],
+)
+def test_non_dialable_principal_types_cannot_register_public_subscriber_number(principal_type):
+    """Spec §8.2: infrastructure credentials authenticate without becoming callable subscribers."""
+    registry = PrincipalRegistry()
+
+    # RED against c0b38ab: register_principal currently accepts a public
+    # routing number for every PrincipalType, including infrastructure-only
+    # service identities. The revised model requires a policy rejection.
+    with pytest.raises(AuthError):
+        registry.register_principal(
+            f"infra-{principal_type.value}",
+            "SUB-PUBLIC-1",
+            principal_type,
+            CREDENTIAL_B,
+            scopes=frozenset({"internal:work"}),
+        )
+
+
+
+def test_trusted_connector_relay_stays_within_explicit_subscriber_set():
+    """Spec §8.7: connector transport trust must not widen subscriber authority."""
+    binding = ConnectorBinding()
+    binding.bind("chatgpt-tunnel-connector", {"SUB-A"})
+
+    binding.verify_claim("chatgpt-tunnel-connector", "SUB-A")
+    with pytest.raises(UnregisteredConnectorClaim):
+        binding.verify_claim("chatgpt-tunnel-connector", "SUB-B")
+
 
 def test_second_independent_installation_cannot_share_public_subscriber_number():
     registry = PrincipalRegistry()
