@@ -8,13 +8,15 @@ from runtime.agent_auth import AuthContext, SubscriberActorRequired, require_ide
 class AuthenticatedCollab:
     """Authentication boundary for the first collaboration mutation slice.
 
-    Slice 1 covers durable dialogue send/claim/ack/release and project-state
-    writes only. The authenticated actor always comes from ``AuthContext``;
+    Slice 1 covers durable dialogue send/claim/ack/release, project-state
+    writes, and subscriber session heartbeat. The authenticated actor always
+    comes from ``AuthContext``;
     any legacy body identity is treated only as an assertion and rejected on
     mismatch before the underlying collaboration engine is called.
 
-    Bootstrap/register/heartbeat/operator/control are separate authority
-    domains and require explicit scopes in later slices.
+    Bootstrap/register/operator/control remain separate authority domains.
+    Subscriber session heartbeat is included here because session ownership
+    must derive from the authenticated subscriber actor.
 
     Delivery-plane wake/Pulse/SAM mutators are tracked as slice 1.5 and must be
     classified/authenticated before the global activation gate can turn green.
@@ -57,14 +59,14 @@ class AuthenticatedCollab:
         return self._engine.session_heartbeat(
             subscriber,
             session_id,
-            host,
-            widget_version,
-            activity,
-            widget_role,
-            bundle_id,
-            pair_protocol,
-            pair_ack,
-            expected_peer,
+            host=host,
+            widget_version=widget_version,
+            activity=activity,
+            widget_role=widget_role,
+            bundle_id=bundle_id,
+            pair_protocol=pair_protocol,
+            pair_ack=pair_ack,
+            expected_peer=expected_peer,
         )
 
     def send_message(
