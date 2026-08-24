@@ -32,7 +32,8 @@ PULSE_URI = "ui://eiros/pulse-lite-v4.html"
 PULSE_VERSION = "0.4.2-addressed-wake"
 WIDGET_TEST_URI = "ui://eiros/widget-test-v2.html"
 WIDGET_TEST_LEGACY_URI = "ui://eiros/widget-test-v1.html"
-ROOM_URI = "ui://eiros/collab-room-v9-25-listener-safe.html"
+ROOM_URI = "ui://eiros/collab-room-v9-26-authorized-kill.html"
+ROOM_LEGACY_V925_URI = "ui://eiros/collab-room-v9-25-listener-safe.html"
 ROOM_LEGACY_V924_URI = "ui://eiros/collab-room-v9-24-inline-isolated.html"
 ROOM_LEGACY_V920_URI = "ui://eiros/collab-room-v9-20-browser-recovery.html"
 ROOM_LEGACY_V919_URI = "ui://eiros/collab-room-v9-19-clean-start.html"
@@ -40,7 +41,7 @@ ROOM_LEGACY_V94_LOCALWAKE_URI = "ui://eiros/collab-room-v9-4-localwake.html"
 ROOM_LEGACY_V918_URI = "ui://eiros/collab-room-v9-18-touch-green.html"
 ROOM_LEGACY_V914_URI = "ui://eiros/collab-room-v9-14-room-claims-pulse.html"
 ROOM_LEGACY_V916_URI = "ui://eiros/collab-room-v9-16-autonomy.html"
-ROOM_VERSION = "0.9.25-listener-safe"
+ROOM_VERSION = "0.9.26-authorized-kill"
 ROOM_LAUNCHER_URI = "ui://eiros/room-launcher-v1d-static-proof.html"
 ROOM_LAUNCHER_VERSION = "0.2.6-server-heartbeat"
 ROOM_PROBE_URI = "ui://eiros/room-probe-hydrate-v1.html"
@@ -53,8 +54,9 @@ WIDGET_LIFECYCLE_JS = CODE_ROOT / "runtime" / "widget_lifecycle.js"
 PULSE_INLINE_HTML = CODE_ROOT / "runtime" / "pulse_listener_inline.html"
 ROOM_HTML = CODE_ROOT / "runtime" / "collab_room.html"
 ROOM_LAUNCHER_HTML = CODE_ROOT / "runtime" / "room_launcher.html"
-UI_KILLER_URI = "ui://eiros/widget-killer-v1.html"
-UI_KILLER_VERSION = "0.1.0-kill-signal"
+UI_KILLER_URI = "ui://eiros/widget-killer-v2-authorized.html"
+UI_KILLER_LEGACY_URI = "ui://eiros/widget-killer-v1.html"
+UI_KILLER_VERSION = "0.2.0-authorized-kill"
 UI_KILLER_HTML = CODE_ROOT / "runtime" / "widget_killer.html"
 CONTROL_PILL_URI = "ui://eiros/control-pill-v2.html"
 CONTROL_PILL_LEGACY_URI = "ui://eiros/control-pill-v1.html"
@@ -64,8 +66,9 @@ PULSE_ANCHOR_URI = "ui://eiros/pulse-anchor-v5-6-storage-safe-host-pip.html"
 PULSE_FRESH_URI = "ui://eiros/pulse-anchor-v5-7-self-diagnostic-pip.html"
 PULSE_FRESH_VERSION = "0.5.7-self-diagnostic-pip"
 PULSE_V57_ROLLBACK_URI = "ui://eiros/pulse-anchor-v5-7-rollback.html"
-PULSE_SUM_URI = "ui://eiros/pulse-anchor-v5-8-sum-auto-wake.html"
-PULSE_SUM_VERSION = "0.5.8-sum-auto-wake"
+PULSE_SUM_URI = "ui://eiros/pulse-anchor-v5-9-authorized-kill.html"
+PULSE_SUM_LEGACY_V58_URI = "ui://eiros/pulse-anchor-v5-8-sum-auto-wake.html"
+PULSE_SUM_VERSION = "0.5.9-authorized-kill"
 SUM_TRANSPORT_GENERATION = "sum-set-state-v1"
 WIDGET_MOUNT_ATTEMPTS_FILE = ROOT / "runtime" / "widget-mount-attempts.json"
 PULSE_ANCHOR_LEGACY_V44_URI = "ui://eiros/pulse-anchor-v4-4-relay-user-wake.html"
@@ -95,7 +98,7 @@ WORK_ANCHOR_HTML = CODE_ROOT / "runtime" / "work_anchor.html"
 # implementation URI and open_pulse must point directly at that current key.
 UI_MOUNT_CONTRACT_VERSION = "2"
 ROOM_MOUNT_URI = ROOM_URI
-PULSE_ANCHOR_MOUNT_URI = PULSE_ANCHOR_URI
+PULSE_ANCHOR_MOUNT_URI = PULSE_SUM_URI
 
 INSTANCE_CONFIG = load_config()
 SUM_CONTROLLER = SumControllerStore(
@@ -148,7 +151,7 @@ mcp = FastMCP(
         "(1) Call core_snapshot, project_state_get for eiros-hub, and project_state_get for eiros-autonomy-network. "
         "(2) Call sam_status, pulse_status, and room_telemetry_status. "
         "(3) If a live current-generation Wake Listener and live Pulse leader already exist, preserve them: do not call open_pulse, close_eiros_widgets, open_collab_room, open_work_anchor, open_widget_test, open_control_pill, or open_room_launcher. "
-        "(4) If no live Wake Listener or live Pulse leader exists, call open_pulse_v57 exactly once. Never call close_eiros_widgets automatically. "
+        "(4) If no live Wake Listener or live Pulse leader exists, call open_pulse_v59 exactly once. Never call close_eiros_widgets automatically. "
         "(5) After mounting, call widget_boot_status with wait_seconds=5, follow its diagnosis and do_now actions, then recheck sam_status and room_telemetry_status. Treat wake as continuously ready only when video_pip_active=true and continuous_wake_ready=true; otherwise tell Rico that one direct tap on Open PiP is still required. "
         "(6) Open Room only after Rico explicitly asks for Room or a UI message explicitly requests it. "
         "(7) Resume unfinished work from durable state without asking Rico to repeat context. Never mount duplicate Listener instances merely to chase UI colors. "
@@ -681,7 +684,7 @@ def _diagnose_widget_boot(attempt: dict[str, Any], widgets: list[dict[str, Any]]
             f"{snap.get('version') or 'unknown'} instead of {expected_kind} {expected_version}.",
             [
                 "Reconnect EBRIDGE so this ChatGPT session refreshes its MCP tool catalog.",
-                "Invoke the new open_pulse_v57 tool exactly once.",
+                "Invoke the new open_pulse_v59 tool exactly once.",
                 "Run widget_boot_status again and follow the returned diagnosis.",
                 "If the same stale binding remains, restart the ChatGPT app; change branch only after that fails.",
             ],
@@ -705,7 +708,7 @@ def _diagnose_widget_boot(attempt: dict[str, Any], widgets: list[dict[str, Any]]
                 "The MCP resource was served, but the iframe produced no JavaScript telemetry. This is the grey/blank iframe failure class.",
                 [
                     "Reconnect EBRIDGE once.",
-                    "Restart the ChatGPT app and invoke open_pulse_v57 once.",
+                    "Restart the ChatGPT app and invoke open_pulse_v59 once.",
                     "If the iframe is still silent, open a new branch only after the app restart test.",
                 ],
                 [
@@ -722,7 +725,7 @@ def _diagnose_widget_boot(attempt: dict[str, Any], widgets: list[dict[str, Any]]
                 [
                     "Reconnect EBRIDGE to refresh the MCP catalog.",
                     "Restart the ChatGPT app if the resource is still not requested.",
-                    "Invoke open_pulse_v57 once after reconnect.",
+                    "Invoke open_pulse_v59 once after reconnect.",
                 ],
                 [
                     "Do not restart server-side services for a missing host resource request.",
@@ -1853,7 +1856,7 @@ def widget_boot_status(mount_id: str = "", wait_seconds: int = 0) -> dict[str, A
         return _diagnosis(
             "NO_MOUNT_ATTEMPT",
             "No recorded EIROS widget mount attempt exists.",
-            ["Invoke open_pulse_v57 exactly once."],
+            ["Invoke open_pulse_v59 exactly once."],
             ["Do not call legacy open_pulse tools."],
             False,
         )
@@ -2184,6 +2187,17 @@ def room_resource_legacy_v94_localwake() -> str:
 
 
 @app_resource(
+    ROOM_LEGACY_V925_URI,
+    name="EIROS Room Legacy v9.25",
+    title="EIROS Shared Collaboration Room",
+    description="Cached v9.25 URI served with the current authorized-global-kill Room implementation.",
+    mime_type="text/html;profile=mcp-app",
+)
+def room_resource_legacy_v925() -> str:
+    return room_resource()
+
+
+@app_resource(
     ROOM_LEGACY_V924_URI,
     name="EIROS Room Legacy v9.24",
     title="EIROS Shared Collaboration Room",
@@ -2462,6 +2476,18 @@ def widget_killer_resource() -> str:
     return html.replace("__EIROS_KILLER_BOOTSTRAP_JSON__", json.dumps(bootstrap, ensure_ascii=False))
 
 
+@app_resource(
+    UI_KILLER_LEGACY_URI,
+    name="EIROS Widget Killer Legacy v1",
+    title="EIROS Widget Killer",
+    description="Cached v1 killer URI served with the current authorized global-kill envelope.",
+    mime_type="text/html;profile=mcp-app",
+    meta=UI_KILLER_META,
+)
+def widget_killer_resource_legacy_v1() -> str:
+    return widget_killer_resource()
+
+
 @mcp.tool(
     name="close_eiros_widgets",
     title="Close EIROS Widgets",
@@ -2491,7 +2517,7 @@ CONTROL_PILL_META: dict[str, Any] = {
         "csp": {"connectDomains": [], "resourceDomains": []},
         **({"domain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
     },
-    "openai/widgetDescription": "Fresh EIROS control pill. It retires older EIROS widgets before becoming active.",
+    "openai/widgetDescription": "Legacy control-pill compatibility surface; lifecycle changes require explicit operator close.",
     "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
     **({"openai/widgetDomain": WIDGET_DOMAIN} if WIDGET_DOMAIN else {}),
 }
@@ -2501,7 +2527,7 @@ CONTROL_PILL_META: dict[str, Any] = {
     CONTROL_PILL_URI,
     name="EIROS SUM Compatibility Control",
     title="EIROS SUM Wake Listener",
-    description="Compatibility control URI serving the current SUM v5.8 listener.",
+    description="Compatibility control URI serving the current SUM v5.9 listener.",
     mime_type="text/html;profile=mcp-app",
     meta=PULSE_RESOURCE_META,
 )
@@ -2682,27 +2708,11 @@ def _widget_test_html() -> str:
 *{box-sizing:border-box}body{margin:0;background:transparent;color:#ececec}
 .box{min-height:46px;display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid #3f3f46;border-radius:13px;background:#111}
 .dot{width:8px;height:8px;border-radius:50%;background:#19c37d;box-shadow:0 0 8px rgba(25,195,125,.5)}
-.main{flex:1;min-width:0}.title{font-size:12px;font-weight:750}.sub{font-size:10px;color:#a1a1aa;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.badge{font-size:10px;color:#f5b849;border:1px solid #3f3f46;border-radius:999px;padding:2px 6px}
+.main{flex:1;min-width:0}.title{font-size:12px;font-weight:750}.sub{font-size:10px;color:#a1a1aa;margin-top:2px}.badge{font-size:10px;color:#19c37d;border:1px solid #3f3f46;border-radius:999px;padding:2px 6px}
 </style>
 </head>
 <body>
-<div class="box"><span class="dot"></span><div class="main"><div class="title">EIROS Kill Switch</div><div id="sub" class="sub">sending kill signal…</div></div><span id="badge" class="badge">widget-test</span></div>
-<script>
-(()=> {
-  const projectId='eiros-hub', threadId='first-contact', generation=String(Date.now());
-  const killKey=['eiros-ui-kill',projectId,threadId].join(':');
-  const payload=JSON.stringify({generation,ts:Date.now(),reason:'open_widget_test kill-switch'});
-  try{
-    localStorage.setItem(killKey,payload);
-    document.getElementById('sub').textContent='kill signal sent · '+generation;
-    document.getElementById('badge').textContent='killed';
-  }catch(e){
-    document.getElementById('sub').textContent='kill failed: '+String(e&&e.message||e);
-    document.getElementById('badge').textContent='error';
-  }
-})();
-</script>
+<div class="box"><span class="dot"></span><div class="main"><div class="title">EIROS Widget Diagnostic</div><div class="sub">Static render only · no lifecycle mutation</div></div><span class="badge">safe</span></div>
 </body>
 </html>"""
 
@@ -2719,7 +2729,7 @@ WIDGET_TEST_META: dict[str, Any] = {
     WIDGET_TEST_LEGACY_URI,
     name="EIROS SUM Compatibility Listener Legacy",
     title="EIROS SUM Wake Listener",
-    description="Backward-compatible SUM v5.8 listener on the legacy widget-test URI.",
+    description="Backward-compatible widget-test URI serving the current SUM v5.9 listener.",
     mime_type="text/html;profile=mcp-app",
     meta=PULSE_RESOURCE_META,
 )
@@ -2732,7 +2742,7 @@ def widget_test_resource_legacy() -> str:
     WIDGET_TEST_URI,
     name="EIROS SUM Compatibility Listener",
     title="EIROS SUM Wake Listener",
-    description="Compatibility SUM v5.8 listener on the clean widget-test URI.",
+    description="Compatibility widget-test URI serving the current SUM v5.9 listener.",
     mime_type="text/html;profile=mcp-app",
     meta=PULSE_RESOURCE_META,
 )
@@ -2853,7 +2863,7 @@ def _render_pulse_sum_html(mount_id: str = "") -> str:
         PULSE_ANCHOR_HTML,
         PULSE_SUM_VERSION,
         mount_id,
-        "pulse-v58",
+        "pulse-v59",
         include_sum_controller=True,
     )
 
@@ -3035,7 +3045,7 @@ def work_anchor_resource() -> str:
 )
 def eiros_console_resource() -> str:
     attempt = _mark_widget_resource_served(EIROS_CONSOLE_URI)
-    return _render_pulse_anchor_html(PULSE_SUM_VERSION, str(attempt.get("mount_id") or ""), "pulse-v58-console")
+    return _render_pulse_anchor_html(PULSE_SUM_VERSION, str(attempt.get("mount_id") or ""), "pulse-v59-console")
 
 
 @app_resource(
@@ -3055,7 +3065,7 @@ def pulse_inline_resource() -> str:
     PULSE_FRESH_URI,
     name="EIROS SUM Compatibility Listener",
     title="EIROS SUM Wake Listener",
-    description="Compatibility mount for cached ChatGPT schemas; serves the current v5.8 SUM listener.",
+    description="Compatibility mount for cached ChatGPT schemas; serves the current v5.9 SUM listener.",
     mime_type="text/html;profile=mcp-app",
     meta=PULSE_RESOURCE_META,
 )
@@ -3077,8 +3087,21 @@ def pulse_v57_rollback_resource() -> str:
 
 
 @app_resource(
+    PULSE_SUM_LEGACY_V58_URI,
+    name="EIROS SUM Auto-Wake Listener v5.8 Legacy",
+    title="EIROS SUM Wake Listener",
+    description="Cached v5.8 URI served with the current v5.9 authorized-kill listener implementation.",
+    mime_type="text/html;profile=mcp-app",
+    meta=PULSE_RESOURCE_META,
+)
+def pulse_sum_resource_legacy_v58() -> str:
+    attempt = _mark_widget_resource_served(PULSE_SUM_LEGACY_V58_URI)
+    return _render_pulse_sum_html(str(attempt.get("mount_id") or ""))
+
+
+@app_resource(
     PULSE_SUM_URI,
-    name="EIROS SUM Auto-Wake Listener v5.8",
+    name="EIROS SUM Auto-Wake Listener v5.9",
     title="EIROS SUM Wake Listener",
     description="SUM auto-wake listener with visible state machine, host monitoring and natural user continuation.",
     mime_type="text/html;profile=mcp-app",
@@ -3261,9 +3284,38 @@ def open_pulse_v57() -> dict[str, Any]:
 
 
 @mcp.tool(
+    name="open_pulse_v59",
+    title="Open EIROS SUM Listener v5.9",
+    description="Mount the fresh v5.9 SUM listener with PiP-safe handover and authorized global-kill filtering.",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
+    meta={
+        "ui": {"resourceUri": PULSE_SUM_URI, "visibility": ["model", "app"]},
+        "openai/outputTemplate": PULSE_SUM_URI,
+        "openai/toolInvocation/invoking": "Opening EIROS SUM listener v5.9…",
+        "openai/toolInvocation/invoked": "EIROS SUM listener v5.9 requested.",
+    },
+    structured_output=True,
+)
+def open_pulse_v59() -> dict[str, Any]:
+    attempt = _record_widget_mount_attempt("open_pulse_v59", PULSE_SUM_URI, PULSE_SUM_VERSION, "listener")
+    selected_channel = str(INSTANCE_CONFIG.get("channel", "default"))
+    status = event_engine.status(20, selected_channel)
+    return {
+        "ok": True,
+        "mount_id": attempt["mount_id"],
+        "resource_uri": PULSE_SUM_URI,
+        "anchor_version": PULSE_SUM_VERSION,
+        "expected_widget_kind": "listener",
+        "diagnostic_next_action": "call widget_boot_status with wait_seconds=5 and this mount_id",
+        "pending_event_count": int(status.get("pending_count", 0)),
+        "latest_seq": int(status.get("latest_seq", 0)),
+    }
+
+
+@mcp.tool(
     name="open_pulse_v58",
     title="Open EIROS SUM Auto-Wake Listener",
-    description="Mount the v5.8 SUM listener with visible states, host monitoring and natural continuation messages.",
+    description="Compatibility tool name that mounts the current v5.9 SUM listener with authorized global-kill filtering.",
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False, destructiveHint=False, idempotentHint=False),
     meta={
         "ui": {"resourceUri": PULSE_SUM_URI, "visibility": ["model", "app"]},
@@ -3316,7 +3368,7 @@ def open_pulse() -> dict[str, Any]:
             agent_id,
             "server-open-pulse",
             "chatgpt-pulse-anchor",
-            PULSE_ANCHOR_VERSION,
+            PULSE_SUM_VERSION,
             "online",
         )
     except Exception:
@@ -3327,8 +3379,8 @@ def open_pulse() -> dict[str, Any]:
         "ok": True,
         "server_version": SERVER_VERSION,
         "resource_uri": PULSE_ANCHOR_MOUNT_URI,
-        "implementation_uri": PULSE_ANCHOR_URI,
-        "anchor_version": PULSE_ANCHOR_VERSION,
+        "implementation_uri": PULSE_SUM_URI,
+        "anchor_version": PULSE_SUM_VERSION,
         "ui_mount_contract": UI_MOUNT_CONTRACT_VERSION,
         "mount_compatibility": "stable-trusted-uri-current-implementation",
         "instance_id": INSTANCE_CONFIG.get("instance_id"),
@@ -3405,7 +3457,7 @@ def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: 
     # v0.4.5 compatibility singletons; intermediate experiments stay blocked.
     legacy_v45 = identity.startswith("pulse-chatgpt-")
     supported_generation = identity.startswith(
-        ("pulse-v49-", "pulse-v55-", "pulse-v56-", "pulse-v57-", "pulse-v58-")
+        ("pulse-v49-", "pulse-v55-", "pulse-v56-", "pulse-v57-", "pulse-v58-", "pulse-v59-")
     )
     if identity.startswith("pulse-") and not (legacy_v45 or supported_generation):
         return {

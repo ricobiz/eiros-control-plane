@@ -3,6 +3,20 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.EirosWidgetLifecycle = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  function isAuthorizedGlobalKill(raw) {
+    try {
+      const payload = JSON.parse(String(raw || ''));
+      return Boolean(
+        payload &&
+        payload.protocol === 'eiros-global-kill-v2' &&
+        payload.authority === 'operator-explicit' &&
+        payload.source === 'close_eiros_widgets'
+      );
+    } catch (error) {
+      return false;
+    }
+  }
+
   function createPulseLifecycle(options) {
     const opts = options || {};
     const target = opts.target;
@@ -31,7 +45,7 @@
 
     function onStorage(event) {
       if (!event) return;
-      if (event.key === killKey) retire('global kill');
+      if (event.key === killKey && isAuthorizedGlobalKill(event.newValue)) retire('global kill');
       if (event.key === listenerKillKey) retire('listener kill');
     }
 
@@ -65,5 +79,5 @@
     };
   }
 
-  return { createPulseLifecycle };
+  return { createPulseLifecycle, isAuthorizedGlobalKill };
 });

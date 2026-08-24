@@ -54,7 +54,7 @@ class PulseMountLifecycleTests(unittest.TestCase):
 
             listeners.storage({
               key: 'eiros-ui-kill:eiros-hub:first-contact',
-              newValue: 'operator-kill',
+              newValue: JSON.stringify({protocol:'eiros-global-kill-v2',authority:'operator-explicit',source:'close_eiros_widgets'}),
             });
             if (retirements.join(',') !== 'global kill') {
               throw new Error('global killer did not retire Pulse exactly once');
@@ -100,7 +100,7 @@ class PulseMountLifecycleTests(unittest.TestCase):
             ]);
             listeners.storage({
               key: 'eiros-ui-kill:eiros-hub:first-contact',
-              newValue: 'operator-kill',
+              newValue: JSON.stringify({protocol:'eiros-global-kill-v2',authority:'operator-explicit',source:'close_eiros_widgets'}),
             });
             if (retirements.join(',') !== 'global kill') {
               throw new Error('lifecycle did not survive denied browser storage');

@@ -9,7 +9,7 @@ def test_connector_boot_protocol() -> None:
     assert "Call core_snapshot, project_state_get for eiros-hub" in SOURCE
     assert "Call sam_status, pulse_status, and room_telemetry_status" in SOURCE
     assert "If a live current-generation Wake Listener and live Pulse leader already exist, preserve them" in SOURCE
-    assert "If no live Wake Listener or live Pulse leader exists, call open_pulse_v57 exactly once" in SOURCE
+    assert "If no live Wake Listener or live Pulse leader exists, call open_pulse_v59 exactly once" in SOURCE
     assert "call widget_boot_status with wait_seconds=5" in SOURCE
     assert "Never call close_eiros_widgets automatically" in SOURCE
     assert "Treat wake as continuously ready only when video_pip_active=true and continuous_wake_ready=true" in SOURCE

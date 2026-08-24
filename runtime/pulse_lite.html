@@ -34,6 +34,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
   const pulseVersion=String(boot.pulseVersion||'unknown');
   const agentId=String(boot.agentId||'chatgpt');
   const killKey=['eiros-ui-kill',projectId,threadId].join(':');
+  function isAuthorizedGlobalKill(raw){try{const p=JSON.parse(String(raw||''));return p.protocol==='eiros-global-kill-v2'&&p.authority==='operator-explicit'&&p.source==='close_eiros_widgets'}catch{return false}}
   let timer=null;
   let stopped=false;
   let lastHeartbeat=0;
@@ -45,7 +46,7 @@ window.__EIROS_BOOTSTRAP__=__EIROS_BOOTSTRAP_JSON__;
     const root=$('root');
     if(root){root.className='closed';root.textContent='EIROS Pulse Lite closed · '+String(reason||'retired');}
   }
-  window.addEventListener('storage',e=>{if(e.key===killKey)closeSelf('kill signal')});
+  window.addEventListener('storage',e=>{if(e.key===killKey&&isAuthorizedGlobalKill(e.newValue))closeSelf('authorized global kill')});
 
   function showError(error){
     set('badge','error');

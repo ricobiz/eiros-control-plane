@@ -23,6 +23,7 @@ window.__EIROS_CONTROL_PILL_BOOTSTRAP__=__EIROS_CONTROL_PILL_BOOTSTRAP_JSON__;
   const projectId=String(boot.projectId||'eiros-hub'),threadId=String(boot.threadId||'first-contact'),generation=String(boot.generation||Date.now()),version=String(boot.controlPillVersion||'0.3.0-antenna-split');
   const agentId=String(boot.agentId||'chatgpt'),channel=String(boot.channel||'default'),instanceId=String(boot.instanceId||'');
   const uiKillKey=['eiros-ui-kill',projectId,threadId].join(':'),activeKey=['eiros-control-pill-active',projectId,threadId].join(':');
+  function isAuthorizedGlobalKill(raw){try{const p=JSON.parse(String(raw||''));return p.protocol==='eiros-global-kill-v2'&&p.authority==='operator-explicit'&&p.source==='close_eiros_widgets'}catch{return false}}
   const widgetId='control-pill-'+generation+'-'+Math.random().toString(36).slice(2,8);
   const root=document.getElementById('root'),sub=document.getElementById('sub'),ver=document.getElementById('ver'),badge=document.getElementById('badge'),reload=document.getElementById('reload'),txt=document.getElementById('txt'),snd=document.getElementById('snd'),fb=document.getElementById('fb');
   const bridge=window.mcp||window.openai||{};
@@ -73,8 +74,8 @@ window.__EIROS_CONTROL_PILL_BOOTSTRAP__=__EIROS_CONTROL_PILL_BOOTSTRAP_JSON__;
     return post(wake);
   }
 
-  try{localStorage.setItem(uiKillKey,JSON.stringify({generation,ts:Date.now(),reason:'open_control_pill-ui-only'}));localStorage.setItem(activeKey,widgetId);set(sub,'old UI retired · active');set(ver,'control pill · '+version+' · gen '+generation);set(badge,'ok')}catch(e){set(sub,'local UI kill failed');set(ver,'control pill · '+version);set(badge,'warn')}
-  window.addEventListener('storage',e=>{if(e.key===activeKey&&e.newValue!==widgetId)closeSelf('superseded');if(e.key===uiKillKey&&!String(e.newValue||'').includes(String(generation)))closeSelf('ui kill signal')});
+  try{localStorage.setItem(activeKey,widgetId);set(sub,'active');set(ver,'control pill · '+version+' · gen '+generation);set(badge,'ok')}catch(e){set(sub,'local UI state failed');set(ver,'control pill · '+version);set(badge,'warn')}
+  window.addEventListener('storage',e=>{if(e.key===activeKey&&e.newValue!==widgetId)closeSelf('superseded');if(e.key===uiKillKey&&isAuthorizedGlobalKill(e.newValue))closeSelf('authorized global kill')});
 
   async function heartbeat(activity='online'){const now=Date.now();if(now-lastHb<4500)return;lastHb=now;try{await callTool('room_heartbeat',{agent_id:agentId,session_id:widgetId,host:'chatgpt-control-pill',widget_version:version,activity})}catch(e){}}
   async function refreshStatus(){try{const d=unwrap(await callTool('room_snapshot',{project_id:projectId,thread_id:threadId,limit:1,after_seq:0}));const pending=Object.values(d.hub?.pending_by_agent||{}).reduce((a,b)=>a+Number(b||0),0);set(badge,pending?('P '+pending):'ok');set(sub,pending?('Pending '+pending+' · ringing'):'Ready · listening')}catch(e){}}

@@ -12,7 +12,7 @@ def test_widget_boot_diagnostics_contract() -> None:
     assert 'name="open_pulse_v57"' in SERVER
     assert '"openai/outputTemplate": PULSE_FRESH_URI' in SERVER
     assert 'def widget_boot_status(' in SERVER
-    assert 'call open_pulse_v57 exactly once' in SERVER
+    assert 'call open_pulse_v59 exactly once' in SERVER
     assert 'call widget_boot_status with wait_seconds=5' in SERVER
     for stage in (
         "JS_STARTED",

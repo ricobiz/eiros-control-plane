@@ -36,18 +36,18 @@ class StableUiMountContractTests(unittest.TestCase):
         tool = server_v2.mcp._tool_manager._tools["open_pulse"]
         registered = {str(uri) for uri in server_v2.mcp._resource_manager._resources}
 
-        self.assertEqual(server_v2.PULSE_ANCHOR_MOUNT_URI, server_v2.PULSE_ANCHOR_URI)
+        self.assertEqual(server_v2.PULSE_ANCHOR_MOUNT_URI, server_v2.PULSE_SUM_URI)
         self.assertNotIn(server_v2.PULSE_ANCHOR_MOUNT_URI, legacy_uris)
-        self.assertEqual(tool.meta["ui"]["resourceUri"], server_v2.PULSE_ANCHOR_URI)
-        self.assertEqual(tool.meta["openai/outputTemplate"], server_v2.PULSE_ANCHOR_URI)
-        self.assertIn(server_v2.PULSE_ANCHOR_URI, registered)
+        self.assertEqual(tool.meta["ui"]["resourceUri"], server_v2.PULSE_SUM_URI)
+        self.assertEqual(tool.meta["openai/outputTemplate"], server_v2.PULSE_SUM_URI)
+        self.assertIn(server_v2.PULSE_SUM_URI, registered)
         self.assertIn("ui://eiros/pulse-anchor-v5-3-cache-busted-host-pip.html", registered)
 
     def test_tool_results_report_mount_and_implementation_separately(self) -> None:
         self.assertIn('"resource_uri": ROOM_MOUNT_URI', self.source)
         self.assertIn('"implementation_uri": ROOM_URI', self.source)
         self.assertIn('"resource_uri": PULSE_ANCHOR_MOUNT_URI', self.source)
-        self.assertIn('"implementation_uri": PULSE_ANCHOR_URI', self.source)
+        self.assertIn('"implementation_uri": PULSE_SUM_URI', self.source)
 
     def test_listener_bootstrap_contains_companion_hls(self) -> None:
         self.assertIn('COMPANION_ORIGIN = "https://178-105-43-79.sslip.io"', self.source)

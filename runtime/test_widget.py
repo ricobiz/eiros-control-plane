@@ -65,8 +65,8 @@ def test_current_room_contract_and_legacy_aliases():
     assert "__EIROS_ROOM_BOOTSTRAP_JSON__" not in room_rendered
     assert "initialSystem" in room_rendered
     assert len(room_rendered.encode("utf-8")) < 50000
-    assert server_v2.ROOM_URI == "ui://eiros/collab-room-v9-25-listener-safe.html"
-    assert server_v2.ROOM_VERSION == "0.9.25-listener-safe"
+    assert server_v2.ROOM_URI == "ui://eiros/collab-room-v9-26-authorized-kill.html"
+    assert server_v2.ROOM_VERSION == "0.9.26-authorized-kill"
     assert "EIROS Control" in room_rendered
     assert "operator_send" in room_rendered and "request_immediate_wake" in room_rendered
     assert "room_cleanup_stale" in room_rendered and "dockFresh" in room_rendered
@@ -77,6 +77,7 @@ def test_current_room_contract_and_legacy_aliases():
     assert "noticeUntil" in room_rendered and "Refreshed ·" in room_rendered
     assert "lampShort" in room_rendered and "lastSig=null" in room_rendered
     assert "room_telemetry_update" in room_rendered and "Both agents" in room_rendered
+    assert server_v2.ROOM_LEGACY_V925_URI == "ui://eiros/collab-room-v9-25-listener-safe.html"
     assert server_v2.ROOM_LEGACY_V924_URI == "ui://eiros/collab-room-v9-24-inline-isolated.html"
     assert server_v2.ROOM_VERSION in server_v2.room_resource_legacy_v924()
 
@@ -99,7 +100,7 @@ def test_room_boot_does_not_broadcast_global_kill_to_listener():
     assert "claimLease()" in boot
 
     # Explicit GLOBAL KILL must still be honored when the operator invokes it.
-    assert "if(e.key===killKey){stale();return}" in room_template
+    assert "if(e.key===killKey){if(isAuthorizedGlobalKill(e.newValue))stale();return}" in room_template
     assert "eiros-ui-kill" in room_template
     assert "lease_key:'v925'" in room_template
 
@@ -107,7 +108,7 @@ def test_room_boot_does_not_broadcast_global_kill_to_listener():
 def test_current_connector_boot_and_launcher_contract():
     source = (ROOT / "runtime" / "server_v2.py").read_text(encoding="utf-8")
     assert "EIROS CONNECTOR BOOT PROTOCOL v1.0" in source
-    assert "If no live Wake Listener or live Pulse leader exists, call open_pulse_v57 exactly once." in source
+    assert "If no live Wake Listener or live Pulse leader exists, call open_pulse_v59 exactly once." in source
     assert "Never call close_eiros_widgets automatically." in source
     assert "Open Room only after Rico explicitly asks for Room" in source
     assert '"resume_context": resume' in source and 'reason="room_reconnected"' in source
