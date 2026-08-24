@@ -37,6 +37,36 @@ class AuthenticatedCollab:
             require_identity_match(claimed_agent, auth)
         return auth.subscriber_number
 
+
+    def session_heartbeat(
+        self,
+        auth: AuthContext,
+        *,
+        agent_id: str | None = None,
+        session_id: str,
+        host: str = "native-chat",
+        widget_version: str = "",
+        activity: str = "online",
+        widget_role: str = "",
+        bundle_id: str = "",
+        pair_protocol: str = "",
+        pair_ack: str = "",
+        expected_peer: str = "",
+    ):
+        subscriber = self._actor(auth, agent_id)
+        return self._engine.session_heartbeat(
+            subscriber,
+            session_id,
+            host,
+            widget_version,
+            activity,
+            widget_role,
+            bundle_id,
+            pair_protocol,
+            pair_ack,
+            expected_peer,
+        )
+
     def send_message(
         self,
         auth: AuthContext,

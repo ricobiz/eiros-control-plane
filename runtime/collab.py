@@ -646,7 +646,8 @@ def session_heartbeat(
     pair_ack: str = "",
     expected_peer: str = "",
 ) -> dict[str, Any]:
-    identity = normalize_agent(agent_id)
+    store = read_store()
+    identity = resolve_agent_reference(agent_id, store)
     require_bootstrapped(identity)
     session = str(session_id or "").strip()[:160]
     if not session:

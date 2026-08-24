@@ -241,3 +241,105 @@ def test_service_principal_cannot_enter_subscriber_only_collaboration_mutation(m
     with pytest.raises(SubscriberActorRequired):
         facade.send_message(service_auth, to_agent="rico", content="must not reach engine")
     assert called is False
+
+
+def test_session_heartbeat_maps_authenticated_subscriber_to_internal_agent(monkeypatch, tmp_path):
+    """Heartbeat authority is public SubscriberNumber; storage remains keyed by the legacy internal agent id."""
+    AuthenticatedCollab, _ = _import_facade()
+    monkeypatch.setattr(collab, "STORE_FILE", tmp_path / "collab.json")
+    monkeypatch.setattr(collab, "LOCK_FILE", tmp_path / "collab.lock")
+
+    identity = collab.bootstrap_agent(
+        client_kind="chatgpt",
+        platform_class="chatgpt",
+        instance_id="installation-heartbeat-a",
+        display_name="ChatGPT heartbeat device",
+    )["resume_identity"]
+    subscriber_number = identity["phone_number"]
+    internal_agent_id = identity["agent_id"]
+
+    auth = AuthContext(
+        principal_id="principal-heartbeat-a",
+        agent_number=internal_agent_id,
+        principal_type=PrincipalType.INTERACTIVE_INSTALLATION,
+        revocation_epoch=0,
+        authenticated_at=1.0,
+        scopes=frozenset({"collab:presence"}),
+        auth_method="test",
+        subscriber_number=subscriber_number,
+    )
+    facade = AuthenticatedCollab(collab)
+
+    result = facade.session_heartbeat(
+        auth,
+        agent_id=subscriber_number,
+        session_id="runtime-session-a",
+        host="chatgpt-ios",
+        widget_version="test-v1",
+        activity="online",
+    )
+
+    assert result["agent_id"] == internal_agent_id
+    assert result["phone_number"] == subscriber_number
+    assert set(result["sessions"]) == {"runtime-session-a"}
+
+
+def test_session_heartbeat_rejects_forged_subscriber_before_engine(monkeypatch):
+    AuthenticatedCollab, IdentityMismatch = _import_facade()
+    called = False
+
+    def fake_session_heartbeat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(collab, "session_heartbeat", fake_session_heartbeat)
+    facade = AuthenticatedCollab(collab)
+    auth = AuthContext(
+        principal_id="principal-heartbeat-a",
+        agent_number="legacy-a",
+        principal_type=PrincipalType.INTERACTIVE_INSTALLATION,
+        revocation_epoch=0,
+        authenticated_at=1.0,
+        scopes=frozenset({"collab:presence"}),
+        auth_method="test",
+        subscriber_number="SUB-A",
+    )
+
+    with pytest.raises(IdentityMismatch):
+        facade.session_heartbeat(
+            auth,
+            agent_id="SUB-B",
+            session_id="forged-session",
+        )
+    assert called is False
+
+
+def test_service_principal_cannot_create_subscriber_session(monkeypatch):
+    AuthenticatedCollab, _ = _import_facade()
+    called = False
+
+    def fake_session_heartbeat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(collab, "session_heartbeat", fake_session_heartbeat)
+    facade = AuthenticatedCollab(collab)
+    auth = AuthContext(
+        principal_id="worker-heartbeat",
+        agent_number="internal-worker",
+        principal_type=PrincipalType.HEADLESS_SERVICE,
+        revocation_epoch=0,
+        authenticated_at=1.0,
+        scopes=frozenset({"internal:work"}),
+        auth_method="test",
+        subscriber_number=None,
+    )
+
+    with pytest.raises(SubscriberActorRequired):
+        facade.session_heartbeat(
+            auth,
+            session_id="service-session",
+        )
+    assert called is False
