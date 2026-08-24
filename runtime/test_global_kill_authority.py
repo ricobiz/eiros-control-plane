@@ -90,7 +90,7 @@ def test_explicit_v2_global_kill_still_retires_listener() -> None:
     )
 
 
-def test_listener_specific_kill_semantics_are_unchanged() -> None:
+def test_explicit_listener_specific_kill_remains_available() -> None:
     _run_node(
         r"""
         const { createPulseLifecycle } = require('./runtime/widget_lifecycle.js');
@@ -108,9 +108,9 @@ def test_listener_specific_kill_semantics_are_unchanged() -> None:
           sessionId:'new-listener',
           onRetire: reason => retired.push(reason),
         });
-        listeners.storage({key:'eiros-wake-listener-kill:eiros-hub:first-contact', newValue:'anything'});
+        listeners.storage({key:'eiros-wake-listener-kill:eiros-hub:first-contact', newValue:JSON.stringify({protocol:'eiros-listener-kill-v2',authority:'operator-explicit',source:'close_listener'})});
         if (retired.join(',') !== 'listener kill') {
-          throw new Error('listener-specific kill semantics changed');
+          throw new Error('explicit listener-specific kill was not honored');
         }
         """
     )
@@ -193,3 +193,90 @@ def test_only_explicit_killer_source_writes_shared_global_kill() -> None:
         if 'localStorage.setItem(killKey' in text or 'localStorage.setItem(uiKillKey' in text:
             writers.append(path.name)
     assert writers == ['widget_killer.html']
+
+
+def test_legacy_listener_kill_payloads_do_not_retire_current_listener() -> None:
+    _run_node(
+        r"""
+        const { createPulseLifecycle } = require('./runtime/widget_lifecycle.js');
+        for (const raw of ['old-work-anchor:123', 'anything', '', JSON.stringify({reason:'legacy'})]) {
+          const listeners = {};
+          const target = {
+            addEventListener(name, fn) { listeners[name] = fn; },
+            removeEventListener() {},
+            localStorage: { setItem() {} },
+          };
+          const retired = [];
+          createPulseLifecycle({
+            target,
+            projectId:'eiros-hub',
+            threadId:'first-contact',
+            sessionId:'v59-listener',
+            onRetire: reason => retired.push(reason),
+          });
+          listeners.storage({key:'eiros-wake-listener-kill:eiros-hub:first-contact', newValue:raw});
+          if (retired.length !== 0) throw new Error('legacy listener kill retired current listener: '+raw);
+        }
+        """
+    )
+
+
+def test_explicit_v2_listener_kill_can_retire_current_listener() -> None:
+    _run_node(
+        r"""
+        const { createPulseLifecycle } = require('./runtime/widget_lifecycle.js');
+        const listeners = {};
+        const target = {
+          addEventListener(name, fn) { listeners[name] = fn; },
+          removeEventListener() {},
+          localStorage: { setItem() {} },
+        };
+        const retired = [];
+        createPulseLifecycle({
+          target,
+          projectId:'eiros-hub',
+          threadId:'first-contact',
+          sessionId:'v59-listener',
+          onRetire: reason => retired.push(reason),
+        });
+        listeners.storage({
+          key:'eiros-wake-listener-kill:eiros-hub:first-contact',
+          newValue:JSON.stringify({
+            protocol:'eiros-listener-kill-v2',
+            authority:'operator-explicit',
+            source:'close_listener',
+          }),
+        });
+        if (retired.join(',') !== 'listener kill') throw new Error('authorized listener kill not honored');
+        """
+    )
+
+
+def test_work_anchor_cannot_kill_dedicated_listener_on_boot() -> None:
+    source = (ROOT / 'runtime/work_anchor.html').read_text(encoding='utf-8')
+    assert "localStorage.setItem(['eiros-wake-listener-kill'" not in source
+
+
+def test_inline_listener_requires_authorized_listener_kill_envelope() -> None:
+    source = (ROOT / 'runtime/pulse_listener_inline.html').read_text(encoding='utf-8')
+    assert 'isAuthorizedListenerKill' in source
+    assert 'eiros-listener-kill-v2' in source
+    assert 'operator-explicit' in source
+    assert "source==='close_listener'" in source or 'source==="close_listener"' in source
+    assert "if(e.key===killKey&&isAuthorizedListenerKill(e.newValue))" in source
+
+
+def test_no_current_surface_auto_writes_listener_kill() -> None:
+    candidates = [
+        ROOT / 'runtime/work_anchor.html',
+        ROOT / 'runtime/pulse_anchor.html',
+        ROOT / 'runtime/pulse_listener_inline.html',
+        ROOT / 'runtime/widget_lifecycle.js',
+        ROOT / 'runtime/server_v2.py',
+    ]
+    writers=[]
+    for path in candidates:
+        text=path.read_text(encoding='utf-8')
+        if "localStorage.setItem(['eiros-wake-listener-kill'" in text or 'localStorage.setItem(listenerKillKey' in text:
+            writers.append(path.name)
+    assert writers == []

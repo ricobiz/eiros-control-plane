@@ -165,7 +165,7 @@ window.__EIROS_WORK_ANCHOR_BOOTSTRAP__=__EIROS_WORK_ANCHOR_BOOTSTRAP_JSON__;
     }
   };
   for(const [ev,stage] of [['visibilitychange','VISIBILITY'],['pageshow','PAGESHOW'],['pagehide','PAGEHIDE'],['focus','FOCUS'],['blur','BLUR'],['freeze','FREEZE'],['resume','RESUME']])window.addEventListener(ev,()=>tele(stage,{event:ev,visibility:document.visibilityState,focused:document.hasFocus()}));
-  try{localStorage.setItem(['eiros-wake-listener-kill',projectId,threadId].join(':'),sessionId+':'+Date.now());localStorage.setItem(newKey,sessionId);localStorage.setItem(oldKey,sessionId)}catch(e){}
+  try{localStorage.setItem(newKey,sessionId);localStorage.setItem(oldKey,sessionId)}catch(e){}
   window.addEventListener('storage',e=>{if((e.key===newKey||e.key===oldKey)&&e.newValue&&e.newValue!==sessionId){closed=true;clearTimeout(pollTimer);clearTimeout(hbTimer);setState('bad','Superseded by a newer Work Anchor','SUPERSEDED');tele('SUPERSEDED',{by:e.newValue})}});
   tele('BOOT_READY',{capabilities:capabilities()});heartbeat();poll();
 })();

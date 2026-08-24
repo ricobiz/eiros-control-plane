@@ -31,6 +31,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     ['eiros-wake-listener-active-v48',projectId,threadId,agentId,channel].join(':')
   ];
   const killKey=['eiros-wake-listener-kill',projectId,threadId].join(':');
+  function isAuthorizedListenerKill(raw){try{const p=JSON.parse(String(raw||''));return p.protocol==='eiros-listener-kill-v2'&&p.authority==='operator-explicit'&&p.source==='close_listener'}catch{return false}}
 
   let pollTimer=null;
   const attempts={};
@@ -128,7 +129,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
   }
   function onStorage(e){
     if(e.key===activeKey&&e.newValue!==sessionId)closeSelf('superseded');
-    if(e.key===killKey)closeSelf('listener kill');
+    if(e.key===killKey&&isAuthorizedListenerKill(e.newValue))closeSelf('authorized listener kill');
   }
   window.addEventListener('storage',onStorage);
 

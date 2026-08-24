@@ -17,6 +17,20 @@
     }
   }
 
+  function isAuthorizedListenerKill(raw) {
+    try {
+      const payload = JSON.parse(String(raw || ''));
+      return Boolean(
+        payload &&
+        payload.protocol === 'eiros-listener-kill-v2' &&
+        payload.authority === 'operator-explicit' &&
+        payload.source === 'close_listener'
+      );
+    } catch (error) {
+      return false;
+    }
+  }
+
   function createPulseLifecycle(options) {
     const opts = options || {};
     const target = opts.target;
@@ -46,7 +60,7 @@
     function onStorage(event) {
       if (!event) return;
       if (event.key === killKey && isAuthorizedGlobalKill(event.newValue)) retire('global kill');
-      if (event.key === listenerKillKey) retire('listener kill');
+      if (event.key === listenerKillKey && isAuthorizedListenerKill(event.newValue)) retire('listener kill');
     }
 
     if (target && typeof target.addEventListener === 'function') {
@@ -79,5 +93,5 @@
     };
   }
 
-  return { createPulseLifecycle, isAuthorizedGlobalKill };
+  return { createPulseLifecycle, isAuthorizedGlobalKill, isAuthorizedListenerKill };
 });
