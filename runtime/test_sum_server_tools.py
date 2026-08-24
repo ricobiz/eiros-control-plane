@@ -361,3 +361,9 @@ def test_connector_instructions_use_stable_set_state_transport() -> None:
     assert 'set_state with status=\\"sum_turn_complete_current\\" as the final tool action' in source
     assert 'call sum_wake_ack_current as the first tool action' not in source
     assert 'call sum_turn_complete_current as the final tool action' not in source
+
+
+def test_v58_pulse_poll_reports_pip_handover_readiness():
+    source = Path("runtime/pulse_anchor.html").read_text(encoding="utf-8")
+    assert "handover_ready:" in source
+    assert "videoPipState==='active'||displayMode()==='pip'" in source

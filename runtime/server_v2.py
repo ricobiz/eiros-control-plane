@@ -3380,7 +3380,7 @@ def reconnect_context() -> dict[str, Any]:
     meta={"ui": {"visibility": ["app"]}},
     structured_output=True,
 )
-def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "", claim_seconds: int = 0, agent_id: str = "") -> dict[str, Any]:
+def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: str = "", claim_seconds: int = 0, agent_id: str = "", handover_ready: bool = False) -> dict[str, Any]:
     identity = str(widget_id or "")
     # Room cards are observers only. Older cached Room JavaScript still calls
     # pulse_poll, so return a healthy synthetic leader response without allowing
@@ -3423,7 +3423,7 @@ def pulse_poll(widget_id: str, cursor: int = 0, channel: str = "", instance_id: 
     result = event_engine.poll(
         widget_id=widget_id, cursor=max(0, int(cursor)), channel=channel, instance_id=instance_id,
         leader_lease_seconds=int(polling.get("leader_lease_seconds", 25)),
-        claim_seconds=effective_claim, agent_id=agent_id,
+        claim_seconds=effective_claim, agent_id=agent_id, handover_ready=bool(handover_ready),
     )
     result["pairing"] = _observe_widget_pair(
         "pulse_poll_listener",

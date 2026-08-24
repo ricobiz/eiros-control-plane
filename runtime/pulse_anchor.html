@@ -900,7 +900,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     if(closed)return;
     try{
       await heartbeat();
-      const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel,instance_id:String(boot.instanceId||''),claim_seconds:45});
+      const raw=await callTool('pulse_poll',{widget_id:sessionId,agent_id:agentId,cursor:0,channel,instance_id:String(boot.instanceId||''),claim_seconds:45,handover_ready:videoPipState==='active'||displayMode()==='pip'});
       reportBootStage('PULSE_POLL_OK','pulse_poll returned');
       const data=unwrap(raw);
       if(data.event){
