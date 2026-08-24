@@ -73,7 +73,7 @@ window.__EIROS_CONTROL_PILL_BOOTSTRAP__=__EIROS_CONTROL_PILL_BOOTSTRAP_JSON__;
     return post(wake);
   }
 
-  try{localStorage.setItem(uiKillKey,JSON.stringify({generation,ts:Date.now(),reason:'open_control_pill-ui-only'}));localStorage.setItem(activeKey,widgetId);set(sub,'old UI retired · active');set(ver,'control pill · '+version+' · gen '+generation);set(badge,'ok')}catch(e){set(sub,'local UI kill failed');set(ver,'control pill · '+version);set(badge,'warn')}
+  try{localStorage.setItem(activeKey,widgetId);set(sub,'active');set(ver,'control pill · '+version+' · gen '+generation);set(badge,'ok')}catch(e){set(sub,'local UI lease failed');set(ver,'control pill · '+version);set(badge,'warn')}
   window.addEventListener('storage',e=>{if(e.key===activeKey&&e.newValue!==widgetId)closeSelf('superseded');if(e.key===uiKillKey&&!String(e.newValue||'').includes(String(generation)))closeSelf('ui kill signal')});
 
   async function heartbeat(activity='online'){const now=Date.now();if(now-lastHb<4500)return;lastHb=now;try{await callTool('room_heartbeat',{agent_id:agentId,session_id:widgetId,host:'chatgpt-control-pill',widget_version:version,activity})}catch(e){}}

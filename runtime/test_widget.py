@@ -141,3 +141,20 @@ def test_delivery_receipts_distinguish_live_wake_from_offline_mail(monkeypatch):
     )
     assert receipts[0]["mode"] == "wake queued"
     assert receipts[1]["mode"] == "offline mail"
+
+
+def test_control_pill_boot_does_not_broadcast_global_kill_to_listener():
+    control_pill = (ROOT / "runtime" / "control_pill.html").read_text(encoding="utf-8")
+    killer = (ROOT / "runtime" / "widget_killer.html").read_text(encoding="utf-8")
+
+    # Opening/replacing the Control Pill may retire an older Control Pill via
+    # its own active key, but it must never broadcast the operator-only global
+    # kill key because the Wake Listener intentionally listens to that key.
+    assert "localStorage.setItem(uiKillKey" not in control_pill
+    assert "localStorage.setItem(activeKey,widgetId)" in control_pill
+
+    # The Control Pill must still honor an explicit operator GLOBAL KILL.
+    assert "if(e.key===uiKillKey" in control_pill
+
+    # The only UI surface that writes the global key is the explicit killer.
+    assert "localStorage.setItem(killKey,payload)" in killer
