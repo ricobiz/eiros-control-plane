@@ -154,9 +154,9 @@ Do not mistake the current phone-number field for the final SubscriberNumber sec
 Explicit migration path for this reconciliation slice:
 1. `AuthContext.agent_number` remains as a legacy transport/routing field so reviewed callers do not break; new subscriber-only authority is taken from `AuthContext.subscriber_number`.
 2. `PrincipalRegistry._by_agent_number` remains temporarily for signature/routing compatibility, but a non-empty public number is exclusive to one `INTERACTIVE_INSTALLATION`; non-dialable service principals may authenticate only without a public number.
-3. Current `collab.py` `phone_number` remains the storage/UI alias for the future SubscriberNumber during this slice. Same `platform_class + instance_id` reuses that record and its runtime sessions; a new installation remains a separate record/number.
+3. Current `collab.py` keeps the `phone_number` storage slot only as a migration-era routing alias. Existing sequential values such as `100001` are legacy metadata: they are not promoted into final SubscriberNumbers and never become authentication material. Same `platform_class + instance_id` still reuses that legacy record and its runtime sessions during this slice; a later bootstrap/storage migration replaces the value with a newly enrolled opaque SubscriberNumber after DeviceBinding proof.
 4. Current `agent_id/from_agent` engine parameters remain legacy adapter names. `AuthenticatedCollab` supplies them only after deriving the trusted subscriber actor; body values are assertion-only.
-5. A later storage/bootstrap migration replaces sequential `phone_number` allocation and self-asserted `instance_id` with opaque high-entropy SubscriberNumber allocation plus cryptographic DeviceBinding. That later step is not hidden inside this auth-only slice.
+5. A later storage/bootstrap migration replaces sequential `phone_number` allocation and self-asserted `instance_id` with opaque high-entropy SubscriberNumber allocation plus cryptographic DeviceBinding. No old `agent_id`, display name, sequential `phone_number`, or self-asserted `instance_id` is sufficient to transplant subscriber authority to another installation. That later step is not hidden inside this auth-only slice.
 
 ## 8. RED contract to write before implementation
 

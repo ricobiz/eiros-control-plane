@@ -61,9 +61,9 @@
 - Produces: `NonDialablePrincipalRegistration`, `SubscriberActorRequired`, `AuthContext.subscriber_number: str | None`.
 - Preserves: legacy `AuthContext.agent_number` during migration.
 
-- [x] **Step 1:** Add `NonDialablePrincipalRegistration` as a distinct policy error (subclass of `ConflictingPrincipalRegistration` for compatibility) and reject non-empty public-number registration for HEADLESS_SERVICE/WATCHDOG/SERVER_WORKER/TRUSTED_CONNECTOR.
+- [x] **Step 1:** Add `NonDialablePrincipalRegistration(AuthError)` as a sibling policy error, not a re-registration-conflict subtype, and reject non-empty public-number registration for HEADLESS_SERVICE/WATCHDOG/SERVER_WORKER/TRUSTED_CONNECTOR before idempotent/rebind handling.
 - [x] **Step 2:** Add a reverse-index exclusivity guard: a non-empty public number already owned by a different INTERACTIVE_INSTALLATION principal rejects the second registration with `ConflictingPrincipalRegistration`; exact same principal re-registration remains idempotent and revocation-safe.
-- [x] **Step 3:** Add `subscriber_number: str | None` to AuthContext. AuthStore sets it to the registered public number only for INTERACTIVE_INSTALLATION; all service types receive `None`. Preserve `agent_number` as migration compatibility during this slice.
+- [x] **Step 3:** Add `subscriber_number: str | None` to AuthContext. AuthStore sets it to the registered public number only for INTERACTIVE_INSTALLATION; all service types receive `None`. Preserve `agent_number` as migration compatibility during this slice, but never infer subscriber authority automatically from that legacy field in `AuthContext.__post_init__`; directly constructed trusted test/adaptor contexts must set `subscriber_number` explicitly.
 - [x] **Step 4:** Add `SubscriberActorRequired(AuthError)` and change `AuthenticatedCollab._actor()` to reject any context without a callable subscriber actor before invoking the engine. Body identity remains assertion-only and validated against the trusted subscriber actor.
 - [x] **Step 5:** Run the new RED tests; all must pass.
 - [x] **Step 6:** Run `runtime/test_agent_auth.py` and `runtime/test_authenticated_collab.py`; all old security regressions must remain green.
@@ -80,4 +80,4 @@
 - [x] **Step 2:** Run `/opt/eiros-control-plane/venv/bin/pytest -q` and record exact totals.
 - [x] **Step 3:** Run `git diff --check` and inspect `git status --short`.
 - [x] **Step 4:** Commit the reconcile slice with a focused message and push `test/subscriber-identity-reconcile`.
-- [ ] **Step 5:** Send exact SHA + test evidence + known migration caveat (`agent_number`/`phone_number` names remain legacy adapters) to Claude for independent review. Do not merge to main until review returns GREEN.
+- [x] **Step 5:** Send exact SHA + test evidence + known migration caveat (`agent_number`/`phone_number` names remain legacy adapters) to Claude for independent review. Review request is durable in EIROS Room; do not merge to main until review returns GREEN.
