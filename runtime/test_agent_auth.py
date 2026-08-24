@@ -413,54 +413,73 @@ def test_case18_connector_claims_registered_agent_number_is_accepted():
     binding.verify_claim("chatgpt-tunnel-connector", "AGN-0001")
 
 
-# --- Revision 5: chatgpt seq206 finding #1 ----------------------------------
-# Multi-principal-per-agent_number is the approved identity model; the old
-# single-owner reverse index silently displaced a second legitimate
-# registration instead of letting both coexist.
+# --- Subscriber identity reconciliation: public number cardinality ----------
+# Product correction (Rico, 2026-08-24): one public callable number identifies
+# exactly one user x platform x device/installation subscriber. Independent
+# principals do not coexist behind that public address; service principals are
+# non-dialable infrastructure identities.
 
-def test_multiple_principals_can_share_one_agent_number():
+def test_second_independent_installation_cannot_share_public_subscriber_number():
     registry = PrincipalRegistry()
-    registry.register_principal("principal-p1", "AGN-SHARED", PrincipalType.INTERACTIVE_INSTALLATION, CREDENTIAL_A)
-    registry.register_principal("principal-p2", "AGN-SHARED", PrincipalType.HEADLESS_SERVICE, CREDENTIAL_B)
+    registry.register_principal(
+        "principal-phone-a",
+        "SUB-DEVICE-A",
+        PrincipalType.INTERACTIVE_INSTALLATION,
+        CREDENTIAL_A,
+    )
+
+    # RED against c0b38ab: its reverse index intentionally accepts this and
+    # turns SUB-DEVICE-A into a set-of-principals. The revised product model
+    # requires a distinct public number for the second installation instead.
+    with pytest.raises(ConflictingPrincipalRegistration):
+        registry.register_principal(
+            "principal-phone-b",
+            "SUB-DEVICE-A",
+            PrincipalType.INTERACTIVE_INSTALLATION,
+            CREDENTIAL_B,
+        )
+
+
+def test_service_auth_context_has_no_public_subscriber_number():
+    registry = PrincipalRegistry()
+    registry.register_principal(
+        "worker-1",
+        "",
+        PrincipalType.HEADLESS_SERVICE,
+        CREDENTIAL_B,
+        scopes=frozenset({"internal:work"}),
+    )
     store = _store(registry)
+    token = store.issue_bearer_token("worker-1", ttl_seconds=60.0, now=NOW)
+    ctx = store.verify_bearer_token(token.token, now=NOW + 1.0)
 
-    kwargs_p1 = _signed_request_kwargs(
-        principal_id="principal-p1",
-        agent_number_claim="AGN-SHARED",
-        credential=CREDENTIAL_A,
-        request_id="req-p1",
-        payload=b"p1-does-a-thing",
-    )
-    kwargs_p2 = _signed_request_kwargs(
-        principal_id="principal-p2",
-        agent_number_claim="AGN-SHARED",
-        credential=CREDENTIAL_B,
-        request_id="req-p2",
-        payload=b"p2-does-a-thing",
-    )
-    # Neither raises - both are legitimately bound to AGN-SHARED.
-    ctx1 = store.verify_signed_request(now=NOW, **kwargs_p1)
-    ctx2 = store.verify_signed_request(now=NOW, **kwargs_p2)
-    assert ctx1.principal_id == "principal-p1"
-    assert ctx2.principal_id == "principal-p2"
+    # RED against c0b38ab: AuthContext currently overloads agent_number for
+    # every principal type. The revised typed context exposes no callable
+    # SubscriberNumber for a service principal.
+    assert ctx.subscriber_number is None
 
 
-def test_case12_still_rejected_when_principal_not_a_member_of_claimed_agent_number():
-    """Regression guard: the multi-principal-per-agent_number fix above
-    must not weaken case 12 - a principal genuinely bound to its OWN
-    agent_number must still be rejected when it claims a DIFFERENT real
-    agent_number it is not a member of, even though that other
-    agent_number legitimately has (multiple) other members."""
+def test_case12_still_rejected_for_cross_subscriber_substitution():
+    """A valid Subscriber A credential must not authorize Subscriber B."""
     registry = PrincipalRegistry()
-    registry.register_principal("principal-p1", "AGN-SHARED", PrincipalType.INTERACTIVE_INSTALLATION, CREDENTIAL_A)
-    registry.register_principal("principal-p2", "AGN-SHARED", PrincipalType.HEADLESS_SERVICE, CREDENTIAL_B)
-    registry.register_principal("principal-c", "AGN-OTHER", PrincipalType.INTERACTIVE_INSTALLATION, CREDENTIAL_C)
+    registry.register_principal(
+        "principal-a",
+        "SUB-A",
+        PrincipalType.INTERACTIVE_INSTALLATION,
+        CREDENTIAL_A,
+    )
+    registry.register_principal(
+        "principal-b",
+        "SUB-B",
+        PrincipalType.INTERACTIVE_INSTALLATION,
+        CREDENTIAL_B,
+    )
     store = _store(registry)
     kwargs = _signed_request_kwargs(
-        principal_id="principal-c",
-        agent_number_claim="AGN-SHARED",  # real, but principal-c isn't a member
-        credential=CREDENTIAL_C,
-        request_id="req-c-cross",
+        principal_id="principal-b",
+        agent_number_claim="SUB-A",  # real public subscriber, wrong principal
+        credential=CREDENTIAL_B,
+        request_id="req-cross-subscriber",
         payload=b"do-the-thing",
     )
     with pytest.raises(AgentNumberMismatch):
