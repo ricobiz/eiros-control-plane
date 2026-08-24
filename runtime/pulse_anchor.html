@@ -13,7 +13,7 @@ body{margin:0;background:transparent}
 .dot.warn{background:#f5b849;box-shadow:0 0 8px rgba(245,184,73,.45)}
 .dot.bad{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.45)}
 .label{font-size:10px;color:#7a9bbf;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}.rld{width:24px;height:24px;border:1px solid #1a3a5c;border-radius:8px;background:#071321;color:#7a9bbf;font-size:12px;display:grid;place-items:center;flex-shrink:0}.pin.active{color:#19c37d;border-color:#176747;box-shadow:0 0 8px rgba(25,195,125,.25)}
+.badge{font-size:10px;color:#4a7a9b;padding:2px 6px;border:1px solid #1a3a5c;border-radius:999px;flex-shrink:0}.rld{width:24px;height:24px;border:1px solid #1a3a5c;border-radius:8px;background:#071321;color:#7a9bbf;font-size:12px;display:grid;place-items:center;flex-shrink:0}.rld.pin{width:36px;font-size:10px;font-weight:700}.pin.active{color:#19c37d;border-color:#176747;box-shadow:0 0 8px rgba(25,195,125,.25)}
 .closed{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #333;border-radius:12px;background:#111;min-height:32px;color:#777;font-size:10px}
 .companionPanel{position:relative;margin-top:8px;overflow:hidden;border:1px solid #1a3a5c;border-radius:14px;background:#03070c;box-shadow:0 14px 36px rgba(0,0,0,.28)}
 .companionVideo{display:block;width:100%;aspect-ratio:16/9;min-height:180px;background:#000;object-fit:cover}
@@ -61,7 +61,7 @@ body.mode-fullscreen .console{display:block;margin-top:14px;padding:14px;border:
   <span id="bubbleMark" class="bubbleMark">E</span><span id="dot" class="dot"></span>
   <span id="label" class="label">Pulse Anchor · connecting</span>
   <button id="full" class="rld" title="Open EIROS fullscreen console">▣</button>
-  <button id="pin" class="rld pin" title="Launch global Video PiP">◫</button>
+  <button id="pin" class="rld pin" title="Launch global Video PiP">PiP</button>
   <button id="reload" class="rld" title="Reload listener">↻</button>
   <span id="badge" class="badge">v__ANCHOR_VERSION__</span>
 </div>
@@ -400,7 +400,7 @@ window.__EIROS_ANCHOR_BOOTSTRAP__=__EIROS_ANCHOR_BOOTSTRAP_JSON__;
     const floating=nativeActive||m==='pip';
     if(pin){
       pin.classList.toggle('active',floating);
-      pin.textContent=videoPipState==='active'?'●':(floating?'◉':'◫');
+      pin.textContent='PiP';
       pin.title=videoPipState==='active'?'Global Video PiP active':(floating?'Starting Video PiP':'Launch global Video PiP');
     }
     if(launchPip){
