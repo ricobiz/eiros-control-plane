@@ -151,6 +151,60 @@ merely inspected.
      format, and any future non-Python signer must reproduce these exact
      bytes from the same wall-clock instant.
 
+Revision 6 (2026-08-24, claude): fixes two further defects chatgpt's
+adversarial execution-based review of GREEN SHA 127cb6c found (seq209).
+Both are pure-auth blockers, not cosmetic - reproduced independently by
+execution before being fixed, matching the standard this collaboration has
+held both directions all cycle.
+
+  1. REPLAY RACE: revision 5 made ReplayStore injectable/shareable, but
+     AuthStore.verify_signed_request still composed it as two separate,
+     non-atomic calls - `if self._replay_store.seen(...): raise ... ;
+     self._replay_store.mark(...)`. Two concurrent AuthStore instances
+     sharing the same ReplayStore backend could both call seen(), both
+     observe "not seen" before either called mark(), and both accept the
+     identical replayed signed request - reproduced deterministically with
+     a barrier-forcing test double (see test_agent_auth.py's
+     _RaceForcingReplayStore): both threads got ACCEPT instead of one
+     ACCEPT and one ReplayedRequest. Fixed: ReplayStore gained
+     consume_once(principal_id, request_id, now, window_seconds) -> bool,
+     an atomic check-and-burn primitive (InMemoryReplayStore implements it
+     under a threading.Lock shared with seen()/mark()/prune(), so it also
+     cannot race against those). AuthStore.verify_signed_request now calls
+     consume_once() instead of the old seen()-then-mark() sequence.
+     seen()/mark() remain on the protocol for introspection/debugging use,
+     but composing them non-atomically for a real accept/reject decision
+     is no longer safe under concurrent callers and is no longer how this
+     module makes that decision itself.
+
+  2. TIMESTAMP CROSS-LANGUAGE CANONICALIZATION: revision 5 froze the
+     signed timestamp to integer milliseconds via round(timestamp * 1000)
+     specifically to get a stable, language-independent canonical form -
+     but Python's round() is banker's-rounding (rounds an exact .5 to the
+     nearest EVEN integer), which disagrees with JS-style Math.round()
+     (always rounds .5 up) at exact millisecond-boundary values -
+     independently confirmed by direct execution: round(1000.5) == 1000,
+     not 1001, while round(1001.5) == 1002 (matches Math.round there only
+     by coincidence). A signer and verifier implemented in different
+     languages computing "the same" timestamp could therefore produce
+     DIFFERENT canonical bytes for a legitimate, untampered request. Fixed
+     at the root rather than by picking a different rounding rule inside
+     this function: canonical_envelope() and verify_signed_request() no
+     longer accept a float `timestamp` and round it internally at all -
+     they require an explicit `timestamp_ms: int`, already computed by the
+     caller, encoded as its own exact decimal string with no conversion
+     step left for any language's rounding rule to disagree about. The
+     clock-skew check in verify_signed_request compares `now` (float
+     seconds, never transmitted or signed - no cross-language canonical
+     form needed for it) against `timestamp_ms / 1000.0` - a local numeric
+     comparison, not a serialization step, so ordinary float imprecision
+     there does not matter at 120-second tolerance. This is an
+     API-breaking change to canonical_envelope/verify_signed_request's
+     parameter list (`timestamp` -> `timestamp_ms`, float seconds -> int
+     milliseconds) on top of revision 5's `method` addition - flagged
+     explicitly to chatgpt for the still-pending authenticated_collab.py
+     facade work.
+
 Threat-matrix case numbers below match threat_model_matrix_v1 verbatim.
 """
 from __future__ import annotations
@@ -159,6 +213,7 @@ import dataclasses
 import enum
 import hashlib
 import secrets
+import threading
 import typing
 
 # Resolved design constants (agreed 2026-08-22, see project_state
@@ -350,13 +405,29 @@ class ReplayStore(typing.Protocol):
     constructed with the SAME ReplayStore instance (or, in a real
     deployment, the same persistent-backed implementation of this
     protocol) observe each other's burned nonces. Purely structural
-    typing, matching SignatureVerifier's style."""
+    typing, matching SignatureVerifier's style.
+
+    Revision 6 (chatgpt seq209 finding #1): seen() and mark() are each
+    individually correct, but composing them as two separate calls -
+    "if not seen(...): mark(...)" - is NOT atomic. Two concurrent callers
+    can both observe seen()==False before either calls mark(), and both
+    proceed - reproduced deterministically in test_agent_auth.py. Added
+    consume_once(), an atomic check-and-burn primitive: implementations
+    MUST guarantee that for a given (principal_id, request_id) pair,
+    across any number of concurrent callers, at most one call returns
+    True within window_seconds of now. AuthStore.verify_signed_request
+    uses consume_once() exclusively for its real accept/reject decision;
+    seen()/mark() remain available for introspection/debugging, but a
+    caller composing them for a security decision reintroduces the exact
+    race this revision closed."""
 
     def seen(self, principal_id: str, request_id: str, now: float, window_seconds: float) -> bool: ...
 
     def mark(self, principal_id: str, request_id: str, now: float) -> None: ...
 
     def prune(self, now: float, window_seconds: float) -> None: ...
+
+    def consume_once(self, principal_id: str, request_id: str, now: float, window_seconds: float) -> bool: ...
 
 
 class InMemoryReplayStore:
@@ -367,25 +438,52 @@ class InMemoryReplayStore:
     InMemoryReplayStore instance is injected into each. NOT restart-safe by
     itself - a real multi-process/restart-safe deployment must inject a
     persistent-backed implementation of the same ReplayStore protocol
-    instead."""
+    instead.
+
+    Revision 6 (chatgpt seq209 finding #1): all mutation/inspection now
+    goes through one threading.Lock, and consume_once() performs its
+    check-and-mark as a single critical section - closing the seen()-then-
+    mark() race at the source rather than relying on every caller to
+    compose the two calls correctly."""
 
     def __init__(self) -> None:
         self._seen: dict[tuple[str, str], float] = {}
+        self._lock = threading.Lock()
 
     def seen(self, principal_id: str, request_id: str, now: float, window_seconds: float) -> bool:
+        with self._lock:
+            return self._seen_locked(principal_id, request_id, now, window_seconds)
+
+    def _seen_locked(self, principal_id: str, request_id: str, now: float, window_seconds: float) -> bool:
         last_used = self._seen.get((principal_id, request_id))
         return last_used is not None and (now - last_used) <= window_seconds
 
     def mark(self, principal_id: str, request_id: str, now: float) -> None:
-        self._seen[(principal_id, request_id)] = now
+        with self._lock:
+            self._seen[(principal_id, request_id)] = now
 
     def prune(self, now: float, window_seconds: float) -> None:
         """Lazy sweep. Entries older than window_seconds can never again
         cause a false ReplayedRequest, so there is no correctness reason to
         keep them - only a memory-growth reason to drop them."""
-        expired = [key for key, used_at in self._seen.items() if now - used_at > window_seconds]
-        for key in expired:
-            del self._seen[key]
+        with self._lock:
+            expired = [key for key, used_at in self._seen.items() if now - used_at > window_seconds]
+            for key in expired:
+                del self._seen[key]
+
+    def consume_once(self, principal_id: str, request_id: str, now: float, window_seconds: float) -> bool:
+        """Atomic check-and-burn (revision 6): the check and the mark
+        happen inside the SAME lock acquisition, so no interleaving of any
+        number of concurrent callers can let two of them both observe
+        "not seen" for the same key. Returns True exactly once per
+        (principal_id, request_id) within window_seconds of first use;
+        every subsequent call for that same key within the window returns
+        False."""
+        with self._lock:
+            if self._seen_locked(principal_id, request_id, now, window_seconds):
+                return False
+            self._seen[(principal_id, request_id)] = now
+            return True
 
 
 def hash_payload(payload: bytes) -> str:
@@ -401,7 +499,7 @@ def canonical_envelope(
     principal_id: str,
     agent_number: str,
     method: str,
-    timestamp: float,
+    timestamp_ms: int,
     request_id: str,
     payload_hash: str,
 ) -> bytes:
@@ -438,21 +536,28 @@ def canonical_envelope(
         b"a|b|c|...", making two DIFFERENT logical envelopes mutually
         forgeable under the same signature. Length-prefixing makes the
         byte boundary between fields unambiguous regardless of content.
-      - `timestamp` is frozen to an integer number of milliseconds since
-        the epoch (round(timestamp * 1000)) rather than interpolated as a
-        raw float: float repr is not a stable cross-language canonical
-        format (formatting, trailing zeros and precision differ across
-        runtimes), and any future non-Python signer must be able to
-        reproduce these exact bytes from the same wall-clock instant.
-        Millisecond precision is finer than this module's whole-second
-        clock-skew/replay granularity, so it does not lose information
-        those checks depend on.
+      - `timestamp` was frozen to an integer number of milliseconds via
+        round(timestamp * 1000) rather than interpolated as a raw float,
+        for the same cross-language-stability reason. Revision 6
+        (chatgpt seq209 finding #2) went one step further: round() itself
+        is language-dependent at exact .5ms boundaries (Python's
+        banker's-rounding disagrees with JS-style Math.round() there), so
+        this function no longer performs ANY internal float->int
+        conversion. It now takes `timestamp_ms: int` directly - already
+        computed by the caller - and rejects a non-int value outright
+        (TypeError) rather than silently accepting and rounding one. There
+        is no longer a conversion step inside this function for any
+        language's rounding rule to disagree about.
     """
+    if not isinstance(timestamp_ms, int):
+        raise TypeError(
+            f"timestamp_ms must be int (milliseconds since epoch), got {type(timestamp_ms).__name__}"
+        )
     fields = (
         principal_id.encode("utf-8"),
         agent_number.encode("utf-8"),
         method.encode("utf-8"),
-        str(int(round(timestamp * 1000))).encode("ascii"),
+        str(timestamp_ms).encode("ascii"),
         request_id.encode("utf-8"),
         payload_hash.encode("utf-8"),
     )
@@ -690,7 +795,7 @@ class AuthStore:
         payload: bytes,
         payload_hash_claim: str,
         signature: bytes,
-        timestamp: float,
+        timestamp_ms: int,
         request_id: str,
         now: float,
     ) -> "AuthContext":
@@ -765,25 +870,37 @@ class AuthStore:
             principal_id=principal_id,
             agent_number=agent_number_claim,
             method=method,
-            timestamp=timestamp,
+            timestamp_ms=timestamp_ms,
             request_id=request_id,
             payload_hash=payload_hash_claim,
         )
         if not self._verifier.verify(envelope, signature, credential):
             raise InvalidCredential(f"signature does not verify for {principal_id!r}")
 
-        # 4. Clock skew, boundary inclusive.
-        if abs(now - timestamp) > ALLOWED_CLOCK_SKEW_SECONDS:
-            raise ClockSkewExceeded(f"timestamp {timestamp} outside {ALLOWED_CLOCK_SKEW_SECONDS}s of now={now}")
+        # 4. Clock skew, boundary inclusive. timestamp_ms is the signed,
+        # cross-language-canonical value (revision 6); now is this
+        # process's own local clock reading, never transmitted or signed,
+        # so converting it here for comparison is a plain numeric op, not
+        # a serialization step - ordinary float imprecision does not
+        # matter at 120-second tolerance.
+        request_seconds = timestamp_ms / 1000.0
+        if abs(now - request_seconds) > ALLOWED_CLOCK_SKEW_SECONDS:
+            raise ClockSkewExceeded(
+                f"timestamp_ms {timestamp_ms} outside {ALLOWED_CLOCK_SKEW_SECONDS}s of now={now}"
+            )
 
-        # 5. Replay - opportunistically prune expired entries, then burn
-        # this nonce now that it is authenticated, before any check below
-        # that might still reject the request for other reasons. Goes
-        # through the injected ReplayStore (revision 5).
+        # 5. Replay - opportunistically prune expired entries, then
+        # atomically check-and-burn this nonce via consume_once (revision
+        # 6, chatgpt seq209 finding #1). The previous seen()-then-mark()
+        # two-step was not atomic: two concurrent AuthStore instances
+        # sharing a ReplayStore could both observe "not seen" before
+        # either marked, and both accept the identical replayed request -
+        # reproduced deterministically before this fix (see
+        # test_agent_auth.py). consume_once collapses check-and-mark into
+        # one atomic operation with no window for that race.
         self._replay_store.prune(now, REPLAY_WINDOW_SECONDS)
-        if self._replay_store.seen(principal_id, request_id, now, REPLAY_WINDOW_SECONDS):
+        if not self._replay_store.consume_once(principal_id, request_id, now, REPLAY_WINDOW_SECONDS):
             raise ReplayedRequest(f"request_id {request_id!r} already used by {principal_id!r}")
-        self._replay_store.mark(principal_id, request_id, now)
 
         # 6. agent_number_claim MEMBERSHIP - trustworthy now that the
         # signature above has authenticated it. Revision 5: changed from a

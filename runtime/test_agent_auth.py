@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import threading
 
 import pytest
 
@@ -96,6 +97,7 @@ from runtime.agent_auth import (
 )
 
 NOW = 1_800_000_000.0
+NOW_MS = int(NOW * 1000)
 
 CREDENTIAL_A = b"real-secret-key-for-principal-a"
 CREDENTIAL_B = b"real-secret-key-for-principal-b"
@@ -139,7 +141,7 @@ def _signed_request_kwargs(
     principal_id: str,
     agent_number_claim: str,
     credential: bytes,
-    timestamp: float = NOW,
+    timestamp_ms: int = NOW_MS,
     request_id: str,
     payload: bytes,
     method: str = DEFAULT_METHOD,
@@ -151,13 +153,15 @@ def _signed_request_kwargs(
     Callers wanting a tampered fixture should mutate the returned dict's
     "payload" (or, since revision 5, "method") key afterward -
     "payload_hash_claim" stays as what was actually signed, exactly like a
-    real tamper-in-transit."""
+    real tamper-in-transit. Revision 6: timestamp is now an explicit int
+    timestamp_ms (milliseconds), not a float seconds value - see
+    canonical_envelope's Revision 6 docstring note."""
     payload_hash_claim = hash_payload(payload)
     envelope = canonical_envelope(
         principal_id=principal_id,
         agent_number=agent_number_claim,
         method=method,
-        timestamp=timestamp,
+        timestamp_ms=timestamp_ms,
         request_id=request_id,
         payload_hash=payload_hash_claim,
     )
@@ -169,7 +173,7 @@ def _signed_request_kwargs(
         payload=payload,
         payload_hash_claim=payload_hash_claim,
         signature=signature,
-        timestamp=timestamp,
+        timestamp_ms=timestamp_ms,
         request_id=request_id,
     )
 
@@ -286,7 +290,7 @@ def test_case11_clock_skew_exactly_at_boundary_is_accepted_not_rejected():
         principal_id="principal-a",
         agent_number_claim="AGN-0001",
         credential=CREDENTIAL_A,
-        timestamp=NOW,
+        timestamp_ms=NOW_MS,
         request_id="req-5-boundary",
         payload=b"do-the-thing",
     )
@@ -301,7 +305,7 @@ def test_case11_clock_skew_one_second_past_boundary_is_rejected():
         principal_id="principal-a",
         agent_number_claim="AGN-0001",
         credential=CREDENTIAL_A,
-        timestamp=NOW,
+        timestamp_ms=NOW_MS,
         request_id="req-6-past-boundary",
         payload=b"do-the-thing",
     )
@@ -572,9 +576,153 @@ def test_canonical_envelope_is_unambiguous_across_field_boundaries():
     delimiter, making them mutually forgeable under the same signature.
     Length-prefixed encoding must keep these distinct."""
     env_a = canonical_envelope(
-        principal_id="a|b", agent_number="c", method="m", timestamp=1.0, request_id="d", payload_hash="e"
+        principal_id="a|b", agent_number="c", method="m", timestamp_ms=1_000, request_id="d", payload_hash="e"
     )
     env_b = canonical_envelope(
-        principal_id="a", agent_number="b|c", method="m", timestamp=1.0, request_id="d", payload_hash="e"
+        principal_id="a", agent_number="b|c", method="m", timestamp_ms=1_000, request_id="d", payload_hash="e"
     )
     assert env_a != env_b
+
+
+# --- Revision 6 (2026-08-24): chatgpt seq209 finding #1 (REPLAY RACE) ------
+# ReplayStore.seen()+mark() is a non-atomic check-then-mark pair. These two
+# tests independently reproduce chatgpt's own adversarial finding BEFORE any
+# fix is applied - they are expected to be genuinely RED against unmodified
+# 127cb6c, run in isolation from the timestamp_ms fix below.
+
+
+class _RaceForcingReplayStore:
+    """Test double wrapping a real InMemoryReplayStore. If AuthStore still
+    uses the old two-step seen()-then-mark() sequence, seen() blocks on a
+    2-party barrier AFTER computing its answer but BEFORE returning, so two
+    concurrent callers are GUARANTEED to both observe "not seen" before
+    either has a chance to mark() - deterministically forcing the exact
+    race window chatgpt's seq209 report describes, instead of depending on
+    unreliable GIL-timing luck. consume_once() passes straight through to
+    the real implementation unmodified: proving the FIX is race-free does
+    not require forcing anything, since the real lock is what is under
+    test there."""
+
+    def __init__(self, inner: "InMemoryReplayStore") -> None:
+        self._inner = inner
+        self._barrier = threading.Barrier(2)
+
+    def seen(self, principal_id, request_id, now, window_seconds) -> bool:
+        result = self._inner.seen(principal_id, request_id, now, window_seconds)
+        try:
+            self._barrier.wait(timeout=5)
+        except threading.BrokenBarrierError:
+            pass
+        return result
+
+    def mark(self, principal_id, request_id, now) -> None:
+        self._inner.mark(principal_id, request_id, now)
+
+    def prune(self, now, window_seconds) -> None:
+        self._inner.prune(now, window_seconds)
+
+    def consume_once(self, principal_id, request_id, now, window_seconds) -> bool:
+        return self._inner.consume_once(principal_id, request_id, now, window_seconds)
+
+
+def test_consume_once_is_atomic_under_concurrent_callers():
+    """Direct unit test of the atomic replay primitive chatgpt's seq209
+    review asked for: many threads racing to consume the SAME
+    (principal_id, request_id) key must yield exactly one True, regardless
+    of scheduling. On unmodified 127cb6c, InMemoryReplayStore has no
+    consume_once at all - this is expected to fail with AttributeError."""
+    store = InMemoryReplayStore()
+    n = 50
+    start_barrier = threading.Barrier(n)
+    results: list = [False] * n
+
+    def worker(i: int) -> None:
+        start_barrier.wait(timeout=5)
+        results[i] = store.consume_once("principal-race", "req-race", now=NOW, window_seconds=600.0)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    winners = sum(1 for r in results if r)
+    assert winners == 1, f"expected exactly one caller to win consume_once, got {winners} winners"
+
+
+def test_concurrent_authstore_instances_do_not_both_accept_the_same_replay():
+    """Reproduces chatgpt's seq209 finding directly: two AuthStore instances
+    sharing one ReplayStore backend, both verifying the IDENTICAL
+    genuinely-signed request at effectively the same instant, must not both
+    succeed - exactly one must ACCEPT and the other must see ReplayedRequest.
+    Forces the check-then-mark race window deterministically via
+    _RaceForcingReplayStore so this test is reliable rather than depending
+    on GIL-timing luck. On unmodified 127cb6c this reproduces chatgpt's
+    exact result: both threads ACCEPT."""
+    registry = _registry_with_one_principal(agent_number="AGN-0001", credential=CREDENTIAL_A)
+    shared_backend = InMemoryReplayStore()
+    racing_store = _RaceForcingReplayStore(shared_backend)
+    store_a = AuthStore(registry, verifier=_DeterministicTestSigner(), replay_store=racing_store)
+    store_b = AuthStore(registry, verifier=_DeterministicTestSigner(), replay_store=racing_store)
+    kwargs = _signed_request_kwargs(
+        principal_id="principal-a",
+        agent_number_claim="AGN-0001",
+        credential=CREDENTIAL_A,
+        request_id="req-concurrent-replay",
+        payload=b"do-the-thing",
+    )
+
+    outcomes: list = []
+    outcomes_lock = threading.Lock()
+
+    def attempt(store: "AuthStore") -> None:
+        try:
+            store.verify_signed_request(now=NOW, **kwargs)
+            outcome = "ACCEPT"
+        except ReplayedRequest:
+            outcome = "REJECTED"
+        with outcomes_lock:
+            outcomes.append(outcome)
+
+    t1 = threading.Thread(target=attempt, args=(store_a,))
+    t2 = threading.Thread(target=attempt, args=(store_b,))
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    assert sorted(outcomes) == ["ACCEPT", "REJECTED"], (
+        f"expected exactly one ACCEPT and one REJECTED for a genuine concurrent "
+        f"replay, got {outcomes}"
+    )
+
+
+# --- Revision 6 (2026-08-24): chatgpt seq209 finding #2 (TIMESTAMP) --------
+# canonical_envelope's internal round(timestamp * 1000) is Python
+# banker's-rounding, which disagrees with JS-style Math.round() at exact
+# .5ms boundaries (independently confirmed: round(1000.5) == 1000, not
+# 1001). The fix requires an explicit int timestamp_ms at the boundary -
+# no rounding inside the signing function at all. Both tests below are
+# expected to be genuinely RED against unmodified 127cb6c, since that
+# signature has no timestamp_ms parameter at all yet.
+
+
+def test_canonical_envelope_uses_explicit_timestamp_ms_with_no_internal_rounding():
+    """The encoded bytes must be the EXACT decimal string of the given
+    int, with no rounding step anywhere inside this function."""
+    envelope = canonical_envelope(
+        principal_id="p", agent_number="a", method="m",
+        timestamp_ms=1_800_000_000_500, request_id="r", payload_hash="h",
+    )
+    assert str(1_800_000_000_500).encode("ascii") in envelope
+
+
+def test_canonical_envelope_rejects_float_timestamp_ms():
+    """A float must be rejected outright with a clear type error, not
+    silently accepted and rounded - silent internal rounding is exactly
+    the bug chatgpt's seq209 review found."""
+    with pytest.raises(TypeError, match="int"):
+        canonical_envelope(
+            principal_id="p", agent_number="a", method="m",
+            timestamp_ms=1000.0, request_id="r", payload_hash="h",
+        )
