@@ -241,3 +241,82 @@ def test_service_principal_cannot_enter_subscriber_only_collaboration_mutation(m
     with pytest.raises(SubscriberActorRequired):
         facade.send_message(service_auth, to_agent="rico", content="must not reach engine")
     assert called is False
+
+
+
+def test_session_heartbeat_uses_authenticated_subscriber_and_rejects_forged_agent(monkeypatch):
+    """Session ownership must derive from AuthContext, never the body agent_id."""
+    AuthenticatedCollab, IdentityMismatch = _import_facade()
+    recorded: dict[str, object] = {}
+
+    def fake_session_heartbeat(agent_id, session_id, host="native-chat", widget_version="", activity="online", widget_role="", bundle_id="", pair_protocol="", pair_ack="", expected_peer=""):
+        recorded.update(
+            agent_id=agent_id,
+            session_id=session_id,
+            host=host,
+            widget_version=widget_version,
+            activity=activity,
+            widget_role=widget_role,
+            bundle_id=bundle_id,
+            pair_protocol=pair_protocol,
+            pair_ack=pair_ack,
+            expected_peer=expected_peer,
+        )
+        return dict(recorded)
+
+    monkeypatch.setattr(collab, "session_heartbeat", fake_session_heartbeat)
+    facade = AuthenticatedCollab(collab)
+    auth = AuthContext(
+        principal_id="principal-chatgpt",
+        agent_number="legacy-chatgpt",
+        principal_type=PrincipalType.INTERACTIVE_INSTALLATION,
+        revocation_epoch=0,
+        authenticated_at=1.0,
+        scopes=frozenset({"collab:mutate"}),
+        auth_method="test",
+        subscriber_number="chatgpt",
+    )
+
+    with pytest.raises(IdentityMismatch):
+        facade.session_heartbeat(auth, agent_id="claude", session_id="session-1", host="chatgpt-ios")
+    assert recorded == {}
+
+    result = facade.session_heartbeat(
+        auth,
+        agent_id="chatgpt",
+        session_id="session-1",
+        host="chatgpt-ios",
+        widget_version="0.5.8",
+        activity="online",
+    )
+    assert result["agent_id"] == "chatgpt"
+    assert result["session_id"] == "session-1"
+    assert recorded["host"] == "chatgpt-ios"
+
+
+def test_service_principal_cannot_write_subscriber_session_heartbeat(monkeypatch):
+    """Infrastructure principals have no subscriber session bucket to mutate."""
+    AuthenticatedCollab, _ = _import_facade()
+    called = False
+
+    def fake_session_heartbeat(*args, **kwargs):
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(collab, "session_heartbeat", fake_session_heartbeat)
+    facade = AuthenticatedCollab(collab)
+    auth = AuthContext(
+        principal_id="worker-1",
+        agent_number="",
+        principal_type=PrincipalType.HEADLESS_SERVICE,
+        revocation_epoch=0,
+        authenticated_at=1.0,
+        scopes=frozenset({"internal:work"}),
+        auth_method="test",
+        subscriber_number=None,
+    )
+
+    with pytest.raises(SubscriberActorRequired):
+        facade.session_heartbeat(auth, session_id="worker-session")
+    assert called is False

@@ -8,13 +8,14 @@ from runtime.agent_auth import AuthContext, SubscriberActorRequired, require_ide
 class AuthenticatedCollab:
     """Authentication boundary for the first collaboration mutation slice.
 
-    Slice 1 covers durable dialogue send/claim/ack/release and project-state
-    writes only. The authenticated actor always comes from ``AuthContext``;
+    Slice 1 covers durable dialogue send/claim/ack/release, project-state
+    writes, and subscriber session heartbeat. The authenticated actor always comes from ``AuthContext``;
     any legacy body identity is treated only as an assertion and rejected on
     mismatch before the underlying collaboration engine is called.
 
-    Bootstrap/register/heartbeat/operator/control are separate authority
-    domains and require explicit scopes in later slices.
+    Bootstrap/register/operator/control remain separate authority domains.
+    Subscriber session heartbeat is included in this boundary because session
+    ownership must derive from the authenticated subscriber actor.
 
     Delivery-plane wake/Pulse/SAM mutators are tracked as slice 1.5 and must be
     classified/authenticated before the global activation gate can turn green.
@@ -36,6 +37,35 @@ class AuthenticatedCollab:
         if claimed_agent is not None:
             require_identity_match(claimed_agent, auth)
         return auth.subscriber_number
+
+    def session_heartbeat(
+        self,
+        auth: AuthContext,
+        *,
+        agent_id: str | None = None,
+        session_id: str,
+        host: str = "native-chat",
+        widget_version: str = "",
+        activity: str = "online",
+        widget_role: str = "",
+        bundle_id: str = "",
+        pair_protocol: str = "",
+        pair_ack: str = "",
+        expected_peer: str = "",
+    ):
+        actor = self._actor(auth, agent_id)
+        return self._engine.session_heartbeat(
+            actor,
+            session_id,
+            host=host,
+            widget_version=widget_version,
+            activity=activity,
+            widget_role=widget_role,
+            bundle_id=bundle_id,
+            pair_protocol=pair_protocol,
+            pair_ack=pair_ack,
+            expected_peer=expected_peer,
+        )
 
     def send_message(
         self,
