@@ -7,7 +7,16 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path('/opt/eiros-control-plane')
-LIVE_SERVER = ROOT / '.worktrees/sum-auto-wake/runtime/server_v2.py'
+# LIVE_SERVER must be the exact module deploy/claude_operator_runtime.py imports at
+# runtime (`from runtime import server_v2 as live_server`, resolved from ROOT via
+# sys.path - see that file's own top-of-file comment). It previously pointed at
+# .worktrees/sum-auto-wake/runtime/server_v2.py, a frozen copy that stopped being
+# live once feat/sum-auto-wake merged; that let this test silently drift from
+# reality depending on unrelated worktree state elsewhere on the box (see
+# project_state.flaky_test_live_operator_runtime_2026_08_24). Do not repoint this
+# at any worktree-scoped path again - test_live_server_path_is_not_worktree_scoped
+# below guards exactly that.
+LIVE_SERVER = ROOT / 'runtime/server_v2.py'
 MAIN_VPS_OPS = ROOT / 'runtime/vps_ops_server.py'
 RUNNER = Path('deploy/claude_operator_runtime.py')
 
@@ -49,6 +58,14 @@ def test_live_operator_runtime_exposes_live_ebridge_plus_latest_vps_ops() -> Non
         'missing': sorted(expected - actual),
         'unexpected': sorted(actual - expected),
     }
+
+
+def test_live_server_path_is_not_worktree_scoped() -> None:
+    assert '.worktrees' not in str(LIVE_SERVER), (
+        'LIVE_SERVER must track the main checkout that deploy/claude_operator_runtime.py '
+        'actually imports at runtime, not a frozen worktree snapshot - see '
+        'project_state.flaky_test_live_operator_runtime_2026_08_24'
+    )
 
 
 def test_operator_service_runs_live_runtime_runner() -> None:
