@@ -24,6 +24,7 @@ def load_server(tmp_path: Path, monkeypatch):
 
 def panel_client(server):
     app = Starlette(routes=[
+        Route('/ui/', server.api_panel, methods=['GET']),
         Route('/ui/api/upload', server.api_upload, methods=['POST','OPTIONS']),
         Route('/ui/api/list', server.api_list, methods=['GET','OPTIONS']),
         Route('/ui/api/share', server.api_share_create, methods=['POST','OPTIONS']),
@@ -91,6 +92,10 @@ def test_open_panel_contract_uses_secret_panel_prefix(tmp_path: Path, monkeypatc
     result = server.open_file_vault()
     assert result['resource_uri'] == server.PANEL_URI
     assert result['panel_base'] == 'https://files.example.test/vault-ui-secret-test'
+    assert result['panel_url'] == 'https://files.example.test/vault-ui-secret-test/'
+    direct = panel_client(server).get('/ui/')
+    assert direct.status_code == 200
+    assert 'EIROS File Vault' in direct.text
     html = server.file_vault_panel_resource()
     assert 'https://files.example.test/vault-ui-secret-test' in html
     assert '<input' in html and 'type="file"' in html

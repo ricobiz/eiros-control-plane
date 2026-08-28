@@ -132,8 +132,22 @@ def open_file_vault() -> dict[str, Any]:
         'ok': True,
         'resource_uri': PANEL_URI,
         'panel_base': PANEL_BASE,
+        'panel_url': PANEL_BASE + '/',
         'max_upload_bytes': MAX_UPLOAD_BYTES,
     }
+
+
+@mcp.custom_route('/ui/', methods=['GET'])
+async def api_panel(request: Request) -> Response:
+    return HTMLResponse(
+        _panel_html(),
+        headers={
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Referrer-Policy': 'no-referrer',
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self' https:; img-src 'self' data:;",
+        },
+    )
 
 
 def _cors(response: Response) -> Response:
