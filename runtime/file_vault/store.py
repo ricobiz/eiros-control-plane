@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Iterable, Iterator
 
+from .audit import AuditLogger
 from .models import VaultConfig, VaultFile, VaultShare
 
 _FILE_ID_RE = re.compile(r'^[0-9a-f]{32}$')
@@ -34,6 +35,7 @@ class VaultStore:
         for path in (self.root, self.objects_root, self.staging_root, self.audit_root):
             path.mkdir(parents=True, exist_ok=True)
             os.chmod(path, 0o700)
+        self.audit = AuditLogger(self.audit_root / 'events.jsonl')
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -224,7 +226,9 @@ class VaultStore:
         except Exception:
             final.unlink(missing_ok=True)
             raise
-        return self.get(file_id)
+        item = self.get(file_id)
+        self.audit.write('file_store', ok=True, file_id=item.file_id, size_bytes=item.size_bytes, detail=str(source))
+        return item
 
     def store_stream(
         self,
@@ -374,7 +378,9 @@ class VaultStore:
         now = int(time.time())
         with self._connect() as db:
             db.execute('UPDATE files SET display_name=?, updated_at=? WHERE file_id=?', (name, now, item.file_id))
-        return self.get(item.file_id)
+        updated = self.get(item.file_id)
+        self.audit.write('file_rename', ok=True, file_id=item.file_id)
+        return updated
 
     def set_tags(self, file_id: str, tags: Iterable[str]) -> VaultFile:
         item = self.get(file_id)
@@ -385,7 +391,9 @@ class VaultStore:
                 'UPDATE files SET tags_json=?, updated_at=? WHERE file_id=?',
                 (json.dumps(normalized, ensure_ascii=False), now, item.file_id),
             )
-        return self.get(item.file_id)
+        updated = self.get(item.file_id)
+        self.audit.write('file_tags', ok=True, file_id=item.file_id)
+        return updated
 
     def set_note(self, file_id: str, note: str) -> VaultFile:
         item = self.get(file_id)
@@ -393,7 +401,9 @@ class VaultStore:
         now = int(time.time())
         with self._connect() as db:
             db.execute('UPDATE files SET note=?, updated_at=? WHERE file_id=?', (value, now, item.file_id))
-        return self.get(item.file_id)
+        updated = self.get(item.file_id)
+        self.audit.write('file_note', ok=True, file_id=item.file_id)
+        return updated
 
     def create_share(
         self,
@@ -419,7 +429,9 @@ class VaultStore:
             )
             row = db.execute('SELECT * FROM shares WHERE share_id=?', (share_id,)).fetchone()
         assert row is not None
-        return self._row_to_share(row), token
+        result = self._row_to_share(row)
+        self.audit.write('share_create', ok=True, file_id=item.file_id, share_id=result.share_id)
+        return result, token
 
     def list_shares(self, file_id: str) -> list[VaultShare]:
         item = self.get(file_id)
@@ -444,7 +456,10 @@ class VaultStore:
             )
             row = db.execute('SELECT * FROM shares WHERE share_id=?', (row['share_id'],)).fetchone()
         assert row is not None
-        return self._row_to_share(row), self.get(row['file_id'])
+        result = self._row_to_share(row)
+        item = self.get(row['file_id'])
+        self.audit.write('share_access', ok=True, file_id=item.file_id, share_id=result.share_id)
+        return result, item
 
     def revoke_share(self, share_id: str) -> VaultShare:
         value = self._validate_file_id(share_id)
@@ -457,7 +472,9 @@ class VaultStore:
                 db.execute('UPDATE shares SET revoked_at=? WHERE share_id=?', (now, value))
             row = db.execute('SELECT * FROM shares WHERE share_id=?', (value,)).fetchone()
         assert row is not None
-        return self._row_to_share(row)
+        result = self._row_to_share(row)
+        self.audit.write('share_revoke', ok=True, file_id=result.file_id, share_id=result.share_id)
+        return result
 
     def delete(self, file_id: str) -> dict[str, object]:
         item = self.get(file_id)
@@ -467,4 +484,6 @@ class VaultStore:
             db.execute('DELETE FROM files WHERE file_id=?', (item.file_id,))
         if not object_missing:
             path.unlink()
-        return {'ok': True, 'deleted': True, 'file_id': item.file_id, 'object_missing': object_missing}
+        result = {'ok': True, 'deleted': True, 'file_id': item.file_id, 'object_missing': object_missing}
+        self.audit.write('file_delete', ok=True, file_id=item.file_id, size_bytes=item.size_bytes)
+        return result
