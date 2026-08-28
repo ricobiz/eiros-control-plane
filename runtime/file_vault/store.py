@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import shutil
 import sqlite3
 import time
@@ -352,6 +353,111 @@ class VaultStore:
             'expected_sha256': item.sha256,
             'actual_sha256': actual_hash,
         }
+
+    @staticmethod
+    def _row_to_share(row: sqlite3.Row, *, expose_hash: bool = False) -> VaultShare:
+        return VaultShare(
+            share_id=row['share_id'],
+            file_id=row['file_id'],
+            token_hash=row['token_hash'] if expose_hash else '',
+            created_at=int(row['created_at']),
+            expires_at=int(row['expires_at']),
+            revoked_at=int(row['revoked_at']) if row['revoked_at'] is not None else None,
+            access_count=int(row['access_count']),
+            last_access_at=int(row['last_access_at']) if row['last_access_at'] is not None else None,
+            disposition=row['disposition'],
+        )
+
+    def rename(self, file_id: str, display_name: str) -> VaultFile:
+        item = self.get(file_id)
+        name = self._safe_name(display_name, item.display_name)
+        now = int(time.time())
+        with self._connect() as db:
+            db.execute('UPDATE files SET display_name=?, updated_at=? WHERE file_id=?', (name, now, item.file_id))
+        return self.get(item.file_id)
+
+    def set_tags(self, file_id: str, tags: Iterable[str]) -> VaultFile:
+        item = self.get(file_id)
+        normalized = self._normalize_tags(tags)
+        now = int(time.time())
+        with self._connect() as db:
+            db.execute(
+                'UPDATE files SET tags_json=?, updated_at=? WHERE file_id=?',
+                (json.dumps(normalized, ensure_ascii=False), now, item.file_id),
+            )
+        return self.get(item.file_id)
+
+    def set_note(self, file_id: str, note: str) -> VaultFile:
+        item = self.get(file_id)
+        value = str(note or '')[:4000]
+        now = int(time.time())
+        with self._connect() as db:
+            db.execute('UPDATE files SET note=?, updated_at=? WHERE file_id=?', (value, now, item.file_id))
+        return self.get(item.file_id)
+
+    def create_share(
+        self,
+        file_id: str,
+        *,
+        expires_seconds: int = 86400,
+        disposition: str = 'inline',
+    ) -> tuple[VaultShare, str]:
+        item = self.get(file_id)
+        expires_seconds = int(expires_seconds)
+        if not 300 <= expires_seconds <= 2_592_000:
+            raise ValueError('Share expiry must be between 300 and 2592000 seconds')
+        if disposition not in {'inline', 'attachment'}:
+            raise ValueError('Invalid share disposition')
+        now = int(time.time())
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+        share_id = uuid.uuid4().hex
+        with self._connect() as db:
+            db.execute(
+                'INSERT INTO shares (share_id,file_id,token_hash,created_at,expires_at,revoked_at,access_count,last_access_at,disposition) VALUES (?,?,?,?,?,NULL,0,NULL,?)',
+                (share_id, item.file_id, token_hash, now, now + expires_seconds, disposition),
+            )
+            row = db.execute('SELECT * FROM shares WHERE share_id=?', (share_id,)).fetchone()
+        assert row is not None
+        return self._row_to_share(row), token
+
+    def list_shares(self, file_id: str) -> list[VaultShare]:
+        item = self.get(file_id)
+        with self._connect() as db:
+            rows = list(db.execute('SELECT * FROM shares WHERE file_id=? ORDER BY created_at DESC, share_id DESC', (item.file_id,)))
+        return [self._row_to_share(row) for row in rows]
+
+    def resolve_share_token(self, raw_token: str) -> tuple[VaultShare, VaultFile]:
+        token = str(raw_token or '')
+        token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+        now = int(time.time())
+        with self._connect() as db:
+            row = db.execute(
+                'SELECT * FROM shares WHERE token_hash=? AND revoked_at IS NULL AND expires_at>?',
+                (token_hash, now),
+            ).fetchone()
+            if row is None:
+                raise FileNotFoundError('Share unavailable')
+            db.execute(
+                'UPDATE shares SET access_count=access_count+1, last_access_at=? WHERE share_id=?',
+                (now, row['share_id']),
+            )
+            row = db.execute('SELECT * FROM shares WHERE share_id=?', (row['share_id'],)).fetchone()
+        assert row is not None
+        return self._row_to_share(row), self.get(row['file_id'])
+
+    def revoke_share(self, share_id: str) -> VaultShare:
+        value = self._validate_file_id(share_id)
+        now = int(time.time())
+        with self._connect() as db:
+            row = db.execute('SELECT * FROM shares WHERE share_id=?', (value,)).fetchone()
+            if row is None:
+                raise FileNotFoundError(f'Unknown vault share: {value}')
+            if row['revoked_at'] is None:
+                db.execute('UPDATE shares SET revoked_at=? WHERE share_id=?', (now, value))
+            row = db.execute('SELECT * FROM shares WHERE share_id=?', (value,)).fetchone()
+        assert row is not None
+        return self._row_to_share(row)
 
     def delete(self, file_id: str) -> dict[str, object]:
         item = self.get(file_id)
