@@ -42,7 +42,7 @@ V1 is a single dedicated Python service using the existing EIROS runtime stack:
 - FastMCP / Starlette for MCP tools, browser upload API and public share delivery;
 - SQLite for metadata and share state;
 - normal filesystem storage under `/var/lib/eiros/file-vault`;
-- nginx exposes only the public share/upload-panel paths;
+- nginx exposes the public share path and a separate unguessable private upload-panel prefix;
 - the MCP endpoint stays local and is exposed to ChatGPT through the existing OpenAI tunnel mechanism.
 
 No MinIO is added. The storage backend is deliberately hidden behind a small `VaultStore` interface so a later S3 backend can replace the filesystem without changing MCP tool semantics.
@@ -124,7 +124,7 @@ The share endpoint:
 - sends `Accept-Ranges: bytes` and must pass a real `Range: bytes=...` acceptance test;
 - sends `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and conservative cache headers.
 
-The public nginx location exposes only `/vault/s/` and `/vault/ui/`. It never exposes `/var/lib/eiros/file-vault` directly.
+The public share location exposes only `/vault/s/`. Private upload/library routes are reachable only through a separately generated long secret panel prefix stored outside git. Nginx never exposes `/var/lib/eiros/file-vault` directly and never exposes the Vault `/mcp` endpoint.
 
 ## Upload paths
 
@@ -234,7 +234,7 @@ Audit failure must not corrupt a successful file operation; it is best-effort af
 - Python module: `runtime/file_vault/` plus `runtime/file_vault_mcp_server.py`.
 - Local MCP HTTP port: choose an unused localhost port during deployment (expected 8797+).
 - systemd service: `eiros-file-vault.service`.
-- nginx: exact public prefixes for share and panel only.
+- nginx: `/vault/s/` for public shares plus one generated secret panel prefix; never `/mcp`.
 - OpenAI connector/tunnel: provision dedicated alias `file-vault` using the existing audited tunnel tooling.
 - Runtime data ownership: root-owned, directory mode 0700; nginx never reads object files directly.
 

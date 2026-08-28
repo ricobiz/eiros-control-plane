@@ -350,7 +350,7 @@ Commit: `feat(vault): add browser upload and library panel`.
 **Interfaces:**
 - systemd launches `/opt/eiros-control-plane/venv/bin/python -m runtime.file_vault_mcp_server`.
 - nginx public prefix `/vault/s/` proxies to local service `/s/` and preserves `Range`.
-- nginx panel/API prefix `/vault/ui/` proxies local `/ui/`.
+- nginx panel/API uses a generated long secret external prefix and proxies it to local `/ui/`; predictable `/vault/ui/` is not exposed.
 
 - [ ] **Step 1: Write failing static deployment contract tests**
 
