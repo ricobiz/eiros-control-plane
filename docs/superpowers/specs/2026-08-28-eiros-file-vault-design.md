@@ -136,7 +136,7 @@ The MCP connector exposes a binary/file parameter. The service stores exactly th
 
 ### Browser upload panel
 
-`open_file_vault()` renders a small MCP Apps-compatible upload/library panel. The browser posts multipart data to `/vault/ui/api/upload` in chunks handled by Starlette `UploadFile`; the implementation writes to a staging file incrementally and does not load the entire upload into RAM.
+`open_file_vault()` renders a small MCP Apps-compatible upload/library panel. The browser posts multipart data to local `/ui/api/upload`, exposed externally only beneath the generated secret panel prefix. Starlette `UploadFile` is read in bounded chunks into staging; the implementation does not load the entire upload into RAM.
 
 This is the reliable fallback for uploads directly from iPhone/filesystem if connector file transport cannot map a chat attachment to the MCP binary parameter.
 

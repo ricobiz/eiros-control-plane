@@ -33,3 +33,23 @@ Before an nginx reload, render `deploy/nginx/eiros-file-vault.conf` with the act
 ## Backup note
 
 The vault is durable on this VPS but is not itself an off-site backup. Back up `/var/lib/eiros/file-vault` (objects plus SQLite) if the files need protection against VPS loss.
+
+## Live acceptance — 2026-08-28 UTC
+
+The first VPS deployment used localhost port **8797**. The service was brought up from the isolated feature worktree for acceptance before integration into `main`.
+
+Verified behavior:
+
+- `eiros-file-vault.service` entered `active/running` state;
+- local `/mcp` responded with the expected MCP HTTP negotiation error (`406` without `text/event-stream`), proving the endpoint was live;
+- a bogus public share token returned `404`;
+- a 4096-byte fixture was stored and shared; two full external downloads had the expected SHA-256;
+- `Range: bytes=0-1023` returned `206`, exactly 1024 bytes, and `Content-Range: bytes 0-1023/4096`;
+- after share revocation the public URL returned `404`, while private download remained byte-identical;
+- a real 3 MiB multipart upload through nginx and the secret browser-panel prefix returned `200`, appeared in search, downloaded with the same SHA-256, and deleted successfully;
+- the private panel itself returned `200` through its generated secret prefix;
+- an MCP client discovered 30 canonical/compatibility tools and successfully called `vault_list`;
+- the managed OpenAI tunnel alias `file-vault` was provisioned and its systemd tunnel daemon reported `active/running` and `ready`;
+- the current already-open ChatGPT session did not hot-refresh its connector namespace list after provisioning. This is a session mount limitation; local MCP and the managed remote tunnel were independently verified. Direct ChatGPT attachment-to-binary upload therefore remains to be tested after the new connector is mounted in a refreshed session. The browser upload panel is the supported fallback regardless.
+
+The following existing avatar artifacts were imported into permanent Vault storage with tags and integrity hashes: the first LAM render, its iPhone-safe transcode, the inference log, and the recorded LAM environment. Known-corrupt/placeholder reference files were intentionally not imported.
