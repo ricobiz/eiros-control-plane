@@ -11,3 +11,7 @@ export class LocalAvatarSimulator {
   return {sessionId:this.sessionId,characterId:this.characterId,sequence:++this.sequence,audioPtsMs:pts,framePtsMs:pts,face:mixFace({jawOpen:c.jawOpen},b.face,{mouthSmileLeft:c.smile,mouthSmileRight:c.smile}),head:{quat:[q.x,q.y,q.z,q.w]},gaze:{x:Math.max(-1,Math.min(1,c.gazeX+b.gaze.x)),y:Math.max(-1,Math.min(1,c.gazeY+b.gaze.y))},body:b.body};
  }
 }
+
+export function interruptSimulatorControls(controls:SimulatorControls):void {
+  controls.jawOpen=0;
+}

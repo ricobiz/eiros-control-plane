@@ -7,3 +7,13 @@ describe('LamExpressionAdapter',()=>{
   it('interrupt zeros speech mouth but preserves reflex eyes and switches to Listening',()=>{const a=new LamExpressionAdapter();a.apply(frame({jawOpen:.9,mouthFunnel:.5,eyeBlinkLeft:.6,eyeBlinkRight:.6}));a.setChatState('Responding');a.interrupt();expect(a.getExpressionData().jawOpen).toBe(0);expect(a.getExpressionData().mouthFunnel).toBe(0);expect(a.getExpressionData().eyeBlinkLeft).toBe(.6);expect(a.getChatState()).toBe('Listening');});
   it('passes through valid ARKit weights and clamps values',()=>{const a=new LamExpressionAdapter();a.apply(frame({browInnerUp:2,noseSneerLeft:-1,unknownThing:.7}));const data=a.getExpressionData();expect(data.browInnerUp).toBe(1);expect(data.noseSneerLeft).toBe(0);expect(data).not.toHaveProperty('unknownThing');});
 });
+
+describe('LAM gaze mapping',()=>{
+  it('turns canonical gaze into binocular ARKit eye-look weights',()=>{
+    const a=new LamExpressionAdapter();
+    const f=frame({});
+    f.gaze={x:.5,y:-.25};
+    a.apply(f);
+    expect(a.getExpressionData()).toMatchObject({eyeLookInLeft:.5,eyeLookOutRight:.5,eyeLookDownLeft:.25,eyeLookDownRight:.25});
+  });
+});

@@ -5,7 +5,14 @@ const SPEECH_MOUTH=new Set(['jawForward','jawLeft','jawOpen','jawRight','mouthCl
 const clamp=(v:number)=>Math.max(0,Math.min(1,Number.isFinite(v)?v:0));
 export class LamExpressionAdapter {
   private weights:Record<string,number>={}; private state:LamChatState='Idle';
-  apply(frame:AvatarFrame){for(const [name,value] of Object.entries(frame.face))if(ARKIT.has(name))this.weights[name]=clamp(value);}
+  apply(frame:AvatarFrame){
+    for(const [name,value] of Object.entries(frame.face))if(ARKIT.has(name))this.weights[name]=clamp(value);
+    const x=Math.max(-1,Math.min(1,frame.gaze.x));
+    const y=Math.max(-1,Math.min(1,frame.gaze.y));
+    Object.assign(this.weights,{eyeLookInLeft:0,eyeLookOutLeft:0,eyeLookInRight:0,eyeLookOutRight:0,eyeLookUpLeft:0,eyeLookUpRight:0,eyeLookDownLeft:0,eyeLookDownRight:0});
+    if(x>=0){this.weights.eyeLookInLeft=x;this.weights.eyeLookOutRight=x;}else{this.weights.eyeLookOutLeft=-x;this.weights.eyeLookInRight=-x;}
+    if(y>=0){this.weights.eyeLookUpLeft=y;this.weights.eyeLookUpRight=y;}else{this.weights.eyeLookDownLeft=-y;this.weights.eyeLookDownRight=-y;}
+  }
   getExpressionData(){return {...this.weights};}
   setChatState(state:LamChatState){this.state=state;}
   getChatState(){return this.state;}
