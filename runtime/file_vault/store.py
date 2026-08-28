@@ -19,6 +19,81 @@ from .models import VaultConfig, VaultFile, VaultShare
 _FILE_ID_RE = re.compile(r'^[0-9a-f]{32}$')
 
 
+class StreamingUpload:
+    def __init__(
+        self,
+        store: "VaultStore",
+        filename: str,
+        *,
+        source: str,
+        tags: Iterable[str],
+        note: str,
+    ):
+        self.store = store
+        self.filename = filename
+        self.source = source
+        self.tags = tuple(tags)
+        self.note = note
+        self.staging = store.staging_root / f"{uuid.uuid4().hex}.part"
+        self._fh = self.staging.open("xb")
+        os.chmod(self.staging, 0o600)
+        self._digest = hashlib.sha256()
+        self._size = 0
+        self._done = False
+
+    def write(self, chunk: bytes) -> None:
+        if self._done:
+            raise RuntimeError("Upload session is already closed")
+        if not isinstance(chunk, (bytes, bytearray, memoryview)):
+            raise TypeError("Upload chunks must be bytes")
+        data = bytes(chunk)
+        if not data:
+            return
+        prospective = self._size + len(data)
+        if prospective > self.store.config.max_upload_bytes:
+            self.abort()
+            raise ValueError("File exceeds maximum upload size")
+        free = int(shutil.disk_usage(self.store.root).free)
+        if free - len(data) < self.store.config.reserve_bytes:
+            self.abort()
+            raise ValueError("Upload would violate free-space reserve")
+        self._fh.write(data)
+        self._digest.update(data)
+        self._size = prospective
+
+    def finish(self) -> VaultFile:
+        if self._done:
+            raise RuntimeError("Upload session is already closed")
+        try:
+            self._fh.flush()
+            os.fsync(self._fh.fileno())
+            self._fh.close()
+            self._done = True
+            if int(shutil.disk_usage(self.store.root).free) < self.store.config.reserve_bytes:
+                raise ValueError("Upload would violate free-space reserve")
+            return self.store._finalize_staging(
+                self.staging,
+                filename=self.filename,
+                source=self.source,
+                tags=self.tags,
+                note=self.note,
+                size_bytes=self._size,
+                sha256_hex=self._digest.hexdigest(),
+            )
+        except Exception:
+            self.staging.unlink(missing_ok=True)
+            self._done = True
+            raise
+
+    def abort(self) -> None:
+        if not self._done:
+            try:
+                self._fh.close()
+            finally:
+                self._done = True
+        self.staging.unlink(missing_ok=True)
+
+
 class VaultStore:
     def __init__(self, config: VaultConfig):
         self.config = VaultConfig(
@@ -229,6 +304,16 @@ class VaultStore:
         item = self.get(file_id)
         self.audit.write('file_store', ok=True, file_id=item.file_id, size_bytes=item.size_bytes, detail=str(source))
         return item
+
+    def begin_stream_upload(
+        self,
+        filename: str,
+        *,
+        source: str = "browser_upload",
+        tags: Iterable[str] = (),
+        note: str = "",
+    ) -> StreamingUpload:
+        return StreamingUpload(self, filename, source=source, tags=tags, note=note)
 
     def store_stream(
         self,
