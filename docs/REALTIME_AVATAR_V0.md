@@ -29,3 +29,13 @@ Run the page on the target iPhone for 10 continuous minutes and record:
 - model load: missing expression channels degrade without a runtime crash.
 
 The HUD shows rolling FPS and maximum observed local timeline drift. V0 uses a local deterministic transport; LiveKit and Audio2Face are intentionally the next integration layer, not hidden inside the renderer.
+
+## Verified acceptance evidence — 2026-08-28
+
+- Vitest: 9 test files, 18 tests passed.
+- Production TypeScript/Vite build: exit 0.
+- Python repository baseline: 62 passed, 1 skipped.
+- Headless Chromium mobile viewport: 390×844.
+- Default bundled VRM parsed successfully: `Live · 20 face channels`.
+- Browser console/page errors: none.
+- Headless software-rendered smoke HUD observed: `35 FPS · 0 ms` after model load. This is a functional smoke number, not a substitute for the required 10-minute physical-iPhone acceptance run.
