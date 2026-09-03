@@ -9,8 +9,15 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.utilities.types import Image
 
 from runtime.openai_control_plane import ControlPlaneError, OpenAIControlPlane, redact_text
+from runtime.operator.audit import AuditLog
+from runtime.operator.desktop import DesktopController
+from runtime.operator.files import RootFiles
+from runtime.operator.pty import PtyManager
+from runtime.operator.recovery import RecoveryManager
+from runtime.operator.secrets import SecretStore
 
 ROOT = Path("/opt/eiros-control-plane")
 ALLOWED_SERVICES = {
@@ -30,12 +37,12 @@ SAFE_ROOTS = [
 mcp = FastMCP(
     "EBRIDGE VPS Ops",
     instructions=(
-        "Dedicated audited VPS operations connector for Rico's EIROS server. "
-        "Use vps_health and vps_snapshot first. Use service_status and service_journal "
-        "for allowlisted services. File tools are restricted to EIROS workspace/log paths. "
-        "For OpenAI MCP connector lifecycle, prefer openai_connector_provision for new managed connectors; "
-        "use lower-level openai_tunnel_*, openai_runtime_*, openai_profile_* and openai_tunnel_daemon_* tools "
-        "for inspection and repair. Never request or expose API key values."
+        "Full Rico-authorized VPS operator for the dedicated EIROS server. "
+        "root_exec provides arbitrary root shell; fs_* provides unrestricted filesystem access; "
+        "desktop_* controls and captures the full DISPLAY=:99; pty_* provides persistent PTY sessions; "
+        "secret_* stores and injects named local secrets without returning their values; critical_* provides timed rollback. "
+        "Legacy file_* and service_* tools remain compatibility surfaces and may retain older restrictions. "
+        "Prefer specialized operator tools over embedding secrets in shell commands. Keep privileged routes private."
     ),
     stateless_http=True,
     json_response=True,
@@ -496,6 +503,318 @@ def openai_connector_provision(
         workspace_ids=workspace_ids,
     )
 
+
+
+# ==== EIROS FULL VPS OPERATOR ====
+import threading as _operator_threading
+
+_OPERATOR_AUDIT = AuditLog()
+_OPERATOR_FILES = RootFiles()
+_OPERATOR_DESKTOP = DesktopController(os.environ.get("EIROS_OPERATOR_DISPLAY", ":99"))
+_OPERATOR_PTY = PtyManager()
+_OPERATOR_SECRETS: SecretStore | None = None
+_OPERATOR_RECOVERY: RecoveryManager | None = None
+_OPERATOR_INIT_LOCK = _operator_threading.Lock()
+
+
+def _operator_secrets() -> SecretStore:
+    global _OPERATOR_SECRETS
+    if _OPERATOR_SECRETS is None:
+        with _OPERATOR_INIT_LOCK:
+            if _OPERATOR_SECRETS is None:
+                _OPERATOR_SECRETS = SecretStore()
+    return _OPERATOR_SECRETS
+
+
+def _operator_recovery() -> RecoveryManager:
+    global _OPERATOR_RECOVERY
+    if _OPERATOR_RECOVERY is None:
+        with _OPERATOR_INIT_LOCK:
+            if _OPERATOR_RECOVERY is None:
+                _OPERATOR_RECOVERY = RecoveryManager()
+    return _OPERATOR_RECOVERY
+
+
+def _operator_audit_call(tool: str, target: dict[str, object], fn):
+    started = time.time()
+    try:
+        result = fn()
+        _OPERATOR_AUDIT.write(tool, True, target, int((time.time() - started) * 1000))
+        return result
+    except Exception:
+        _OPERATOR_AUDIT.write(tool, False, target, int((time.time() - started) * 1000))
+        raise
+
+
+def _operator_desktop_mutation(tool: str, target: dict[str, object], fn) -> dict[str, object]:
+    before = _OPERATOR_DESKTOP.capture()
+    _operator_audit_call(tool, target, fn)
+    after = _OPERATOR_DESKTOP.capture()
+    return {
+        "ok": True,
+        "before_seq": before["frame_seq"],
+        "after_seq": after["frame_seq"],
+        "frame_changed": int(after["frame_seq"]) > int(before["frame_seq"]),
+    }
+
+
+@mcp.tool()
+def fs_stat(path: str):
+    """Stat any path on the VPS as the privileged operator."""
+    return _OPERATOR_FILES.stat(path)
+
+
+@mcp.tool()
+def fs_list(path: str):
+    """List any directory on the VPS as the privileged operator."""
+    return _OPERATOR_FILES.list(path)
+
+
+@mcp.tool()
+def fs_read(path: str, max_bytes: int = 200000):
+    """Read any UTF-8/text-like VPS file with bounded output."""
+    return _OPERATOR_FILES.read(path, max_bytes)
+
+
+@mcp.tool()
+def fs_write(path: str, content: str, mode: int = 0o600):
+    """Atomically write any VPS path with an explicit file mode."""
+    return _operator_audit_call("fs_write", {"path": path, "mode": oct(mode)}, lambda: _OPERATOR_FILES.write_atomic(path, content, mode))
+
+
+@mcp.tool()
+def fs_replace(path: str, old: str, new: str, count: int = 1):
+    """Replace exact text in any VPS file."""
+    return _operator_audit_call("fs_replace", {"path": path, "count": count}, lambda: _OPERATOR_FILES.replace(path, old, new, count))
+
+
+@mcp.tool()
+def fs_copy(src: str, dst: str):
+    """Copy a VPS file preserving metadata."""
+    return _operator_audit_call("fs_copy", {"src": src, "dst": dst}, lambda: _OPERATOR_FILES.copy(src, dst))
+
+
+@mcp.tool()
+def fs_move(src: str, dst: str):
+    """Move or rename a VPS path."""
+    return _operator_audit_call("fs_move", {"src": src, "dst": dst}, lambda: _OPERATOR_FILES.move(src, dst))
+
+
+@mcp.tool()
+def fs_mkdir(path: str, mode: int = 0o755):
+    """Create a directory tree anywhere on the VPS."""
+    return _operator_audit_call("fs_mkdir", {"path": path, "mode": oct(mode)}, lambda: _OPERATOR_FILES.mkdir(path, mode))
+
+
+@mcp.tool()
+def fs_delete(path: str, recursive: bool = False):
+    """Delete any VPS file or, when recursive=true, directory tree."""
+    return _operator_audit_call("fs_delete", {"path": path, "recursive": recursive}, lambda: _OPERATOR_FILES.delete(path, recursive))
+
+
+@mcp.tool()
+def fs_chmod(path: str, mode: int):
+    """Change file mode on any VPS path."""
+    return _operator_audit_call("fs_chmod", {"path": path, "mode": oct(mode)}, lambda: _OPERATOR_FILES.chmod(path, mode))
+
+
+@mcp.tool()
+def fs_chown(path: str, uid: int, gid: int):
+    """Change owner/group on any VPS path."""
+    return _operator_audit_call("fs_chown", {"path": path, "uid": uid, "gid": gid}, lambda: _OPERATOR_FILES.chown(path, uid, gid))
+
+
+@mcp.tool()
+def desktop_status():
+    """Read current full DISPLAY=:99 framebuffer metadata."""
+    return _OPERATOR_DESKTOP.status()
+
+
+@mcp.tool()
+def desktop_frame(after_seq: int = 0, region: list[int] | None = None):
+    """Return a native model-visible JPEG frame for the full VPS desktop when changed."""
+    frame = _OPERATOR_DESKTOP.capture(region)
+    meta = {k: v for k, v in frame.items() if k != "jpeg"}
+    changed = int(frame["frame_seq"]) > int(after_seq)
+    if not changed:
+        return [meta | {"frame_changed": False}]
+    return [meta | {"frame_changed": True}, Image(data=frame["jpeg"], format="jpeg")]
+
+
+@mcp.tool()
+def desktop_windows():
+    """Enumerate visible X11 windows on the operator desktop."""
+    return _OPERATOR_DESKTOP.windows()
+
+
+@mcp.tool()
+def desktop_focus(window_id: str):
+    """Focus one visible desktop window by X11 window id."""
+    return _operator_desktop_mutation("desktop_focus", {"window_id": window_id}, lambda: _OPERATOR_DESKTOP.focus(window_id))
+
+
+@mcp.tool()
+def desktop_pointer(x: int, y: int, button: int = 1, clicks: int = 1):
+    """Move the pointer and click on the full operator desktop."""
+    return _operator_desktop_mutation("desktop_pointer", {"x": x, "y": y, "button": button, "clicks": clicks}, lambda: _OPERATOR_DESKTOP.pointer(x, y, button, clicks))
+
+
+@mcp.tool()
+def desktop_drag(x1: int, y1: int, x2: int, y2: int, button: int = 1):
+    """Drag between two coordinates on the operator desktop."""
+    return _operator_desktop_mutation("desktop_drag", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "button": button}, lambda: _OPERATOR_DESKTOP.drag(x1, y1, x2, y2, button))
+
+
+@mcp.tool()
+def desktop_scroll(amount: int):
+    """Scroll the operator desktop; negative is up and positive is down."""
+    return _operator_desktop_mutation("desktop_scroll", {"amount": amount}, lambda: _OPERATOR_DESKTOP.scroll(amount))
+
+
+@mcp.tool()
+def desktop_key(key: str):
+    """Send one xdotool key or hotkey expression to the operator desktop."""
+    return _operator_desktop_mutation("desktop_key", {"key": key}, lambda: _OPERATOR_DESKTOP.key(key))
+
+
+@mcp.tool()
+def desktop_text(text: str):
+    """Type non-secret text into the focused desktop field through stdin-backed xdotool."""
+    return _operator_desktop_mutation("desktop_text", {"chars": len(text)}, lambda: _OPERATOR_DESKTOP.text(text))
+
+
+@mcp.tool()
+def desktop_clipboard_set(text: str):
+    """Set non-secret X11 clipboard text on the operator desktop."""
+    return _operator_audit_call("desktop_clipboard_set", {"chars": len(text)}, lambda: _OPERATOR_DESKTOP.clipboard_set(text))
+
+
+@mcp.tool()
+def desktop_wait(after_seq: int, timeout_seconds: float = 10.0):
+    """Wait for the framebuffer to change after a known frame sequence."""
+    return _OPERATOR_DESKTOP.wait(after_seq, timeout_seconds)
+
+
+@mcp.tool()
+def secret_list():
+    """List local secret names and metadata, never values."""
+    return _operator_secrets().list()
+
+
+@mcp.tool()
+def secret_exists(name: str):
+    """Check whether a named local operator secret exists."""
+    return _operator_secrets().exists(name)
+
+
+@mcp.tool()
+def secret_set(name: str, value: str):
+    """Create or replace a root-owned named secret without returning its value."""
+    return _operator_audit_call("secret_set", {"secret_name": name}, lambda: _operator_secrets().set(name, value))
+
+
+@mcp.tool()
+def secret_delete(name: str):
+    """Delete a named local operator secret."""
+    return _operator_audit_call("secret_delete", {"secret_name": name}, lambda: _operator_secrets().delete(name))
+
+
+@mcp.tool()
+def secret_type(name: str):
+    """Type a named secret into the focused GUI field without putting it in argv or output."""
+    return _operator_desktop_mutation("secret_type", {"secret_name": name}, lambda: _operator_secrets().type_into_desktop(name, _OPERATOR_DESKTOP))
+
+
+@mcp.tool()
+def secret_exec_env(mapping: dict[str, str], argv: list[str], cwd: str = "/"):
+    """Run a local argv command with named secrets injected only into environment variables."""
+    return _operator_audit_call("secret_exec_env", {"secret_names": sorted(mapping.values()), "argv0": argv[0] if argv else ""}, lambda: _operator_secrets().run_with_env(mapping, argv, cwd))
+
+
+@mcp.tool()
+def secret_exec_stdin(name: str, argv: list[str], cwd: str = "/"):
+    """Run a local argv command with one named secret supplied on stdin."""
+    return _operator_audit_call("secret_exec_stdin", {"secret_name": name, "argv0": argv[0] if argv else ""}, lambda: _operator_secrets().run_with_stdin(name, argv, cwd))
+
+
+@mcp.tool()
+def pty_start(command: str = "/bin/bash", cwd: str = "/"):
+    """Start a persistent root PTY session for an interactive command."""
+    return _operator_audit_call("pty_start", {"cwd": cwd, "command_chars": len(command)}, lambda: _OPERATOR_PTY.start(command, cwd))
+
+
+@mcp.tool()
+def pty_write(session_id: str, data: str):
+    """Write raw text to a persistent PTY session."""
+    return _operator_audit_call("pty_write", {"session_id": session_id, "bytes": len(data.encode())}, lambda: _OPERATOR_PTY.write(session_id, data))
+
+
+@mcp.tool()
+def pty_read(session_id: str, after_seq: int = 0, max_chars: int = 200000):
+    """Read bounded PTY output produced after a sequence number."""
+    return _OPERATOR_PTY.read(session_id, after_seq, max_chars)
+
+
+@mcp.tool()
+def pty_resize(session_id: str, rows: int, cols: int):
+    """Resize a persistent PTY."""
+    return _operator_audit_call("pty_resize", {"session_id": session_id, "rows": rows, "cols": cols}, lambda: _OPERATOR_PTY.resize(session_id, rows, cols))
+
+
+@mcp.tool()
+def pty_signal(session_id: str, sig: int):
+    """Send a Unix signal to the PTY process group."""
+    return _operator_audit_call("pty_signal", {"session_id": session_id, "signal": sig}, lambda: _OPERATOR_PTY.signal(session_id, sig))
+
+
+@mcp.tool()
+def pty_close(session_id: str):
+    """Terminate and close a persistent PTY session."""
+    return _operator_audit_call("pty_close", {"session_id": session_id}, lambda: _OPERATOR_PTY.close(session_id))
+
+
+@mcp.tool()
+def pty_list():
+    """List persistent PTY sessions without command contents."""
+    return _OPERATOR_PTY.list()
+
+
+@mcp.tool()
+def critical_stage(paths: list[str], seconds: int = 120):
+    """Stage file backups and a timed local rollback before a critical change."""
+    return _operator_audit_call("critical_stage", {"paths": paths, "seconds": seconds}, lambda: _operator_recovery().stage(paths, seconds))
+
+
+@mcp.tool()
+def critical_write(tx_id: str, path: str, content: str, mode: int = 0o600):
+    """Atomically write one path that belongs to a staged rollback transaction."""
+    return _operator_audit_call("critical_write", {"tx_id": tx_id, "path": path, "mode": oct(mode)}, lambda: _operator_recovery().atomic_write(tx_id, path, content, mode))
+
+
+@mcp.tool()
+def critical_verify(tx_id: str, argv: list[str]):
+    """Verify a critical transaction using an argv command; failure rolls back immediately."""
+    return _operator_audit_call("critical_verify", {"tx_id": tx_id, "argv0": argv[0] if argv else ""}, lambda: _operator_recovery().verify(tx_id, argv))
+
+
+@mcp.tool()
+def critical_commit(tx_id: str):
+    """Commit a verified critical transaction and cancel its rollback timer."""
+    return _operator_audit_call("critical_commit", {"tx_id": tx_id}, lambda: _operator_recovery().commit(tx_id))
+
+
+@mcp.tool()
+def critical_rollback(tx_id: str):
+    """Immediately roll back a staged critical transaction."""
+    return _operator_audit_call("critical_rollback", {"tx_id": tx_id}, lambda: _operator_recovery().rollback(tx_id))
+
+
+@mcp.tool()
+def critical_status(tx_id: str):
+    """Read rollback transaction state without file contents."""
+    return _operator_recovery().status(tx_id)
+
+# ==== /EIROS FULL VPS OPERATOR ====
 
 # ==== EIROS FULL ROOT EXECUTOR ====
 import subprocess as _eiros_subprocess

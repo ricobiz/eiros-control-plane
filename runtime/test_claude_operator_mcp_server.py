@@ -79,3 +79,18 @@ def test_claude_nginx_root_health_is_exact_not_oauth_catchall() -> None:
     text = Path("deploy/claude-sslip.nginx.template.conf").read_text(encoding="utf-8")
     assert 'location = / {' in text
     assert 'location / {' not in text
+
+
+def test_operator_mirrors_full_vps_operator_surface() -> None:
+    import runtime.claude_operator_mcp_server as operator
+
+    names = _tool_names(operator.mcp)
+    assert {"desktop_frame", "secret_type", "pty_start", "fs_write", "critical_stage"} <= names
+
+
+def test_operator_instructions_advertise_desktop_pty_and_secret_broker() -> None:
+    import runtime.claude_operator_mcp_server as operator
+    text = operator.mcp.instructions.lower()
+    assert "desktop" in text
+    assert "pty" in text
+    assert "secret" in text

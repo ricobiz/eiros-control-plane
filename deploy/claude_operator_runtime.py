@@ -46,12 +46,10 @@ main_vps_ops = _load_module('eiros_main_vps_ops_server', MAIN_VPS_OPS)
 mcp = FastMCP(
     'EIROS Claude Operator',
     instructions=(
-        'Full Rico-authorized EIROS operator surface for Claude. It combines the live '
-        'SUM/SAM/Room/Listener EBRIDGE implementation with the latest VPS Ops root/git/'
-        'systemd/OpenAI control-plane tools. Read status before mutation, preserve live '
-        'Room/Listener/PiP surfaces unless a repair requires replacement, test before '
-        'service restarts, never expose secrets, and never force-push without explicit '
-        'Rico authorization.'
+        'Full Rico-authorized EIROS operator surface. It combines the live EBRIDGE implementation '
+        'with unrestricted root/filesystem operations, full DISPLAY=:99 desktop control, persistent PTY sessions, '
+        'a local secret broker, rollback-protected critical changes, Git/systemd/network and OpenAI control-plane tools. '
+        'Prefer specialized operator tools, verify consequential changes, keep privileged routes private, and never return secret values.'
     ),
     stateless_http=True,
     json_response=True,

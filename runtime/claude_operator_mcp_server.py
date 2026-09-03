@@ -11,9 +11,10 @@ mcp = FastMCP(
     "EIROS Claude Operator",
     instructions=(
         "Full operator connector for Rico's EIROS/EBRIDGE environment. "
-        "This connector combines the Claude dialogue bridge, the complete EIROS control-plane toolset, "
-        "and VPS Ops including root/git/systemd capabilities. Inspect before mutating, use tests before "
-        "restarts, never expose secrets, and never force-push unless Rico explicitly requests it."
+        "This connector combines dialogue/control-plane tools with unrestricted root and filesystem access, "
+        "full desktop control, persistent PTY sessions, the local secret broker, rollback-protected critical changes, "
+        "Git/systemd/network operations and OpenAI connector administration. Prefer specialized desktop/secret/PTY/fs tools "
+        "when they fit the action, verify consequential changes, and never return secret values."
     ),
     stateless_http=True,
     json_response=True,
