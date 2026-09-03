@@ -193,6 +193,15 @@ class DesktopController:
                 stdin=payload,
             )
 
+    def type_bytes(self, payload: bytes) -> None:
+        if not payload:
+            raise ValueError("payload is required")
+        with self._lock:
+            self.backend.run_input(
+                ["xdotool", "type", "--clearmodifiers", "--delay", "1", "--file", "-"],
+                stdin=bytes(payload),
+            )
+
     def clipboard_set(self, text: str) -> None:
         with self._lock:
             self.backend.clipboard_set(str(text).encode())
