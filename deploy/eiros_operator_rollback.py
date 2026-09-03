@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runtime.operator.recovery import RecoveryManager  # noqa: E402
+from runtime.vps_operator.recovery import RecoveryManager  # noqa: E402
 
 
 def main() -> int:

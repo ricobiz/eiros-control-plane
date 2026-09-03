@@ -1,8 +1,8 @@
 from pathlib import Path
 import json
 
-from runtime.operator.audit import AuditLog
-from runtime.operator.files import RootFiles
+from runtime.vps_operator.audit import AuditLog
+from runtime.vps_operator.files import RootFiles
 
 
 def test_root_files_can_write_read_replace_and_delete_outside_repo(tmp_path: Path) -> None:

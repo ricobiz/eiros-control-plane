@@ -1,6 +1,6 @@
 import time
 
-from runtime.operator.pty import PtyManager
+from runtime.vps_operator.pty import PtyManager
 
 
 def _wait_for(mgr: PtyManager, session_id: str, needle: str, timeout: float = 3.0) -> str:

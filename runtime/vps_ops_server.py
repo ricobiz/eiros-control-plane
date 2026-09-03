@@ -12,12 +12,12 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.utilities.types import Image
 
 from runtime.openai_control_plane import ControlPlaneError, OpenAIControlPlane, redact_text
-from runtime.operator.audit import AuditLog
-from runtime.operator.desktop import DesktopController
-from runtime.operator.files import RootFiles
-from runtime.operator.pty import PtyManager
-from runtime.operator.recovery import RecoveryManager
-from runtime.operator.secrets import SecretStore
+from runtime.vps_operator.audit import AuditLog
+from runtime.vps_operator.desktop import DesktopController
+from runtime.vps_operator.files import RootFiles
+from runtime.vps_operator.pty import PtyManager
+from runtime.vps_operator.recovery import RecoveryManager
+from runtime.vps_operator.secrets import SecretStore
 
 ROOT = Path("/opt/eiros-control-plane")
 ALLOWED_SERVICES = {

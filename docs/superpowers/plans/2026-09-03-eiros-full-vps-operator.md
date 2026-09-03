@@ -57,8 +57,8 @@
 from pathlib import Path
 import json
 
-from runtime.operator.audit import AuditLog
-from runtime.operator.files import RootFiles
+from runtime.vps_operator.audit import AuditLog
+from runtime.vps_operator.files import RootFiles
 
 
 def test_root_files_can_write_read_replace_and_delete_outside_repo(tmp_path: Path) -> None:
@@ -87,7 +87,7 @@ def test_audit_never_serializes_secret_fields(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests and verify RED**
 
 Run: `./venv/bin/pytest -q runtime/test_operator_files.py`
-Expected: collection/import failure because `runtime.operator.audit` and `runtime.operator.files` do not exist.
+Expected: collection/import failure because `runtime.vps_operator.audit` and `runtime.vps_operator.files` do not exist.
 
 - [ ] **Step 3: Implement minimal audit/files modules**
 
@@ -189,7 +189,7 @@ Run: `git add runtime/operator/__init__.py runtime/operator/audit.py runtime/ope
 
 ```python
 # runtime/test_operator_desktop.py
-from runtime.operator.desktop import DesktopController
+from runtime.vps_operator.desktop import DesktopController
 
 class FakeBackend:
     def __init__(self): self.frame = b"A"; self.events = []
@@ -218,7 +218,7 @@ def test_text_uses_xdotool_file_stdin_not_argv() -> None:
 - [ ] **Step 2: Run tests RED**
 
 Run: `./venv/bin/pytest -q runtime/test_operator_desktop.py`
-Expected: import failure for `runtime.operator.desktop`.
+Expected: import failure for `runtime.vps_operator.desktop`.
 
 - [ ] **Step 3: Implement X11 backend and controller**
 
@@ -287,7 +287,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Run real frame/input smoke probe on :99 without changing MT5 state**
 
-Run: `DISPLAY=:99 ./venv/bin/python -c 'from runtime.operator.desktop import DesktopController; c=DesktopController(); f=c.capture(); print(f["width"],f["height"],len(f["jpeg"]),len(c.windows()))'`
+Run: `DISPLAY=:99 ./venv/bin/python -c 'from runtime.vps_operator.desktop import DesktopController; c=DesktopController(); f=c.capture(); print(f["width"],f["height"],len(f["jpeg"]),len(c.windows()))'`
 Expected: `1440 900`, non-zero JPEG byte count, non-zero visible-window count.
 
 - [ ] **Step 6: Commit**
@@ -311,7 +311,7 @@ Run: `git add runtime/operator/desktop.py runtime/test_operator_desktop.py && gi
 ```python
 # runtime/test_operator_secrets.py
 from pathlib import Path
-from runtime.operator.secrets import SecretStore
+from runtime.vps_operator.secrets import SecretStore
 
 class FakeDesktop:
     def __init__(self): self.payload = None
@@ -345,7 +345,7 @@ def test_process_output_is_redacted_even_if_child_echoes_secret(tmp_path: Path) 
 - [ ] **Step 2: Run tests RED**
 
 Run: `./venv/bin/pytest -q runtime/test_operator_secrets.py`
-Expected: import failure for `runtime.operator.secrets`.
+Expected: import failure for `runtime.vps_operator.secrets`.
 
 - [ ] **Step 3: Add `DesktopController.type_bytes` and implement SecretStore**
 
@@ -423,7 +423,7 @@ Run: `git add runtime/operator/desktop.py runtime/operator/secrets.py runtime/te
 ```python
 # runtime/test_operator_pty.py
 import time
-from runtime.operator.pty import PtyManager
+from runtime.vps_operator.pty import PtyManager
 
 
 def test_persistent_shell_write_read_and_close() -> None:
@@ -440,7 +440,7 @@ def test_persistent_shell_write_read_and_close() -> None:
 - [ ] **Step 2: Run test RED**
 
 Run: `./venv/bin/pytest -q runtime/test_operator_pty.py`
-Expected: import failure for `runtime.operator.pty`.
+Expected: import failure for `runtime.vps_operator.pty`.
 
 - [ ] **Step 3: Implement PTY manager with stdlib `pty`**
 
@@ -553,7 +553,7 @@ Run: `git add runtime/operator/pty.py runtime/test_operator_pty.py && git commit
 ```python
 # runtime/test_operator_recovery.py
 from pathlib import Path
-from runtime.operator.recovery import RecoveryManager
+from runtime.vps_operator.recovery import RecoveryManager
 
 class FakeScheduler:
     def __init__(self): self.scheduled=[]; self.cancelled=[]
@@ -575,7 +575,7 @@ def test_failed_verify_restores_original_file(tmp_path: Path) -> None:
 - [ ] **Step 2: Run test RED**
 
 Run: `./venv/bin/pytest -q runtime/test_operator_recovery.py`
-Expected: import failure for `runtime.operator.recovery`.
+Expected: import failure for `runtime.vps_operator.recovery`.
 
 - [ ] **Step 3: Implement transaction manager and rollback entrypoint**
 
@@ -658,7 +658,7 @@ class RecoveryManager:
 # deploy/eiros_operator_rollback.py
 from __future__ import annotations
 import sys
-from runtime.operator.recovery import RecoveryManager
+from runtime.vps_operator.recovery import RecoveryManager
 
 if __name__ == "__main__":
     if len(sys.argv) != 2: raise SystemExit("usage: eiros_operator_rollback.py <tx_id>")
@@ -679,7 +679,7 @@ Run:
 ./venv/bin/python - <<'PY'
 import time
 from pathlib import Path
-from runtime.operator.recovery import RecoveryManager
+from runtime.vps_operator.recovery import RecoveryManager
 p=Path('/tmp/eiros-rollback-smoke'); p.write_text('original')
 m=RecoveryManager(); tx=m.stage([str(p)],seconds=8)['tx_id']; m.atomic_write(tx,str(p),'changed',0o600)
 print(tx,p.read_text()); time.sleep(10); print(p.read_text(),m.status(tx))
@@ -745,12 +745,12 @@ Add imports and controller singletons near the existing `FastMCP` setup:
 
 ```python
 from mcp.server.fastmcp.utilities.types import Image
-from runtime.operator.audit import AuditLog
-from runtime.operator.desktop import DesktopController
-from runtime.operator.files import RootFiles
-from runtime.operator.pty import PtyManager
-from runtime.operator.recovery import RecoveryManager
-from runtime.operator.secrets import SecretStore
+from runtime.vps_operator.audit import AuditLog
+from runtime.vps_operator.desktop import DesktopController
+from runtime.vps_operator.files import RootFiles
+from runtime.vps_operator.pty import PtyManager
+from runtime.vps_operator.recovery import RecoveryManager
+from runtime.vps_operator.secrets import SecretStore
 
 AUDIT = AuditLog()
 ROOT_FILES = RootFiles()

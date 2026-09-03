@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from runtime.operator.recovery import RecoveryManager
+from runtime.vps_operator.recovery import RecoveryManager
 
 
 class FakeScheduler:
@@ -47,7 +47,7 @@ def test_commit_cancels_rollback_and_keeps_new_file(tmp_path: Path) -> None:
 
 
 def test_systemd_scheduler_requests_one_second_timer_accuracy(monkeypatch, tmp_path: Path) -> None:
-    import runtime.operator.recovery as recovery
+    import runtime.vps_operator.recovery as recovery
 
     calls = []
 

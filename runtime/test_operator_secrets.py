@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from runtime.operator.desktop import DesktopController
-from runtime.operator.secrets import SecretStore
+from runtime.vps_operator.desktop import DesktopController
+from runtime.vps_operator.secrets import SecretStore
 
 
 class FakeBackend:

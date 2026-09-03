@@ -1,6 +1,6 @@
 import pytest
 
-from runtime.operator.desktop import DesktopController
+from runtime.vps_operator.desktop import DesktopController
 
 
 class FakeBackend:
