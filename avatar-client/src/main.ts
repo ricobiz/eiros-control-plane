@@ -15,9 +15,11 @@ interface ActiveBackend {
   dispose(): void;
 }
 
-const mode=resolveAvatarClientMode(location.search);
+const mode=resolveAvatarClientMode(location.search, import.meta.env.BASE_URL);
 const app=document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML=`<div class="stage" id="stage"></div><div class="hud"><div class="card"><div class="mode">${mode.renderer.toUpperCase()} renderer</div><input class="file" id="file" type="file" accept=".vrm,model/gltf-binary"><div class="status" id="status">Starting…</div><div class="controls" id="controls"></div><div class="states" id="states"></div><button id="interrupt" type="button">Interrupt</button><div class="hint">Idle blink / gaze / head / breathing run automatically. LAM uses the same canonical AvatarFrame as VRM.</div></div><div class="badge" id="fps">-- FPS</div></div>`;
+app.innerHTML=`<div class="stage" id="stage"></div><div class="hud"><div class="card collapsed" id="card"><div class="cardhead"><div class="mode">${mode.renderer.toUpperCase()} renderer</div><button class="toggle" id="toggle" type="button" aria-label="Toggle controls">▾</button></div><div class="status" id="status">Starting…</div><div class="body" id="cardbody"><input class="file" id="file" type="file" accept=".vrm,model/gltf-binary"><div class="controls" id="controls"></div><div class="states" id="states"></div><button id="interrupt" type="button">Interrupt</button><div class="hint">Idle blink / gaze / head / breathing run automatically. LAM uses the same canonical AvatarFrame as VRM.</div></div></div><div class="badge" id="fps">-- FPS</div></div>`;
+const card=document.getElementById('card') as HTMLDivElement;
+document.getElementById('toggle')!.addEventListener('click',()=>{const open=card.classList.toggle('collapsed');(document.getElementById('toggle') as HTMLButtonElement).textContent=open?'▾':'▴';});
 const stage=document.querySelector<HTMLElement>('#stage')!;
 const status=document.querySelector<HTMLElement>('#status')!;
 const controlsEl=document.querySelector<HTMLElement>('#controls')!;
@@ -59,7 +61,8 @@ async function startVrm():Promise<ActiveBackend> {
   const [{ AvatarRenderer },{ VrmAdapter }]=await Promise.all([import('./renderer'),import('./vrm-adapter')]);
   const renderer=new AvatarRenderer(stage);
   let adapter:InstanceType<typeof VrmAdapter>|null=null;
-  const load=async(url:string)=>{status.textContent='Loading VRM…';adapter=new VrmAdapter(await renderer.load(url));setReady(`VRM Live · ${Object.keys(adapter.capabilities()).length} face channels`);};
+  const view=new URLSearchParams(location.search).get('view')||'head';
+  const load=async(url:string)=>{status.textContent='Loading VRM…';adapter=new VrmAdapter(await renderer.load(url,view));setReady(`VRM Live · ${Object.keys(adapter.capabilities()).length} face channels`);};
   fileInput.hidden=false;
   fileInput.onchange=e=>{const f=(e.currentTarget as HTMLInputElement).files?.[0];if(f)void load(URL.createObjectURL(f)).catch(setError);};
   await load(mode.model);

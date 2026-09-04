@@ -12,3 +12,8 @@ describe('resolveAvatarClientMode', () => {
     expect(resolveAvatarClientMode('?renderer=lam&model=%2Fmodels%2Fcustom.zip')).toEqual({ renderer: 'lam', model: '/models/custom.zip' });
   });
 });
+
+it('prefixes bundled model paths with the deployment base', () => {
+  expect(resolveAvatarClientMode('', '/avatar-abc/')).toEqual({ renderer: 'vrm', model: '/avatar-abc/models/avatar.vrm' });
+  expect(resolveAvatarClientMode('?renderer=lam', '/avatar-abc')).toEqual({ renderer: 'lam', model: '/avatar-abc/models/lam-eval.zip' });
+});

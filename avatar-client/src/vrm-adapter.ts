@@ -5,6 +5,7 @@ export interface VrmRigFacade {
  setHeadQuaternion(q:[number,number,number,number]):void;
  setGaze(x:number,y:number):void;
  setBreath(value:number):void;
+ setLean(value:number):void;
 }
 const aliases:Record<string,string[]>={
  jawOpen:['jawOpen','aa','A'], eyeBlinkLeft:['eyeBlinkLeft','blinkLeft','blink_l','blink'], eyeBlinkRight:['eyeBlinkRight','blinkRight','blink_r','blink'],
@@ -20,6 +21,6 @@ export class VrmAdapter {
  capabilities(){return {...this.map};}
  apply(frame:AvatarFrame){
   for(const [key,value] of Object.entries(frame.face)){const target=this.map[key];if(target)this.rig.setExpression(target,value);}
-  this.rig.setHeadQuaternion(frame.head.quat); this.rig.setGaze(frame.gaze.x,frame.gaze.y); this.rig.setBreath(frame.body.breath);
+  this.rig.setHeadQuaternion(frame.head.quat); this.rig.setGaze(frame.gaze.x,frame.gaze.y); this.rig.setBreath(frame.body.breath); this.rig.setLean(frame.body.lean);
  }
 }

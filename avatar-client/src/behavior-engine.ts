@@ -9,6 +9,6 @@ export class BehaviorEngine {
    let blink=0;
    if(this.blinkStart!==null){const p=(nowMs-this.blinkStart)/160;if(p>=1){this.blinkStart=null;this.nextBlinkAt=nowMs+2200+this.rng.next()*2600;}else blink=p<.5?p*2:(1-p)*2;}
    const breath=.5+.5*Math.sin(nowMs/1650);
-   return {face:{eyeBlinkLeft:blink,eyeBlinkRight:blink},gaze:{x:.12*Math.sin(nowMs/2300),y:.08*Math.sin(nowMs/3100+.7)},headEuler:[.018*Math.sin(nowMs/2800),.028*Math.sin(nowMs/3600+.4),.012*Math.sin(nowMs/4100)],body:{breath,lean:.025*Math.sin(nowMs/5000)}};
+   return {face:{eyeBlinkLeft:blink,eyeBlinkRight:blink},gaze:{x:.12*Math.sin(nowMs/2300),y:.08*Math.sin(nowMs/3100+.7)},headEuler:[.035*Math.sin(nowMs/2800)+.012*Math.sin(nowMs/900),.055*Math.sin(nowMs/3600+.4)+.015*Math.sin(nowMs/1100+.9),.024*Math.sin(nowMs/4100)],body:{breath,lean:.07*Math.sin(nowMs/5000)+.02*Math.sin(nowMs/1700+.3)}};
  }
 }
