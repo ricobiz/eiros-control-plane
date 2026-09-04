@@ -43,6 +43,7 @@ memory/
 *.tar
 *.tar.gz
 *.zip
+!avatar-client/public/models/lam-eval.zip
 *.tmp
 .DS_Store
 
