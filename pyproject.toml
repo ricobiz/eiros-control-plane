@@ -8,7 +8,7 @@ version = "0.2.0a1"
 description = "Persistent event-driven control plane and reverse wake for ChatGPT MCP Apps"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["mcp==1.28.0"]
+dependencies = ["mcp==1.28.1"]
 
 [project.scripts]
 eiros = "runtime.cli:main"
